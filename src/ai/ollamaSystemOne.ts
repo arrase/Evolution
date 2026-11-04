@@ -8,7 +8,31 @@ import {
 
 export const DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434";
 export const DEFAULT_SYSTEM_ONE_MODEL = "d3:4b";
+export const SECONDARY_SYSTEM_ONE_MODEL = "tev1:4b";
 export const DEFAULT_SYSTEM_ONE_TIMEOUT_MS = 5000;
+
+export function resolveDemeDecisionModelTag(
+  demeId: string,
+  primaryTag: string = DEFAULT_SYSTEM_ONE_MODEL,
+  secondaryTag: string = SECONDARY_SYSTEM_ONE_MODEL
+): string {
+  if (
+    demeId === "deme-rift-west" ||
+    demeId === "deme-island-1" ||
+    demeId === "deme-island-3" ||
+    demeId === "deme-darwin-founder"
+  ) {
+    return primaryTag;
+  }
+  if (demeId === "deme-rift-east" || demeId === "deme-island-2") {
+    return secondaryTag;
+  }
+  let hash = 0;
+  for (let i = 0; i < demeId.length; i += 1) {
+    hash = (hash * 31 + demeId.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % 2 === 0 ? primaryTag : secondaryTag;
+}
 
 export interface EvaluateSystemOneOptions {
   host?: string;
@@ -209,8 +233,9 @@ export function buildContextualJustification(
   const capacity = Math.round(input.currentCell.carryingCapacity);
   const pct = (dominantProbability * 100).toFixed(1);
   const confPct = (confidence * 100).toFixed(0);
+  const modelPrefix = input.deme.decisionModelTag ? `${input.deme.decisionModelTag} | ` : "";
 
-  return `[${labels.biome}: ${input.currentCell.biome} | ${labels.resources}: ${currentRes}/${capacity} | ${labels.traits}: ${traitText}] → ${labels.dominant}: ${dominantName} (${pct}%, ${labels.confidence} ${confPct}%)`;
+  return `[${modelPrefix}${labels.biome}: ${input.currentCell.biome} | ${labels.resources}: ${currentRes}/${capacity} | ${labels.traits}: ${traitText}] → ${labels.dominant}: ${dominantName} (${pct}%, ${labels.confidence} ${confPct}%)`;
 }
 
 function formatSignedMetric(value: number): string {
@@ -391,8 +416,11 @@ export function computeDemeEvaluationSignature(input: DemeDecisionEvaluationInpu
         `${n.biome}:${n.demesCount === 0 ? "empty" : "occupied"}:${Math.round(n.currentResources / 100)}`
     )
     .join(",");
+  const modelKey = input.deme.decisionModelTag
+    ? input.deme.decisionModelTag
+    : DEFAULT_SYSTEM_ONE_MODEL;
 
-  return `${input.season}|${input.currentCell.biome}|${adequacyBucket}|${healthBucket}|${vitality}|${competitionKey}|${traitsKey}|${dominantKey}|${neighborKey}`;
+  return `${modelKey}|${input.season}|${input.currentCell.biome}|${adequacyBucket}|${healthBucket}|${vitality}|${competitionKey}|${traitsKey}|${dominantKey}|${neighborKey}`;
 }
 
 export async function evaluateDemeWithOllamaSystemOne(
@@ -400,7 +428,11 @@ export async function evaluateDemeWithOllamaSystemOne(
   options?: EvaluateSystemOneOptions
 ): Promise<DemeDecisionEvaluationOutput> {
   const host = options?.host ? options.host : DEFAULT_OLLAMA_HOST;
-  const modelTag = options?.modelTag ? options.modelTag : DEFAULT_SYSTEM_ONE_MODEL;
+  const modelTag = options?.modelTag
+    ? options.modelTag
+    : input.deme.decisionModelTag
+      ? input.deme.decisionModelTag
+      : DEFAULT_SYSTEM_ONE_MODEL;
   const timeoutMs = options?.timeoutMs ? options.timeoutMs : DEFAULT_SYSTEM_ONE_TIMEOUT_MS;
 
   const ollamaClient = getOllamaClient(host);

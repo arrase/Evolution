@@ -9,8 +9,11 @@ import {
   buildCompactSystemOneState,
   buildContextualJustification,
   computeDemeEvaluationSignature,
+  DEFAULT_SYSTEM_ONE_MODEL,
   evaluateDemeWithOllamaSystemOne,
-  normalizeDecisionProbabilities
+  normalizeDecisionProbabilities,
+  resolveDemeDecisionModelTag,
+  SECONDARY_SYSTEM_ONE_MODEL
 } from "../../src/ai/ollamaSystemOne";
 import { computeThermodynamicMetrics } from "../../src/engine/thermodynamics";
 import {
@@ -231,9 +234,11 @@ describe("Cognitive Engine Contracts (System 1 & System 2)", () => {
       const status = await unreachableProvider.checkStatus();
       expect(status.connected).toBe(false);
       expect(status.systemOneModelReady).toBe(false);
+      expect(status.secondarySystemOneModelReady).toBe(false);
       expect(status.systemTwoModelReady).toBe(false);
       expect(status.missingCommands).toContain("ollama pull d3:4b");
-      expect(status.missingCommands).toContain("ollama pull gemma4:e4b-it-qat");
+      expect(status.missingCommands).toContain("ollama pull tev1:4b");
+      expect(status.missingCommands).toContain("ollama pull gemma4:e2b");
     });
   });
 
@@ -473,6 +478,28 @@ describe("Cognitive Engine Contracts (System 1 & System 2)", () => {
         }
       });
       expect(sigA).toBe(sigB);
+
+      expect(resolveDemeDecisionModelTag("deme-rift-west")).toBe(DEFAULT_SYSTEM_ONE_MODEL);
+      expect(resolveDemeDecisionModelTag("deme-rift-east")).toBe(SECONDARY_SYSTEM_ONE_MODEL);
+      expect(resolveDemeDecisionModelTag("deme-island-1")).toBe("d3:4b");
+      expect(resolveDemeDecisionModelTag("deme-island-2")).toBe("tev1:4b");
+      expect(resolveDemeDecisionModelTag("deme-island-3")).toBe("d3:4b");
+
+      const sigD3 = computeDemeEvaluationSignature({
+        ...enrichedInput,
+        deme: {
+          ...enrichedInput.deme,
+          decisionModelTag: "d3:4b"
+        }
+      });
+      const sigTev1 = computeDemeEvaluationSignature({
+        ...enrichedInput,
+        deme: {
+          ...enrichedInput.deme,
+          decisionModelTag: "tev1:4b"
+        }
+      });
+      expect(sigD3).not.toBe(sigTev1);
     });
 
     it("prevents duplicate synthesized trait names when existingTraitNames or globalEmergentTraitNames already contain the default template name (T015, FR-006)", async () => {

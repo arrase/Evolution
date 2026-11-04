@@ -15,7 +15,8 @@ import { Modal } from "./Modal";
 const REQUIRED_CLI_COMMANDS = [
   'OLLAMA_ORIGINS="*" ollama serve',
   "ollama pull d3:4b",
-  "ollama pull gemma4:e4b-it-qat"
+  "ollama pull tev1:4b",
+  "ollama pull gemma4:e2b"
 ] as const;
 
 export function OllamaDiagnosticsModal() {
@@ -97,9 +98,11 @@ export function OllamaDiagnosticsModal() {
                 <div className="font-semibold text-slate-200">
                   {t("diagnostics.systemOneLabel")}
                 </div>
-                {isSystemOneReady && ollamaStatus.resolvedSystemOneTag !== "" && (
+                {ollamaStatus !== null && ollamaStatus.resolvedSystemOneTag !== "" && (
                   <div className="text-[11px] font-mono text-slate-400">
-                    {ollamaStatus.resolvedSystemOneTag}
+                    {ollamaStatus.resolvedSecondarySystemOneTag
+                      ? `${ollamaStatus.resolvedSystemOneTag} + ${ollamaStatus.resolvedSecondarySystemOneTag}`
+                      : ollamaStatus.resolvedSystemOneTag}
                   </div>
                 )}
               </div>

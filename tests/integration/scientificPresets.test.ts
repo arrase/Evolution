@@ -229,15 +229,19 @@ describe("Scientific Presets 30-Generation Integration Benchmarks (FR-014, SC-00
     useSimulationStore.getState().setPlaybackMode("paused");
   });
 
-  it("deduplicates equivalent System 1 evaluations within the same turn while formatting deme-specific justifications and caps System 2 synthesis to at most 1 per turn (T007, T008, FR-003, FR-006)", async () => {
+  it("deduplicates equivalent System 1 evaluations per assigned decision model (d3:4b and tev1:4b) within the same turn while formatting deme-specific justifications and caps System 2 synthesis to at most 1 per turn (T006, FR-001, FR-002, FR-003)", async () => {
     const baseProvider = new MockCognitiveProvider();
     let evalCallCount = 0;
     let milestoneCallCount = 0;
+    const evaluatedModels: string[] = [];
 
     const instrumentedProvider: MockCognitiveProvider = {
       checkStatus: () => baseProvider.checkStatus(),
       evaluateDemeDecisions: async (input) => {
         evalCallCount += 1;
+        if (input.deme.decisionModelTag) {
+          evaluatedModels.push(input.deme.decisionModelTag);
+        }
         return baseProvider.evaluateDemeDecisions(input);
       },
       synthesizeMilestone: async (input) => {
@@ -263,8 +267,11 @@ describe("Scientific Presets 30-Generation Integration Benchmarks (FR-014, SC-00
     }
 
     const nextWorld = await executeGenerationalTurn(world, instrumentedProvider, "en");
-    expect(evalCallCount).toBe(1);
+    expect(evalCallCount).toBe(2);
+    expect(evaluatedModels.sort()).toEqual(["d3:4b", "tev1:4b"]);
     expect(milestoneCallCount).toBe(1);
     expect(Object.keys(nextWorld.demes).length).toBeGreaterThanOrEqual(2);
+    expect(nextWorld.demes["deme-island-1"]?.lastJustification).toContain("d3:4b");
+    expect(nextWorld.demes["deme-island-2"]?.lastJustification).toContain("tev1:4b");
   });
 });

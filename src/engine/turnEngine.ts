@@ -1,6 +1,7 @@
 import {
   buildContextualJustification,
-  computeDemeEvaluationSignature
+  computeDemeEvaluationSignature,
+  resolveDemeDecisionModelTag
 } from "../ai/ollamaSystemOne";
 import {
   DEFAULT_LOCALE,
@@ -32,7 +33,13 @@ export async function executeGenerationalTurn(
   const afterEnv = runEnvironmentalPhase(state);
 
   const decisionsByDemeId: Record<string, DemeDecisionEvaluationOutput> = {};
-  const signatureCache = new Map<string, DemeDecisionEvaluationOutput>();
+  const signatureBuckets = new Map<
+    string,
+    {
+      representative: DemeDecisionEvaluationInput;
+      followers: DemeDecisionEvaluationInput[];
+    }
+  >();
   const allDecisions = Object.values(afterEnv.decisionsCatalog);
 
   for (const deme of Object.values(afterEnv.demes)) {
@@ -149,6 +156,7 @@ export async function executeGenerationalTurn(
         population: deme.population,
         energyReserves: deme.energyReserves,
         lastEnergyDelta: deme.lastEnergyDelta,
+        decisionModelTag: resolveDemeDecisionModelTag(deme.id),
         lastDominantDecisionId: deme.lastDominantDecisionId,
         baldwinProgress,
         innovationProgress: deme.innovationCounter,
@@ -174,26 +182,39 @@ export async function executeGenerationalTurn(
     };
 
     const signature = computeDemeEvaluationSignature(evaluationInput);
-    const cachedEvaluation = signatureCache.get(signature);
-    if (cachedEvaluation !== undefined) {
-      const dominantProb = cachedEvaluation.probabilities[cachedEvaluation.dominantDecisionId];
-      decisionsByDemeId[deme.id] = {
-        probabilities: { ...cachedEvaluation.probabilities },
-        dominantDecisionId: cachedEvaluation.dominantDecisionId,
-        confidence: cachedEvaluation.confidence,
-        justification: buildContextualJustification(
-          evaluationInput,
-          cachedEvaluation.dominantDecisionId,
-          dominantProb !== undefined ? dominantProb : 0.5,
-          cachedEvaluation.confidence
-        )
-      };
+    const existingBucket = signatureBuckets.get(signature);
+    if (existingBucket !== undefined) {
+      existingBucket.followers.push(evaluationInput);
     } else {
-      const evaluated = await provider.evaluateDemeDecisions(evaluationInput);
-      signatureCache.set(signature, evaluated);
-      decisionsByDemeId[deme.id] = evaluated;
+      signatureBuckets.set(signature, {
+        representative: evaluationInput,
+        followers: []
+      });
     }
   }
+
+  await Promise.all(
+    Array.from(signatureBuckets.values()).map(async (bucket) => {
+      const evaluated = await provider.evaluateDemeDecisions(bucket.representative);
+      decisionsByDemeId[bucket.representative.deme.id] = evaluated;
+
+      const dominantProb = evaluated.probabilities[evaluated.dominantDecisionId];
+      const safeProb = dominantProb !== undefined ? dominantProb : 0.5;
+      for (const followerInput of bucket.followers) {
+        decisionsByDemeId[followerInput.deme.id] = {
+          probabilities: { ...evaluated.probabilities },
+          dominantDecisionId: evaluated.dominantDecisionId,
+          confidence: evaluated.confidence,
+          justification: buildContextualJustification(
+            followerInput,
+            evaluated.dominantDecisionId,
+            safeProb,
+            evaluated.confidence
+          )
+        };
+      }
+    })
+  );
 
   let afterMilestones = resolveBiophysicalAndDemographicPhase(afterEnv, decisionsByDemeId);
 

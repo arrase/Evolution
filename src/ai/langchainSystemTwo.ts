@@ -13,7 +13,7 @@ import {
 } from "../types/simulation";
 
 export const DEFAULT_SYSTEM_TWO_BASE_URL = "http://127.0.0.1:11434";
-export const DEFAULT_SYSTEM_TWO_MODEL = "gemma4:e4b-it-qat";
+export const DEFAULT_SYSTEM_TWO_MODEL = "gemma4:e2b";
 export const DEFAULT_SYSTEM_TWO_TIMEOUT_MS = 15000;
 
 const RawBiophysicalVectorSchema = z.object({

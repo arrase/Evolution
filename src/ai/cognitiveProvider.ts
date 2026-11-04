@@ -28,7 +28,8 @@ import {
   DEFAULT_SYSTEM_ONE_TIMEOUT_MS,
   evaluateDemeWithOllamaSystemOne,
   getOllamaClient,
-  normalizeDecisionProbabilities
+  normalizeDecisionProbabilities,
+  SECONDARY_SYSTEM_ONE_MODEL
 } from "./ollamaSystemOne";
 
 const MOCK_MILESTONE_TEMPLATES: Record<
@@ -111,6 +112,7 @@ const MOCK_MILESTONE_TEMPLATES: Record<
 export interface LiveCognitiveProviderOptions {
   host?: string;
   systemOneTag?: string;
+  secondarySystemOneTag?: string;
   systemTwoTag?: string;
   systemOneTimeoutMs?: number;
   systemTwoTimeoutMs?: number;
@@ -119,6 +121,7 @@ export interface LiveCognitiveProviderOptions {
 export class LiveCognitiveProvider implements CognitiveProvider {
   private readonly host: string;
   private resolvedSystemOneTag: string;
+  private resolvedSecondarySystemOneTag: string;
   private resolvedSystemTwoTag: string;
   private readonly systemOneTimeoutMs: number;
   private readonly systemTwoTimeoutMs: number;
@@ -128,6 +131,9 @@ export class LiveCognitiveProvider implements CognitiveProvider {
     this.resolvedSystemOneTag = options?.systemOneTag
       ? options.systemOneTag
       : DEFAULT_SYSTEM_ONE_MODEL;
+    this.resolvedSecondarySystemOneTag = options?.secondarySystemOneTag
+      ? options.secondarySystemOneTag
+      : SECONDARY_SYSTEM_ONE_MODEL;
     this.resolvedSystemTwoTag = options?.systemTwoTag
       ? options.systemTwoTag
       : DEFAULT_SYSTEM_TWO_MODEL;
@@ -149,24 +155,35 @@ export class LiveCognitiveProvider implements CognitiveProvider {
       const matchedD3 =
         installedNames.find((name) => name === this.resolvedSystemOneTag) ||
         installedNames.find((name) => name === "d3" || name.startsWith("d3:"));
+      const matchedTev1 =
+        installedNames.find((name) => name === this.resolvedSecondarySystemOneTag) ||
+        installedNames.find((name) => name === "tev1" || name.startsWith("tev1:"));
       const matchedGemma =
         installedNames.find((name) => name === this.resolvedSystemTwoTag) ||
-        installedNames.find((name) => name.startsWith("gemma4:e4b-it-qat")) ||
+        installedNames.find((name) => name.startsWith("gemma4:e2b")) ||
         installedNames.find((name) => name === "gemma4" || name.startsWith("gemma4:"));
 
-      const systemOneModelReady = Boolean(matchedD3);
+      const primarySystemOneReady = Boolean(matchedD3);
+      const secondarySystemOneModelReady = Boolean(matchedTev1);
+      const systemOneModelReady = primarySystemOneReady && secondarySystemOneModelReady;
       const systemTwoModelReady = Boolean(matchedGemma);
 
       if (matchedD3) {
         this.resolvedSystemOneTag = matchedD3;
+      }
+      if (matchedTev1) {
+        this.resolvedSecondarySystemOneTag = matchedTev1;
       }
       if (matchedGemma) {
         this.resolvedSystemTwoTag = matchedGemma;
       }
 
       const missingCommands: string[] = [];
-      if (!systemOneModelReady) {
+      if (!primarySystemOneReady) {
         missingCommands.push(`ollama pull ${DEFAULT_SYSTEM_ONE_MODEL}`);
+      }
+      if (!secondarySystemOneModelReady) {
+        missingCommands.push(`ollama pull ${SECONDARY_SYSTEM_ONE_MODEL}`);
       }
       if (!systemTwoModelReady) {
         missingCommands.push(`ollama pull ${DEFAULT_SYSTEM_TWO_MODEL}`);
@@ -177,6 +194,8 @@ export class LiveCognitiveProvider implements CognitiveProvider {
         host: this.host,
         systemOneModelReady,
         resolvedSystemOneTag: this.resolvedSystemOneTag,
+        secondarySystemOneModelReady,
+        resolvedSecondarySystemOneTag: this.resolvedSecondarySystemOneTag,
         systemTwoModelReady,
         resolvedSystemTwoTag: this.resolvedSystemTwoTag,
         missingCommands
@@ -187,10 +206,13 @@ export class LiveCognitiveProvider implements CognitiveProvider {
         host: this.host,
         systemOneModelReady: false,
         resolvedSystemOneTag: this.resolvedSystemOneTag,
+        secondarySystemOneModelReady: false,
+        resolvedSecondarySystemOneTag: this.resolvedSecondarySystemOneTag,
         systemTwoModelReady: false,
         resolvedSystemTwoTag: this.resolvedSystemTwoTag,
         missingCommands: [
           `ollama pull ${DEFAULT_SYSTEM_ONE_MODEL}`,
+          `ollama pull ${SECONDARY_SYSTEM_ONE_MODEL}`,
           `ollama pull ${DEFAULT_SYSTEM_TWO_MODEL}`
         ]
       };
@@ -200,9 +222,20 @@ export class LiveCognitiveProvider implements CognitiveProvider {
   async evaluateDemeDecisions(
     input: DemeDecisionEvaluationInput
   ): Promise<DemeDecisionEvaluationOutput> {
+    const requestedTag = input.deme.decisionModelTag;
+    const isSecondary =
+      requestedTag === SECONDARY_SYSTEM_ONE_MODEL ||
+      requestedTag === this.resolvedSecondarySystemOneTag ||
+      (requestedTag !== undefined && requestedTag.startsWith("tev1"));
+    const modelTag = isSecondary
+      ? this.resolvedSecondarySystemOneTag
+      : requestedTag
+        ? requestedTag
+        : this.resolvedSystemOneTag;
+
     return evaluateDemeWithOllamaSystemOne(input, {
       host: this.host,
-      modelTag: this.resolvedSystemOneTag,
+      modelTag,
       timeoutMs: this.systemOneTimeoutMs
     });
   }
@@ -233,6 +266,8 @@ export class MockCognitiveProvider implements CognitiveProvider {
       host: "mock://deterministic",
       systemOneModelReady: true,
       resolvedSystemOneTag: DEFAULT_SYSTEM_ONE_MODEL,
+      secondarySystemOneModelReady: true,
+      resolvedSecondarySystemOneTag: SECONDARY_SYSTEM_ONE_MODEL,
       systemTwoModelReady: true,
       resolvedSystemTwoTag: DEFAULT_SYSTEM_TWO_MODEL,
       missingCommands: []

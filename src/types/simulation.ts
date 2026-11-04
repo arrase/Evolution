@@ -244,6 +244,8 @@ export interface OllamaStatusReport {
   host: string;
   systemOneModelReady: boolean;
   resolvedSystemOneTag: string;
+  secondarySystemOneModelReady?: boolean;
+  resolvedSecondarySystemOneTag?: string;
   systemTwoModelReady: boolean;
   resolvedSystemTwoTag: string;
   missingCommands: string[];
@@ -259,6 +261,7 @@ export interface DemeDecisionEvaluationInput {
     population: number;
     energyReserves: number;
     lastEnergyDelta: number;
+    decisionModelTag?: string;
     lastDominantDecisionId?: string;
     baldwinProgress?: number;
     innovationProgress?: number;
