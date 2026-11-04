@@ -55,6 +55,7 @@ export const SEA_LEVEL_COST = 25;
 const MAX_VISIBLE_TOASTS = 4;
 
 export interface ExtendedSimulationStore extends SimulationStore {
+  previousWorld: WorldState | null;
   playbackSpeed: PlaybackSpeed;
   mapLens: MapLens;
   toasts: Toast[];
@@ -369,6 +370,7 @@ const initialSelection = resolveInitialSelection(initialWorld);
 export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => ({
   locale: initialLocale,
   world: initialWorld,
+  previousWorld: null,
   playbackMode: "paused",
   selectedHexId: initialSelection.selectedHexId,
   selectedDemeId: initialSelection.selectedDemeId,
@@ -401,6 +403,7 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
     const selection = resolveInitialSelection(freshWorld);
     set({
       world: freshWorld,
+      previousWorld: null,
       playbackMode: "paused",
       activeBrush: { kind: "inspect" },
       selectedHexId: selection.selectedHexId,
@@ -515,6 +518,7 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
 
       set({
         world: nextWorld,
+        previousWorld: preTurnState.world,
         playbackMode: nextPlaybackMode,
         selectedHexId: nextSelection.selectedHexId,
         selectedDemeId: nextSelection.selectedDemeId,
@@ -916,6 +920,7 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
     const selection = resolveInitialSelection(importedWorld);
     set({
       world: importedWorld,
+      previousWorld: null,
       playbackMode: "paused",
       activeBrush: { kind: "inspect" },
       selectedHexId: selection.selectedHexId,

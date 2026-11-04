@@ -331,10 +331,31 @@
     "zoomIn": "Aproximar",
     "zoomOut": "Afastar",
     "resetView": "Redefinir vista",
+    "rotateLeft": "Girar à esquerda (Q)",
+    "rotateRight": "Girar à direita (E)",
+    "tiltView": "Inclinar câmera (R/F)",
     "vitalStatus": "Estado vital",
     "actions": "Comportamento dominante",
     "cultureBadge": "Tradições culturais",
-    "activeInteractions": "Interações ativas"
+    "activeInteractions": "Interações ativas",
+    "villageScale": "Escala de aldeia",
+    "villageTiers": {
+      "camp": "Acampamento",
+      "hamlet": "Povoado",
+      "village": "Aldeia Consolidada",
+      "settlement": "Assentamento Complexo"
+    },
+    "infrastructureTitle": "Infraestruturas 3D",
+    "infrastructures": {
+      "road": "Estrada de blocos",
+      "ramp": "Rampa escalonada",
+      "bridge": "Ponte 3D",
+      "disusedRoad": "Rota em desuso",
+      "disputeFront": "Frente fortificada de disputa",
+      "expedition": "Expedição migratória",
+      "totem": "Monólito cultural",
+      "ruins": "Ruínas desmoronadas"
+    }
   },
   "panel": {
     "label": "Detalhes",

@@ -331,10 +331,31 @@
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "resetView": "Reset view",
+    "rotateLeft": "Rotate left (Q)",
+    "rotateRight": "Rotate right (E)",
+    "tiltView": "Tilt camera (R/F)",
     "vitalStatus": "Vital status",
     "actions": "Dominant behaviour",
     "cultureBadge": "Cultural traditions",
-    "activeInteractions": "Active interactions"
+    "activeInteractions": "Active interactions",
+    "villageScale": "Village scale",
+    "villageTiers": {
+      "camp": "Camp",
+      "hamlet": "Hamlet",
+      "village": "Consolidated Village",
+      "settlement": "Complex Settlement"
+    },
+    "infrastructureTitle": "3D Infrastructures",
+    "infrastructures": {
+      "road": "Block road",
+      "ramp": "Stepped ramp",
+      "bridge": "3D Bridge",
+      "disusedRoad": "Disused route",
+      "disputeFront": "Fortified dispute front",
+      "expedition": "Migration expedition",
+      "totem": "Cultural monolith",
+      "ruins": "Collapsed ruins"
+    }
   },
   "panel": {
     "label": "Details",

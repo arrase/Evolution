@@ -186,3 +186,113 @@ export function colorOnScale(scale: readonly [string, string, string], ratio: nu
 export function habitatHealthRatio(cell: HexCell): number {
   return cell.carryingCapacity / cell.carryingCapacityMax;
 }
+
+export function shadeColorHex(hex: string, factor: number): string {
+  const clean = hex.startsWith("#") ? hex.slice(1) : hex;
+  const r = Math.min(255, Math.max(0, Math.round(parseInt(clean.slice(0, 2), 16) * factor)));
+  const g = Math.min(255, Math.max(0, Math.round(parseInt(clean.slice(2, 4), 16) * factor)));
+  const b = Math.min(255, Math.max(0, Math.round(parseInt(clean.slice(4, 6), 16) * factor)));
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+export type VillageTierKey = "camp" | "hamlet" | "village" | "settlement";
+
+export const VILLAGE_TIER_VISUALS: Record<
+  VillageTierKey,
+  {
+    roman: "I" | "II" | "III" | "IV";
+    level: 1 | 2 | 3 | 4;
+    minPop: number;
+    roofColor: string;
+    wallColor: string;
+    badgeClass: string;
+  }
+> = {
+  camp: {
+    roman: "I",
+    level: 1,
+    minPop: 10,
+    roofColor: "#d97706",
+    wallColor: "#78350f",
+    badgeClass: "bg-amber-950/80 text-amber-200 border-amber-500/40"
+  },
+  hamlet: {
+    roman: "II",
+    level: 2,
+    minPop: 50,
+    roofColor: "#ea580c",
+    wallColor: "#9a3412",
+    badgeClass: "bg-orange-950/80 text-orange-200 border-orange-500/40"
+  },
+  village: {
+    roman: "III",
+    level: 3,
+    minPop: 150,
+    roofColor: "#0284c7",
+    wallColor: "#cbd5e1",
+    badgeClass: "bg-sky-950/80 text-sky-200 border-sky-500/40"
+  },
+  settlement: {
+    roman: "IV",
+    level: 4,
+    minPop: 400,
+    roofColor: "#eab308",
+    wallColor: "#e2e8f0",
+    badgeClass: "bg-yellow-950/80 text-yellow-200 border-yellow-500/40"
+  }
+};
+
+export type Infrastructure3DKind =
+  | "road"
+  | "ramp"
+  | "bridge"
+  | "dispute_front"
+  | "expedition"
+  | "merge_integration";
+
+export const INFRASTRUCTURE_3D_STYLES: Record<
+  Infrastructure3DKind,
+  {
+    topColor: string;
+    sideColor: string;
+    accentColor: string;
+    labelKey: string;
+  }
+> = {
+  road: {
+    topColor: "#d6d3d1",
+    sideColor: "#78716c",
+    accentColor: "#34d399",
+    labelKey: "map.infrastructures.road"
+  },
+  ramp: {
+    topColor: "#e7e5e4",
+    sideColor: "#57534e",
+    accentColor: "#10b981",
+    labelKey: "map.infrastructures.ramp"
+  },
+  bridge: {
+    topColor: "#b45309",
+    sideColor: "#78350f",
+    accentColor: "#fbbf24",
+    labelKey: "map.infrastructures.bridge"
+  },
+  dispute_front: {
+    topColor: "#991b1b",
+    sideColor: "#450a0a",
+    accentColor: "#f87171",
+    labelKey: "map.infrastructures.disputeFront"
+  },
+  expedition: {
+    topColor: "#0284c7",
+    sideColor: "#0c4a6e",
+    accentColor: "#38bdf8",
+    labelKey: "map.infrastructures.expedition"
+  },
+  merge_integration: {
+    topColor: "#a855f7",
+    sideColor: "#581c87",
+    accentColor: "#c084fc",
+    labelKey: "map.infrastructures.road"
+  }
+};

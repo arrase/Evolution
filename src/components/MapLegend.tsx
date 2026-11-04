@@ -1,22 +1,64 @@
 import { useTranslation } from "react-i18next";
 import { useSimulationStore, type MapLens } from "../store/useSimulationStore";
-import {
-  BiomeTypeSchema,
-  DecisionArchetypeSchema,
-  HexEdgeFlowTypeSchema
-} from "../types/simulation";
+import { BiomeTypeSchema, DecisionArchetypeSchema } from "../types/simulation";
 import {
   BIOME_STYLES,
   DECISION_ARCHETYPE_VISUALS,
   DEME_STATUS_RINGS,
   type DemeVitalStatus,
-  FLOW_STYLES,
   FOOD_SCALE,
-  HEALTH_SCALE
+  HEALTH_SCALE,
+  INFRASTRUCTURE_3D_STYLES,
+  VILLAGE_TIER_VISUALS,
+  type VillageTierKey
 } from "./palette";
 
 const LENSES: MapLens[] = ["biome", "food", "health"];
 const VITAL_STATUSES: DemeVitalStatus[] = ["thriving", "stable", "struggling", "starving"];
+const VILLAGE_TIERS: VillageTierKey[] = ["camp", "hamlet", "village", "settlement"];
+const LEGEND_INFRASTRUCTURES: Array<{
+  key: string;
+  labelKey: string;
+  topColor: string;
+  accentColor: string;
+}> = [
+  {
+    key: "road",
+    labelKey: "map.infrastructures.road",
+    topColor: INFRASTRUCTURE_3D_STYLES.road.topColor,
+    accentColor: INFRASTRUCTURE_3D_STYLES.road.accentColor
+  },
+  {
+    key: "ramp",
+    labelKey: "map.infrastructures.ramp",
+    topColor: INFRASTRUCTURE_3D_STYLES.ramp.topColor,
+    accentColor: INFRASTRUCTURE_3D_STYLES.ramp.accentColor
+  },
+  {
+    key: "bridge",
+    labelKey: "map.infrastructures.bridge",
+    topColor: INFRASTRUCTURE_3D_STYLES.bridge.topColor,
+    accentColor: INFRASTRUCTURE_3D_STYLES.bridge.accentColor
+  },
+  {
+    key: "dispute_front",
+    labelKey: "map.infrastructures.disputeFront",
+    topColor: INFRASTRUCTURE_3D_STYLES.dispute_front.topColor,
+    accentColor: INFRASTRUCTURE_3D_STYLES.dispute_front.accentColor
+  },
+  {
+    key: "expedition",
+    labelKey: "map.infrastructures.expedition",
+    topColor: INFRASTRUCTURE_3D_STYLES.expedition.topColor,
+    accentColor: INFRASTRUCTURE_3D_STYLES.expedition.accentColor
+  },
+  {
+    key: "totem",
+    labelKey: "map.infrastructures.totem",
+    topColor: "#a855f7",
+    accentColor: "#e9d5ff"
+  }
+];
 
 export function MapLegend() {
   const { t } = useTranslation();
@@ -78,6 +120,27 @@ export function MapLegend() {
 
           <div className="border-t border-slate-800 pt-2">
             <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {t("map.villageScale")}
+            </div>
+            <ul className="grid grid-cols-2 gap-x-2 gap-y-1">
+              {VILLAGE_TIERS.map((tier) => {
+                const tierVisual = VILLAGE_TIER_VISUALS[tier];
+                return (
+                  <li key={tier} className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className={`shrink-0 rounded border px-1 py-0.5 font-mono text-[9px] font-bold leading-none ${tierVisual.badgeClass}`}
+                    >
+                      {tierVisual.roman}
+                    </span>
+                    <span className="truncate text-[11px]">{t(`map.villageTiers.${tier}`)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div className="border-t border-slate-800 pt-2">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
               {t("map.vitalStatus")}
             </div>
             <ul className="grid grid-cols-2 gap-x-2 gap-y-1">
@@ -91,12 +154,6 @@ export function MapLegend() {
                 </li>
               ))}
             </ul>
-            <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-purple-200">
-              <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full border border-purple-400 bg-purple-950">
-                <span className="h-1.5 w-1.5 rounded-full bg-purple-200" />
-              </span>
-              <span className="truncate">{t("map.cultureBadge")}</span>
-            </div>
           </div>
 
           <div className="border-t border-slate-800 pt-2">
@@ -126,24 +183,25 @@ export function MapLegend() {
             </ul>
           </div>
 
-          <ul className="flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-800 pt-2">
-            {HexEdgeFlowTypeSchema.options.map((flowType) => (
-              <li key={flowType} className="flex items-center gap-1.5">
-                <svg width="18" height="6" aria-hidden="true">
-                  <line
-                    x1="0"
-                    y1="3"
-                    x2="18"
-                    y2="3"
-                    stroke={FLOW_STYLES[flowType].stroke}
-                    strokeWidth="2"
-                    strokeDasharray={FLOW_STYLES[flowType].dash}
+          <div className="border-t border-slate-800 pt-2">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {t("map.infrastructureTitle")}
+            </div>
+            <ul className="grid grid-cols-2 gap-x-2 gap-y-1">
+              {LEGEND_INFRASTRUCTURES.map((item) => (
+                <li key={item.key} className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className="h-2.5 w-3.5 shrink-0 rounded-xs border"
+                    style={{
+                      backgroundColor: item.topColor,
+                      borderColor: item.accentColor
+                    }}
                   />
-                </svg>
-                {t(`map.flows.${flowType}`)}
-              </li>
-            ))}
-          </ul>
+                  <span className="truncate text-[11px]">{t(item.labelKey)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </details>
     </section>

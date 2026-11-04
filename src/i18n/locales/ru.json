@@ -331,10 +331,31 @@
     "zoomIn": "Приблизить",
     "zoomOut": "Отдалить",
     "resetView": "Сбросить вид",
+    "rotateLeft": "Повернуть влево (Q)",
+    "rotateRight": "Повернуть вправо (E)",
+    "tiltView": "Наклон камеры (R/F)",
     "vitalStatus": "Жизненный статус",
     "actions": "Основное поведение",
     "cultureBadge": "Культурные традиции",
-    "activeInteractions": "Активные взаимодействия"
+    "activeInteractions": "Активные взаимодействия",
+    "villageScale": "Масштаб поселения",
+    "villageTiers": {
+      "camp": "Стоянка",
+      "hamlet": "Хутор",
+      "village": "Укреплённая деревня",
+      "settlement": "Развитое поселение"
+    },
+    "infrastructureTitle": "3D-инфраструктура",
+    "infrastructures": {
+      "road": "Блочная дорога",
+      "ramp": "Ступенчатый пандус",
+      "bridge": "3D-мост",
+      "disusedRoad": "Заброшенный путь",
+      "disputeFront": "Укреплённый рубеж конфликта",
+      "expedition": "Миграционная экспедиция",
+      "totem": "Культурный монолит",
+      "ruins": "Обрушенные руины"
+    }
   },
   "panel": {
     "label": "Подробности",

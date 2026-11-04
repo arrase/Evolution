@@ -161,12 +161,50 @@ describe("i18n configuration and 8-locale dictionary parity (FR-015, SC-006)", (
       getItem: (key: string) => (key === LOCALE_STORAGE_KEY ? storedLocale : null)
     });
 
-    expect(detectBrowserLocale()).toBe("es");
+    expect( detectBrowserLocale()).toBe("es");
     expect(loadLocaleFromLocalStorage()).toBe("en");
 
     storedLocale = "de";
     expect(loadLocaleFromLocalStorage()).toBe("de");
 
     vi.unstubAllGlobals();
+  });
+
+  it("includes all 4 village scale tiers, 3D infrastructures, and 3D orbital camera keys across all 8 locales (FR-010)", () => {
+    const villageTiers = ["camp", "hamlet", "village", "settlement"] as const;
+    const infrastructureKeys = [
+      "road",
+      "ramp",
+      "bridge",
+      "disusedRoad",
+      "disputeFront",
+      "expedition",
+      "totem",
+      "ruins"
+    ] as const;
+    const cameraKeys = [
+      "rotateLeft",
+      "rotateRight",
+      "tiltView",
+      "zoomIn",
+      "zoomOut",
+      "resetView"
+    ] as const;
+
+    for (const locale of SUPPORTED_LOCALES) {
+      const mapDict = LOCALE_RESOURCES[locale].translation.map;
+      expect(mapDict.villageScale.trim().length).toBeGreaterThan(0);
+      expect(mapDict.infrastructureTitle.trim().length).toBeGreaterThan(0);
+
+      for (const tier of villageTiers) {
+        expect(mapDict.villageTiers[tier].trim().length).toBeGreaterThan(0);
+      }
+      for (const infraKey of infrastructureKeys) {
+        expect(mapDict.infrastructures[infraKey].trim().length).toBeGreaterThan(0);
+      }
+      for (const camKey of cameraKeys) {
+        expect(mapDict[camKey].trim().length).toBeGreaterThan(0);
+      }
+    }
   });
 });

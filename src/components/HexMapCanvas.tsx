@@ -6,36 +6,36 @@ import {
   type WheelEvent
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Minus, Plus, RotateCcw, X } from "lucide-react";
+import { Compass, Eye, Minus, Plus, RotateCcw, RotateCw, X } from "lucide-react";
+import { computeCellsViewBox, getHexIdsInRadius, HEX_SIZE } from "../engine/hexGrid";
 import {
-  computeCellsViewBox,
-  computeHex25DGeometry,
-  getExistingNeighborCells,
-  getHexIdsInRadius,
-  HEX_SIZE,
-  sortCellsFor25DPainterOrder,
-  type Hex25DGeometry
-} from "../engine/hexGrid";
+  buildWorld3DScene,
+  clampCamera3D,
+  DEFAULT_CAMERA_3D,
+  MAX_ZOOM_3D,
+  MIN_ZOOM_3D,
+  projectPoint3D,
+  projectVoxelBoxFaces,
+  type Camera3DState,
+  type ProjectedVoxelBox3D,
+  type VillageSettlement3D,
+  type VoxelBox3D,
+  type VoxelHexTerritory3D
+} from "../engine/world3d";
 import { useSimulationStore, type MapLens } from "../store/useSimulationStore";
-import type {
-  BiomeType,
-  DecisionArchetype,
-  Deme,
-  HexCell,
-  HexEdgeFlow
-} from "../types/simulation";
+import type { Deme, HexCell } from "../types/simulation";
 import {
   BIOME_RELIEF_COLORS,
   BIOME_STYLES,
   colorOnScale,
   DECISION_ARCHETYPE_VISUALS,
   DEME_STATUS_RINGS,
-  type DemeVitalStatus,
-  FLOW_STYLES,
   FOOD_SCALE,
-  getDemeStatus,
   habitatHealthRatio,
-  HEALTH_SCALE
+  HEALTH_SCALE,
+  INFRASTRUCTURE_3D_STYLES,
+  shadeColorHex,
+  VILLAGE_TIER_VISUALS
 } from "./palette";
 
 interface HoveredHex {
@@ -44,195 +44,82 @@ interface HoveredHex {
   top: number;
 }
 
-interface DemeTokenPosition {
-  deme: Deme;
-  x: number;
-  y: number;
-  radius: number;
-  vitalStatus: DemeVitalStatus;
-  dominantArchetype: DecisionArchetype;
-  hasCulture: boolean;
-}
-
-interface PanDragState {
+interface CameraDragState {
+  mode: "pan" | "orbit";
   startClientX: number;
   startClientY: number;
-  startPanX: number;
-  startPanY: number;
+  startCamera: Camera3DState;
   moved: boolean;
 }
 
-const HOVER_CARD_WIDTH = 236;
-const HOVER_CARD_HEIGHT = 176;
+const HOVER_CARD_WIDTH = 248;
+const HOVER_CARD_HEIGHT = 188;
 const HOVER_CARD_GAP = 16;
-const MIN_ZOOM = 1.0;
-const MAX_ZOOM = 2.75;
-const ZOOM_STEP = 0.35;
-
-const DEME_OFFSETS: Record<number, Array<{ dx: number; dy: number }>> = {
-  1: [{ dx: 0, dy: -2 }],
-  2: [
-    { dx: -15, dy: -2 },
-    { dx: 15, dy: -2 }
-  ],
-  3: [
-    { dx: -15, dy: 6 },
-    { dx: 15, dy: 6 },
-    { dx: 0, dy: -15 }
-  ]
-};
+const ZOOM_STEP = 0.3;
+const PITCH_PRESETS = [32, 48, 68] as const;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function computeDemeRadius(population: number, cohabitingCount: number): number {
-  if (cohabitingCount >= 3) {
-    return clamp(Math.log10(population) * 4.5, 8.2, 10.2);
-  }
-  if (cohabitingCount === 2) {
-    return clamp(Math.log10(population) * 5.2, 8.6, 11.5);
-  }
-  return clamp(Math.log10(population) * 6, 9, 13.8);
 }
 
 function formatPopulation(population: number): string {
   return population >= 1000 ? `${(population / 1000).toFixed(1)}k` : String(population);
 }
 
-function computeCellFill(cell: HexCell, lens: MapLens): string {
-  if (lens === "biome" || cell.biome === "ocean") {
-    return `url(#biome-grad-${cell.biome})`;
+function computeTerritoryTopFill(
+  cell: HexCell,
+  lens: MapLens,
+  season: "wet_warm" | "dry_cold"
+): string {
+  if (cell.biome === "ocean") {
+    return BIOME_STYLES.ocean.fill;
   }
   if (lens === "food") {
     return colorOnScale(FOOD_SCALE, cell.currentResources / cell.carryingCapacityMax);
   }
-  return colorOnScale(HEALTH_SCALE, habitatHealthRatio(cell));
+  if (lens === "health") {
+    return colorOnScale(HEALTH_SCALE, habitatHealthRatio(cell));
+  }
+  const baseFill = BIOME_RELIEF_COLORS[cell.biome].topHighlight;
+  return shadeColorHex(baseFill, season === "wet_warm" ? 1.04 : 0.94);
 }
 
-function renderBiomeMotif(biome: BiomeType, centerX: number, topCenterY: number) {
-  const stroke = BIOME_RELIEF_COLORS[biome].motifStroke;
-  switch (biome) {
-    case "tropical_forest":
-      return (
-        <g
-          transform={`translate(${centerX}, ${topCenterY})`}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={1.3}
-          strokeLinecap="round"
+function renderProjectedVoxelBox(proj: ProjectedVoxelBox3D) {
+  return (
+    <g
+      key={proj.id}
+      className={proj.isAnimatedCaravan ? "voxel-caravan-animated" : undefined}
+    >
+      {proj.sideFaces.map((face, idx) => (
+        <polygon
+          key={`${proj.id}-side-${idx}`}
+          points={face.points}
+          fill={face.fill}
+          stroke={face.stroke}
+          strokeWidth={0.55}
           strokeLinejoin="round"
-          opacity={0.38}
-          className="pointer-events-none"
-        >
-          <path d="M -11 4 C -15 0 -9 -7 -5 -2 C -2 -8 6 -7 7 -1 C 12 -4 15 2 10 5 Z" />
-          <path d="M -6 4 L -6 9 M 4 4 L 4 9" />
-        </g>
-      );
-    case "savanna":
-      return (
-        <g
-          transform={`translate(${centerX}, ${topCenterY})`}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={1.3}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          opacity={0.38}
-          className="pointer-events-none"
-        >
-          <path d="M -12 -3 L 10 -3 C 7 -7 -7 -7 -12 -3 Z" />
-          <path d="M -1 -3 L -2 7 M -1 -3 L -6 0 M -1 -3 L 4 0" />
-          <path d="M -13 7 L -11 4 M 9 7 L 11 4 L 13 7" />
-        </g>
-      );
-    case "arid_steppe":
-      return (
-        <g
-          transform={`translate(${centerX}, ${topCenterY})`}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={1.3}
-          strokeLinecap="round"
-          opacity={0.38}
-          className="pointer-events-none"
-        >
-          <path d="M -16 2 Q -7 -5 2 2 T 16 1" />
-          <path d="M -12 8 Q -3 3 8 8" />
-        </g>
-      );
-    case "tundra":
-      return (
-        <g
-          transform={`translate(${centerX}, ${topCenterY})`}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={1.2}
-          strokeLinecap="round"
-          opacity={0.4}
-          className="pointer-events-none"
-        >
-          <path d="M 0 -7 L 0 7 M -6 -3.5 L 6 3.5 M -6 3.5 L 6 -3.5" />
-          <path d="M -14 7 L 14 7" />
-        </g>
-      );
-    case "high_mountain":
-      return (
-        <g
-          transform={`translate(${centerX}, ${topCenterY})`}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={1.4}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          opacity={0.5}
-          className="pointer-events-none"
-        >
-          <path d="M -15 8 L -5 -8 L 4 8" />
-          <path d="M -1 8 L 7 -5 L 15 8" />
-          <path d="M -8 -3 L -5 -8 L -2 -3 M 5 -1.5 L 7 -5 L 9 -1.5" />
-        </g>
-      );
-    case "coastal_shallows":
-      return (
-        <g
-          transform={`translate(${centerX}, ${topCenterY})`}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={1.2}
-          strokeLinecap="round"
-          opacity={0.36}
-          className="pointer-events-none"
-        >
-          <path d="M -14 -2 Q -7 -5 0 -2 T 14 -2" />
-          <path d="M -10 4 Q -3 1 4 4 T 12 4" />
-        </g>
-      );
-    case "ocean":
-      return (
-        <g
-          transform={`translate(${centerX}, ${topCenterY})`}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={1.1}
-          strokeLinecap="round"
-          opacity={0.25}
-          className="pointer-events-none"
-        >
-          <path d="M -15 -3 Q -8 -7 0 -3 T 15 -3" />
-          <path d="M -12 4 Q -5 0 3 4 T 13 4" />
-        </g>
-      );
-  }
+        />
+      ))}
+      <polygon
+        points={proj.topPolygonPoints}
+        fill={proj.topFill}
+        stroke={proj.strokeColor}
+        strokeWidth={0.6}
+        strokeLinejoin="round"
+      />
+    </g>
+  );
 }
 
 export function HexMapCanvas() {
   const { t } = useTranslation();
   const world = useSimulationStore((s) => s.world);
+  const previousWorld = useSimulationStore((s) => s.previousWorld);
   const mapLens = useSimulationStore((s) => s.mapLens);
   const selectedHexId = useSimulationStore((s) => s.selectedHexId);
   const selectedDemeId = useSimulationStore((s) => s.selectedDemeId);
   const activeBrush = useSimulationStore((s) => s.activeBrush);
+  const activeModal = useSimulationStore((s) => s.activeModal);
   const highlightedLineageId = useSimulationStore((s) => s.highlightedLineageId);
   const selectHex = useSimulationStore((s) => s.selectHex);
   const selectDeme = useSimulationStore((s) => s.selectDeme);
@@ -241,18 +128,16 @@ export function HexMapCanvas() {
 
   const [isPointerDown, setIsPointerDown] = useState(false);
   const [hovered, setHovered] = useState<HoveredHex | null>(null);
-  const [zoom, setZoom] = useState(1.0);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [panDrag, setPanDrag] = useState<PanDragState | null>(null);
+  const [camera, setCamera] = useState<Camera3DState>(DEFAULT_CAMERA_3D);
+  const [dragState, setDragState] = useState<CameraDragState | null>(null);
 
   useEffect(() => {
-    setZoom(MIN_ZOOM);
-    setPan({ x: 0, y: 0 });
+    setCamera(DEFAULT_CAMERA_3D);
     setHovered(null);
   }, [world.presetId]);
 
-  const cellList = sortCellsFor25DPainterOrder(Object.values(world.cells));
-  const baseViewBox = computeCellsViewBox(cellList, HEX_SIZE * 2.3);
+  const cellArray = Object.values(world.cells);
+  const baseViewBox = computeCellsViewBox(cellArray, HEX_SIZE * 2.8);
   const [baseMinX, baseMinY, baseWidth, baseHeight] = baseViewBox.split(" ").map(Number) as [
     number,
     number,
@@ -260,15 +145,36 @@ export function HexMapCanvas() {
     number
   ];
 
-  const zoomedWidth = baseWidth / zoom;
-  const zoomedHeight = baseHeight / zoom;
-  const maxPanX = (baseWidth - zoomedWidth) * 0.65;
-  const maxPanY = (baseHeight - zoomedHeight) * 0.65;
-  const clampedPanX = clamp(pan.x, -maxPanX, maxPanX);
-  const clampedPanY = clamp(pan.y, -maxPanY, maxPanY);
-  const activeMinX = baseMinX + (baseWidth - zoomedWidth) / 2 + clampedPanX;
-  const activeMinY = baseMinY + (baseHeight - zoomedHeight) / 2 + clampedPanY;
-  const activeViewBox = `${activeMinX} ${activeMinY} ${zoomedWidth} ${zoomedHeight}`;
+  const scene = buildWorld3DScene(world, camera, {
+    previousWorld,
+    highlightedLineageId
+  });
+
+  useEffect(() => {
+    if (selectedDemeId === null) {
+      return;
+    }
+    const targetVillage = scene.villagesByDemeId[selectedDemeId];
+    if (targetVillage === undefined) {
+      return;
+    }
+    setCamera((prev) => {
+      if (prev.zoom <= 1.0) {
+        return prev;
+      }
+      const unpanned = projectPoint3D(
+        { x: targetVillage.worldX, y: targetVillage.worldY, z: targetVillage.baseZ },
+        { ...prev, panX: 0, panY: 0 },
+        scene.origin
+      );
+      const maxPan = baseWidth * 0.55;
+      return clampCamera3D({
+        ...prev,
+        panX: clamp(scene.origin.x - unpanned.screenX, -maxPan, maxPan),
+        panY: clamp(scene.origin.y - unpanned.screenY, -maxPan, maxPan)
+      });
+    });
+  }, [selectedDemeId]);
 
   const isPainting = activeBrush.kind !== "inspect";
   const hoveredCell = hovered !== null ? world.cells[hovered.hexId] : undefined;
@@ -283,97 +189,183 @@ export function HexMapCanvas() {
       .map((entry) => entry.hexId)
   );
 
-  const cellGeometries: Record<string, Hex25DGeometry> = {};
-  const demePositions: Record<string, DemeTokenPosition> = {};
-
-  for (const cell of cellList) {
-    const geom = computeHex25DGeometry(cell.q, cell.r, cell.altitude, cell.biome === "ocean");
-    cellGeometries[cell.id] = geom;
-
-    const presentDemes = cell.demeIds
-      .map((id) => world.demes[id])
-      .filter((d): d is Deme => d !== undefined);
-    const offsets = DEME_OFFSETS[presentDemes.length];
-
-    if (offsets !== undefined) {
-      presentDemes.forEach((deme, index) => {
-        const offset = offsets[index]!;
-        const dominantDecision = world.decisionsCatalog[deme.lastDominantDecisionId];
-        const dominantArchetype: DecisionArchetype =
-          dominantDecision !== undefined ? dominantDecision.archetype : "forage";
-
-        demePositions[deme.id] = {
-          deme,
-          x: geom.centerX + offset.dx,
-          y: geom.topCenterY + offset.dy,
-          radius: computeDemeRadius(deme.population, presentDemes.length),
-          vitalStatus: getDemeStatus(deme),
-          dominantArchetype,
-          hasCulture: deme.culturalTraitIds.length > 0
-        };
-      });
-    }
+  function rotateCameraBy(deltaYaw: number) {
+    setCamera((prev) => clampCamera3D({ ...prev, yawDeg: prev.yawDeg + deltaYaw }));
   }
 
-  function resolveDominantArchetype(deme: Deme): DecisionArchetype {
-    const pos = demePositions[deme.id];
-    if (pos !== undefined) {
-      return pos.dominantArchetype;
-    }
-    const decision = world.decisionsCatalog[deme.lastDominantDecisionId];
-    return decision !== undefined ? decision.archetype : "forage";
+  function cycleCameraTilt() {
+    setCamera((prev) => {
+      const currentIdx = PITCH_PRESETS.findIndex((p) => Math.abs(p - prev.pitchDeg) <= 6);
+      const nextPitch =
+        currentIdx === -1
+          ? PITCH_PRESETS[0]
+          : PITCH_PRESETS[(currentIdx + 1) % PITCH_PRESETS.length]!;
+      return clampCamera3D({ ...prev, pitchDeg: nextPitch });
+    });
   }
 
   function adjustZoom(nextZoom: number) {
-    const clampedZoom = Number(clamp(nextZoom, MIN_ZOOM, MAX_ZOOM).toFixed(2));
-    setZoom(clampedZoom);
-    if (clampedZoom <= MIN_ZOOM) {
-      setPan({ x: 0, y: 0 });
-    }
+    setCamera((prev) => {
+      const clampedZoom = clamp(nextZoom, MIN_ZOOM_3D, MAX_ZOOM_3D);
+      return clampCamera3D({
+        ...prev,
+        zoom: clampedZoom,
+        panX: clampedZoom <= 1.0 ? 0 : prev.panX,
+        panY: clampedZoom <= 1.0 ? 0 : prev.panY
+      });
+    });
   }
 
   function resetCamera() {
-    setZoom(MIN_ZOOM);
-    setPan({ x: 0, y: 0 });
+    setCamera(DEFAULT_CAMERA_3D);
   }
 
   function handleWheel(event: WheelEvent<SVGSVGElement>) {
-    event.preventDefault();
     const delta = event.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
-    adjustZoom(zoom + delta);
+    adjustZoom(camera.zoom + delta);
+  }
+
+  function applyCameraShortcutKey(keyRaw: string): boolean {
+    const key = keyRaw.toLowerCase();
+    if (key === "q") {
+      rotateCameraBy(-18);
+      return true;
+    }
+    if (key === "e") {
+      rotateCameraBy(18);
+      return true;
+    }
+    if (key === "r") {
+      setCamera((prev) => clampCamera3D({ ...prev, pitchDeg: prev.pitchDeg - 8 }));
+      return true;
+    }
+    if (key === "f") {
+      setCamera((prev) => clampCamera3D({ ...prev, pitchDeg: prev.pitchDeg + 8 }));
+      return true;
+    }
+    if (key === "w" || keyRaw === "ArrowUp") {
+      setCamera((prev) => clampCamera3D({ ...prev, panY: prev.panY + 24 }));
+      return true;
+    }
+    if (key === "s" || keyRaw === "ArrowDown") {
+      setCamera((prev) => clampCamera3D({ ...prev, panY: prev.panY - 24 }));
+      return true;
+    }
+    if (key === "a" || keyRaw === "ArrowLeft") {
+      setCamera((prev) => clampCamera3D({ ...prev, panX: prev.panX + 24 }));
+      return true;
+    }
+    if (key === "d" || keyRaw === "ArrowRight") {
+      setCamera((prev) => clampCamera3D({ ...prev, panX: prev.panX - 24 }));
+      return true;
+    }
+    if (key === "+" || key === "=") {
+      setCamera((prev) => {
+        const clampedZoom = clamp(prev.zoom + ZOOM_STEP, MIN_ZOOM_3D, MAX_ZOOM_3D);
+        return clampCamera3D({ ...prev, zoom: clampedZoom });
+      });
+      return true;
+    }
+    if (key === "-") {
+      setCamera((prev) => {
+        const clampedZoom = clamp(prev.zoom - ZOOM_STEP, MIN_ZOOM_3D, MAX_ZOOM_3D);
+        return clampCamera3D({
+          ...prev,
+          zoom: clampedZoom,
+          panX: clampedZoom <= 1.0 ? 0 : prev.panX,
+          panY: clampedZoom <= 1.0 ? 0 : prev.panY
+        });
+      });
+      return true;
+    }
+    if (key === "0") {
+      resetCamera();
+      return true;
+    }
+    return false;
+  }
+
+  useEffect(() => {
+    function handleWindowKeyDown(event: globalThis.KeyboardEvent) {
+      if (activeModal !== "none" || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest("input, select, textarea, dialog") !== null
+      ) {
+        return;
+      }
+      if (applyCameraShortcutKey(event.key)) {
+        event.preventDefault();
+      }
+    }
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => window.removeEventListener("keydown", handleWindowKeyDown);
+  }, [activeModal]);
+
+  function handleCanvasKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.defaultPrevented) {
+      return;
+    }
+    const tag = (event.target as HTMLElement).tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") {
+      return;
+    }
+    if (applyCameraShortcutKey(event.key)) {
+      event.preventDefault();
+    }
   }
 
   function handleSvgPointerDown(event: PointerEvent<SVGSVGElement>) {
     if (isPainting) {
       return;
     }
-    setPanDrag({
+    const shouldOrbit = event.shiftKey || event.altKey || event.button === 2 || event.button === 1;
+    setDragState({
+      mode: shouldOrbit ? "orbit" : "pan",
       startClientX: event.clientX,
       startClientY: event.clientY,
-      startPanX: clampedPanX,
-      startPanY: clampedPanY,
+      startCamera: camera,
       moved: false
     });
   }
 
   function handleSvgPointerMove(event: PointerEvent<SVGSVGElement>) {
-    if (panDrag === null || isPainting) {
+    if (dragState === null || isPainting) {
       return;
     }
-    const dxPx = event.clientX - panDrag.startClientX;
-    const dyPx = event.clientY - panDrag.startClientY;
-    if (Math.hypot(dxPx, dyPx) < 5 && !panDrag.moved) {
+    const dxPx = event.clientX - dragState.startClientX;
+    const dyPx = event.clientY - dragState.startClientY;
+    if (Math.hypot(dxPx, dyPx) < 4 && !dragState.moved) {
       return;
     }
-    const svgBounds = event.currentTarget.getBoundingClientRect();
-    const scaleX = zoomedWidth / Math.max(1, svgBounds.width);
-    const scaleY = zoomedHeight / Math.max(1, svgBounds.height);
 
-    setPanDrag({ ...panDrag, moved: true });
-    setPan({
-      x: clamp(panDrag.startPanX - dxPx * scaleX, -maxPanX, maxPanX),
-      y: clamp(panDrag.startPanY - dyPx * scaleY, -maxPanY, maxPanY)
-    });
+    setDragState({ ...dragState, moved: true });
+
+    if (dragState.mode === "orbit") {
+      setCamera(
+        clampCamera3D({
+          ...dragState.startCamera,
+          yawDeg: dragState.startCamera.yawDeg + dxPx * 0.45,
+          pitchDeg: dragState.startCamera.pitchDeg - dyPx * 0.25
+        })
+      );
+      return;
+    }
+
+    const svgBounds = event.currentTarget.getBoundingClientRect();
+    const scaleX = baseWidth / Math.max(1, svgBounds.width);
+    const scaleY = baseHeight / Math.max(1, svgBounds.height);
+    const maxPan = baseWidth * 0.55;
+
+    setCamera(
+      clampCamera3D({
+        ...dragState.startCamera,
+        panX: clamp(dragState.startCamera.panX + dxPx * scaleX, -maxPan, maxPan),
+        panY: clamp(dragState.startCamera.panY + dyPx * scaleY, -maxPan, maxPan)
+      })
+    );
   }
 
   function handleHexPointerDown(hexId: string) {
@@ -385,7 +377,7 @@ export function HexMapCanvas() {
   }
 
   function handleHexClick(hexId: string) {
-    if (panDrag !== null && panDrag.moved) {
+    if (dragState !== null && dragState.moved) {
       return;
     }
     selectHex(hexId);
@@ -423,44 +415,315 @@ export function HexMapCanvas() {
     }
   }
 
-  function renderCoastalShorelines(cell: HexCell, geom: Hex25DGeometry) {
-    if (cell.biome === "ocean") {
-      return null;
+  function renderTerritoryColumn(territory: VoxelHexTerritory3D) {
+    const { cell } = territory;
+    const relief = BIOME_RELIEF_COLORS[cell.biome];
+    const warmFactor = world.season === "wet_warm" ? 1.03 : 0.92;
+    const topFill = computeTerritoryTopFill(cell, mapLens, world.season);
+    const resourceRatio = clamp(cell.currentResources / cell.carryingCapacityMax, 0, 1);
+    const projectedProps = territory.biomeProps
+      .map((box) => projectVoxelBoxFaces(box, scene.camera, world.season, scene.origin))
+      .sort((a, b) => a.depthZ - b.depthZ);
+
+    const cellRuins = scene.ruins.filter((r) => r.hexId === cell.id);
+    const projectedRuins: ProjectedVoxelBox3D[] = [];
+    for (const ruin of cellRuins) {
+      for (const block of ruin.ruinBlocks) {
+        projectedRuins.push(projectVoxelBoxFaces(block, scene.camera, world.season, scene.origin));
+      }
     }
-    const oceanNeighbors = getExistingNeighborCells(cell, world.cells).filter(
-      (neighbor) => neighbor.biome === "ocean"
+    projectedRuins.sort((a, b) => a.depthZ - b.depthZ);
+
+    const residentVillages = cell.demeIds
+      .map((id) => scene.villagesByDemeId[id])
+      .filter((v): v is VillageSettlement3D => v !== undefined)
+      .sort((a, b) => a.billboardAnchor.depthZ - b.billboardAnchor.depthZ);
+
+    return (
+      <g
+        key={cell.id}
+        onPointerDown={() => handleHexPointerDown(cell.id)}
+        onClick={() => handleHexClick(cell.id)}
+        onPointerEnter={(e) => handleHexPointerEnter(cell.id, e)}
+        className={isPainting ? "cursor-crosshair" : "cursor-pointer"}
+      >
+        {territory.sideFaces.map((face) => (
+          <g key={`side-${cell.id}-${face.edgeIndex}`}>
+            <polygon
+              points={face.points}
+              fill={shadeColorHex(relief.skirtLeft, face.shadeFactor * warmFactor)}
+              stroke="#020617"
+              strokeWidth={0.65}
+              strokeLinejoin="round"
+            />
+            {face.strataLines.map((line, sIdx) => (
+              <line
+                key={`strata-${cell.id}-${face.edgeIndex}-${sIdx}`}
+                x1={line.x1}
+                y1={line.y1}
+                x2={line.x2}
+                y2={line.y2}
+                stroke="#020617"
+                strokeOpacity={0.38}
+                strokeWidth={0.55}
+              />
+            ))}
+          </g>
+        ))}
+
+        <polygon
+          points={territory.topPolygonPoints}
+          fill={topFill}
+          fillOpacity={cell.biome === "ocean" ? 0.92 : 0.96}
+          stroke={BIOME_STYLES[cell.biome].stroke}
+          strokeOpacity={mapLens === "biome" ? 0.82 : 0.42}
+          strokeWidth={1.1}
+          strokeLinejoin="round"
+        />
+
+        {(territory.isSubmerged || territory.waterZ > territory.topZ) && (
+          <g className="pointer-events-none">
+            {territory.waterSideFaces.map((wFace) => (
+              <polygon
+                key={`water-side-${cell.id}-${wFace.edgeIndex}`}
+                points={wFace.points}
+                fill="#0284c7"
+                fillOpacity={0.42}
+                stroke="#38bdf8"
+                strokeOpacity={0.35}
+                strokeWidth={0.5}
+              />
+            ))}
+            <polygon
+              points={territory.waterTopPolygonPoints}
+              fill={cell.biome === "coastal_shallows" ? "#0d9488" : "#0369a1"}
+              fillOpacity={cell.biome === "coastal_shallows" ? 0.34 : 0.54}
+              stroke="#38bdf8"
+              strokeOpacity={0.65}
+              strokeWidth={0.85}
+            />
+          </g>
+        )}
+
+        {cell.biome !== "ocean" && territory.healthState !== "healthy" && (
+          <polygon
+            points={territory.topPolygonPoints}
+            fill="none"
+            stroke={territory.healthState === "collapsed" ? "#f87171" : "#fbbf24"}
+            strokeWidth={1.6}
+            strokeDasharray="4 2"
+            opacity={0.85}
+            className="pointer-events-none"
+          />
+        )}
+
+        {cell.biome !== "ocean" && (
+          <g className="pointer-events-none">
+            <rect
+              x={territory.projectedCenter.screenX - 10}
+              y={territory.projectedCenter.screenY + HEX_SIZE * 0.36 * scene.camera.zoom}
+              width={20}
+              height={2.8}
+              rx={1.2}
+              fill="#020617"
+              fillOpacity={0.78}
+              stroke="#1e293b"
+              strokeWidth={0.5}
+            />
+            <rect
+              x={territory.projectedCenter.screenX - 10}
+              y={territory.projectedCenter.screenY + HEX_SIZE * 0.36 * scene.camera.zoom}
+              width={Math.max(2, 20 * resourceRatio)}
+              height={2.8}
+              rx={1.2}
+              fill={colorOnScale(FOOD_SCALE, resourceRatio)}
+            />
+          </g>
+        )}
+
+        <g className="pointer-events-none">
+          {projectedProps.map((proj) => renderProjectedVoxelBox(proj))}
+          {projectedRuins.map((proj) => renderProjectedVoxelBox(proj))}
+        </g>
+
+        {residentVillages.map((village) => {
+          const projectedBuildings = village.buildings
+            .map((b) => projectVoxelBoxFaces(b, scene.camera, world.season, scene.origin))
+            .sort((a, b) => a.depthZ - b.depthZ);
+          const beaconBottom = projectPoint3D(
+            { x: village.worldX, y: village.worldY, z: village.baseZ + 2 },
+            scene.camera,
+            scene.origin
+          );
+          const beaconTop = projectPoint3D(
+            { x: village.worldX, y: village.worldY, z: village.baseZ + 42 },
+            scene.camera,
+            scene.origin
+          );
+
+          return (
+            <g
+              key={`village-3d-${village.deme.id}`}
+              opacity={village.isDimmedByLineageFilter ? 0.25 : 1}
+              onPointerDown={(e) => {
+                if (!isPainting) {
+                  e.stopPropagation();
+                  selectPopulation(village.deme);
+                }
+              }}
+              className={isPainting ? "pointer-events-none" : "cursor-pointer"}
+            >
+              {highlightedLineageId !== null && village.isHighlightedLineage && (
+                <g className="lineage-beacon-pulse pointer-events-none">
+                  <line
+                    x1={beaconBottom.screenX}
+                    y1={beaconBottom.screenY}
+                    x2={beaconTop.screenX}
+                    y2={beaconTop.screenY}
+                    stroke={village.deme.color}
+                    strokeWidth={6 * scene.camera.zoom}
+                    strokeLinecap="round"
+                    opacity={0.32}
+                  />
+                  <line
+                    x1={beaconBottom.screenX}
+                    y1={beaconBottom.screenY}
+                    x2={beaconTop.screenX}
+                    y2={beaconTop.screenY}
+                    stroke="#ffffff"
+                    strokeWidth={1.8 * scene.camera.zoom}
+                    strokeLinecap="round"
+                    opacity={0.85}
+                  />
+                </g>
+              )}
+              {projectedBuildings.map((proj) => renderProjectedVoxelBox(proj))}
+            </g>
+          );
+        })}
+      </g>
     );
-    if (oceanNeighbors.length === 0) {
-      return null;
+  }
+
+  function renderInterVillageStructuresLayer() {
+    const allStructureBlocks: Array<{
+      proj: ProjectedVoxelBox3D;
+      opacity: number;
+    }> = [];
+
+    for (const structure of scene.structures) {
+      const opacity = structure.status === "disused" ? 0.55 : 0.96;
+      for (const block of structure.blocks) {
+        allStructureBlocks.push({
+          proj: projectVoxelBoxFaces(block, scene.camera, world.season, scene.origin),
+          opacity
+        });
+      }
     }
+
+    allStructureBlocks.sort((a, b) => a.proj.depthZ - b.proj.depthZ);
 
     return (
       <g className="pointer-events-none">
-        {oceanNeighbors.map((oceanCell) => {
-          const oceanGeom = cellGeometries[oceanCell.id];
-          if (oceanGeom === undefined) {
-            return null;
-          }
-          const dx = oceanGeom.centerX - geom.centerX;
-          const dy = oceanGeom.centerY - geom.centerY;
-          const rankedCorners = [...geom.topCorners].sort((a, b) => {
-            const dotA = (a.x - geom.centerX) * dx + (a.y - geom.topCenterY) * dy;
-            const dotB = (b.x - geom.centerX) * dx + (b.y - geom.topCenterY) * dy;
-            return dotB - dotA;
-          });
-          const c1 = rankedCorners[0]!;
-          const c2 = rankedCorners[1]!;
+        {scene.structures.map((structure) => {
+          const pStart = projectPoint3D(structure.startPoint, scene.camera, scene.origin);
+          const pEnd = projectPoint3D(structure.endPoint, scene.camera, scene.origin);
           return (
             <line
-              key={`coast-${cell.id}-${oceanCell.id}`}
-              x1={c1.x}
-              y1={c1.y}
-              x2={c2.x}
-              y2={c2.y}
-              stroke="#38bdf8"
-              strokeWidth={2.2}
-              strokeLinecap="round"
-              opacity={0.82}
+              key={`guide-${structure.id}`}
+              x1={pStart.screenX}
+              y1={pStart.screenY}
+              x2={pEnd.screenX}
+              y2={pEnd.screenY}
+              stroke={structure.color}
+              strokeWidth={structure.kind === "bridge" ? 2.4 : 1.6}
+              strokeDasharray={
+                structure.status === "disused"
+                  ? "3 3"
+                  : structure.kind === "expedition"
+                    ? "5 3"
+                    : undefined
+              }
+              opacity={structure.status === "disused" ? 0.45 : 0.72}
+            />
+          );
+        })}
+        {allStructureBlocks.map(({ proj, opacity }) => (
+          <g key={`struct-block-${proj.id}`} opacity={opacity}>
+            {renderProjectedVoxelBox(proj)}
+          </g>
+        ))}
+      </g>
+    );
+  }
+
+  function renderBrushAndSelectionOverlays() {
+    return (
+      <g className="pointer-events-none">
+        {brushPreviewIds.map((hexId) => {
+          const territory = scene.territoriesByHexId[hexId];
+          if (territory === undefined) {
+            return null;
+          }
+          const previewBox: VoxelBox3D = {
+            id: `brush-preview-${hexId}`,
+            centerX: territory.baseCenterX,
+            centerY: territory.baseCenterY,
+            baseZ: territory.topZ,
+            widthX: HEX_SIZE * 1.15,
+            depthY: HEX_SIZE * 1.15,
+            heightZ: 6,
+            topColor: "#ffffff",
+            leftColor: "#38bdf8",
+            rightColor: "#0284c7",
+            strokeColor: "#ffffff"
+          };
+          const proj = projectVoxelBoxFaces(previewBox, scene.camera, world.season, scene.origin);
+          return (
+            <g key={`preview-3d-${hexId}`} opacity={0.35}>
+              <polygon
+                points={territory.topPolygonPoints}
+                fill="#ffffff"
+                fillOpacity={0.22}
+                stroke="#ffffff"
+                strokeWidth={2}
+                strokeDasharray="5 3"
+              />
+              <polygon
+                points={proj.topPolygonPoints}
+                fill="none"
+                stroke="#38bdf8"
+                strokeWidth={1.6}
+                strokeDasharray="3 2"
+              />
+            </g>
+          );
+        })}
+
+        {selectedHexId !== null && scene.territoriesByHexId[selectedHexId] !== undefined && (
+          <polygon
+            points={scene.territoriesByHexId[selectedHexId]!.topPolygonPoints}
+            fill="none"
+            stroke="#f8fafc"
+            strokeWidth={2.5}
+          />
+        )}
+
+        {[...eventHexIds].map((hexId) => {
+          const territory = scene.territoriesByHexId[hexId];
+          if (territory === undefined) {
+            return null;
+          }
+          return (
+            <circle
+              key={`event-${hexId}-${world.generation}`}
+              cx={territory.projectedCenter.screenX}
+              cy={territory.projectedCenter.screenY}
+              r={HEX_SIZE * 0.72 * scene.camera.zoom}
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth={3}
+              className="event-pulse"
             />
           );
         })}
@@ -468,305 +731,124 @@ export function HexMapCanvas() {
     );
   }
 
-  function renderEcologicalOverlay(cell: HexCell, geom: Hex25DGeometry) {
-    if (cell.biome === "ocean") {
-      return null;
-    }
-    const resourceRatio = clamp(cell.currentResources / cell.carryingCapacityMax, 0, 1);
-    const healthRatio = habitatHealthRatio(cell);
-    const isDegraded = healthRatio < 0.85;
-    const barWidth = 22;
-    const barHeight = 3;
-    const barX = geom.centerX - barWidth / 2;
-    const barY = geom.topCenterY + HEX_SIZE * 0.56;
-
+  function renderOcclusionSafeVillageBillboards() {
     return (
-      <g className="pointer-events-none">
-        {isDegraded && (
-          <polygon
-            points={geom.topPolygonPoints}
-            fill="none"
-            stroke={healthRatio < 0.6 ? "#f87171" : "#fbbf24"}
-            strokeWidth={1.8}
-            strokeDasharray="4 2"
-            opacity={0.85}
-          />
-        )}
-        <rect
-          x={barX}
-          y={barY}
-          width={barWidth}
-          height={barHeight}
-          rx={1.5}
-          fill="#020617"
-          fillOpacity={0.75}
-          stroke="#1e293b"
-          strokeWidth={0.6}
-        />
-        <rect
-          x={barX}
-          y={barY}
-          width={Math.max(2, barWidth * resourceRatio)}
-          height={barHeight}
-          rx={1.5}
-          fill={colorOnScale(FOOD_SCALE, resourceRatio)}
-        />
-      </g>
-    );
-  }
-
-  function renderCellDemes(cell: HexCell) {
-    const geom = cellGeometries[cell.id]!;
-    const presentPositions = cell.demeIds
-      .map((id) => demePositions[id])
-      .filter((pos): pos is DemeTokenPosition => pos !== undefined)
-      .sort(
-        (a, b) =>
-          Number(a.deme.id === selectedDemeId) - Number(b.deme.id === selectedDemeId)
-      );
-    const selectedPos = presentPositions.find((pos) => pos.deme.id === selectedDemeId);
-    const labelY =
-      presentPositions.length > 0
-        ? Math.min(...presentPositions.map((pos) => pos.y - pos.radius)) - 10
-        : geom.topCenterY - 24;
-
-    return (
-      <>
-        {presentPositions.map((pos) => {
-          const { deme, x, y, radius, vitalStatus, dominantArchetype, hasCulture } = pos;
+      <g className={isPainting ? "pointer-events-none" : undefined}>
+        {scene.villages.map((village) => {
+          const { deme, vitalStatus, dominantArchetype, hasCulture, tierRoman, tier } = village;
           const isSelected = deme.id === selectedDemeId;
-          const isDimmed =
-            highlightedLineageId !== null && deme.lineageId !== highlightedLineageId;
           const archetypeVisual = DECISION_ARCHETYPE_VISUALS[dominantArchetype];
-          const badgeX = radius * 0.74;
-          const badgeY = -radius * 0.74;
+          const x = village.billboardAnchor.screenX;
+          const y = village.billboardAnchor.screenY;
 
           return (
             <g
-              key={deme.id}
+              key={`billboard-${deme.id}`}
               transform={`translate(${x}, ${y})`}
-              opacity={isDimmed ? 0.22 : 1}
+              opacity={village.isDimmedByLineageFilter ? 0.24 : 1}
               role="button"
               tabIndex={0}
-              aria-label={`${deme.name}: ${t("map.individuals", { count: deme.population })} · ${t(`panel.status.${vitalStatus}`)} · ${t(`catalogLab.archetypes.${dominantArchetype}`)}`}
+              aria-label={`${deme.name} (${tierRoman} · ${t(`map.villageTiers.${tier}`)}): ${t("map.individuals", { count: deme.population })} · ${t(`panel.status.${vitalStatus}`)} · ${t(`catalogLab.archetypes.${dominantArchetype}`)}`}
               aria-pressed={isSelected}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 selectPopulation(deme);
               }}
               onKeyDown={(e) => handleDemeKeyDown(deme, e)}
-              className={`${isPainting ? "pointer-events-none" : "cursor-pointer"} outline-none [&:focus-visible>circle:first-of-type]:stroke-white`}
+              className={`${isPainting ? "pointer-events-none" : "cursor-pointer"} outline-none [&:focus-visible>rect:first-of-type]:stroke-white`}
             >
-              <circle
-                r={radius + 4.2}
-                fill="none"
-                stroke={isSelected ? "#ffffff" : "transparent"}
-                strokeWidth={2.2}
-              />
-              <circle
-                r={radius + 2.0}
-                fill="#020617"
+              <line
+                x1={0}
+                y1={7}
+                x2={village.roofAnchor.screenX - x}
+                y2={village.roofAnchor.screenY - y}
                 stroke={DEME_STATUS_RINGS[vitalStatus]}
-                strokeWidth={1.9}
+                strokeWidth={1.4}
+                opacity={0.85}
               />
-              <circle r={radius} fill={deme.color} stroke="#020617" strokeWidth={1.5} />
+              {village.isOccludedByFrontTerrain && (
+                <rect
+                  x={-22}
+                  y={-11}
+                  width={44}
+                  height={20}
+                  rx={10}
+                  fill="none"
+                  stroke="#38bdf8"
+                  strokeWidth={1.6}
+                  strokeDasharray="2 2"
+                />
+              )}
+              <rect
+                x={-20}
+                y={-9}
+                width={40}
+                height={16}
+                rx={8}
+                fill="#020617"
+                fillOpacity={0.92}
+                stroke={isSelected ? "#ffffff" : DEME_STATUS_RINGS[vitalStatus]}
+                strokeWidth={isSelected ? 2.2 : 1.5}
+              />
+              <circle cx={-12} cy={-1} r={4.2} fill={deme.color} stroke="#020617" strokeWidth={1} />
               <text
+                x={2}
+                y={-0.5}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fill="#020617"
-                fontSize={radius > 11 ? 8 : 6.5}
+                fill="#f8fafc"
+                fontSize={7.2}
                 fontWeight={800}
                 aria-hidden="true"
-                className="pointer-events-none select-none"
+                className="pointer-events-none select-none font-mono"
               >
-                {formatPopulation(deme.population)}
+                {tierRoman}·{formatPopulation(deme.population)}
               </text>
 
               {hasCulture && (
-                <g transform={`translate(${-badgeX}, ${badgeY})`} aria-hidden="true" className="pointer-events-none">
-                  <circle r={4.4} fill="#2e1065" stroke="#c084fc" strokeWidth={1.1} />
-                  <circle r={1.7} fill="#e9d5ff" />
+                <g transform="translate(-16, -9)" aria-hidden="true" className="pointer-events-none">
+                  <circle r={3.8} fill="#2e1065" stroke="#c084fc" strokeWidth={1} />
+                  <circle r={1.4} fill="#e9d5ff" />
                 </g>
               )}
 
-              <g transform={`translate(${badgeX}, ${badgeY})`} aria-hidden="true" className="pointer-events-none">
+              <g transform="translate(17, -8)" aria-hidden="true" className="pointer-events-none">
                 <circle
-                  r={5.2}
+                  r={4.8}
                   fill={archetypeVisual.bg}
                   stroke={archetypeVisual.color}
-                  strokeWidth={1.2}
+                  strokeWidth={1.1}
                 />
                 <path
                   d={archetypeVisual.glyphPath}
                   fill="none"
                   stroke={archetypeVisual.color}
-                  strokeWidth={1.2}
+                  strokeWidth={1.1}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               </g>
+
+              {isSelected && (
+                <text
+                  x={0}
+                  y={-14}
+                  textAnchor="middle"
+                  fill="#f8fafc"
+                  fontSize={9.5}
+                  fontWeight={700}
+                  stroke="#020617"
+                  strokeWidth={3.2}
+                  paintOrder="stroke"
+                  aria-hidden="true"
+                  className="pointer-events-none select-none"
+                >
+                  {deme.name}
+                </text>
+              )}
             </g>
           );
         })}
-
-        {selectedPos !== undefined && (
-          <text
-            x={presentPositions.length > 1 ? geom.centerX : selectedPos.x}
-            y={labelY}
-            textAnchor="middle"
-            fill="#f8fafc"
-            fontSize={10}
-            fontWeight={700}
-            stroke="#020617"
-            strokeWidth={3.5}
-            paintOrder="stroke"
-            aria-hidden="true"
-            className="pointer-events-none select-none"
-          >
-            {selectedPos.deme.name}
-          </text>
-        )}
-      </>
-    );
-  }
-
-  function resolveFlowEndpoints(flow: HexEdgeFlow): {
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    isIntraHex: boolean;
-  } | null {
-    const sourceGeom = cellGeometries[flow.fromHexId];
-    const targetGeom = cellGeometries[flow.toHexId];
-    if (sourceGeom === undefined || targetGeom === undefined) {
-      return null;
-    }
-
-    const sourceDemePos = demePositions[flow.demeId];
-    const x1 = sourceDemePos !== undefined ? sourceDemePos.x : sourceGeom.centerX;
-    const y1 = sourceDemePos !== undefined ? sourceDemePos.y : sourceGeom.topCenterY;
-
-    let targetDemePos =
-      flow.targetDemeId !== undefined ? demePositions[flow.targetDemeId] : undefined;
-
-    if (targetDemePos === undefined) {
-      const targetCell = world.cells[flow.toHexId];
-      if (targetCell !== undefined) {
-        const fallbackId = targetCell.demeIds.find((id) => id !== flow.demeId);
-        if (fallbackId !== undefined) {
-          targetDemePos = demePositions[fallbackId];
-        }
-      }
-    }
-
-    const x2 = targetDemePos !== undefined ? targetDemePos.x : targetGeom.centerX;
-    const y2 = targetDemePos !== undefined ? targetDemePos.y : targetGeom.topCenterY;
-
-    return {
-      x1,
-      y1,
-      x2,
-      y2,
-      isIntraHex: flow.fromHexId === flow.toHexId
-    };
-  }
-
-  function renderFlowVector(flow: HexEdgeFlow, index: number) {
-    const endpoints = resolveFlowEndpoints(flow);
-    if (endpoints === null) {
-      return null;
-    }
-    const { x1, y1, x2, y2, isIntraHex } = endpoints;
-    const style = FLOW_STYLES[flow.type];
-    const strokeWidth = 1.8 + flow.intensity * 2.0;
-
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const dist = Math.hypot(dx, dy);
-
-    if (dist < 2) {
-      const loopY = y1 - 16;
-      const pathD = `M ${x1 - 7} ${y1 - 4} Q ${x1} ${loopY - 10} ${x1 + 7} ${y1 - 4}`;
-      return (
-        <g key={`${flow.demeId}-${flow.type}-${index}`} className="pointer-events-none">
-          <path d={pathD} fill="none" stroke="#020617" strokeWidth={strokeWidth + 2} opacity={0.75} />
-          <path
-            d={pathD}
-            fill="none"
-            stroke={style.stroke}
-            strokeWidth={strokeWidth}
-            strokeDasharray={style.dash}
-            className="flow-arc-animated"
-          />
-          <g transform={`translate(${x1}, ${loopY - 3})`}>
-            <circle r={4.8} fill={style.bg} stroke={style.stroke} strokeWidth={1.1} />
-            <path
-              d={style.glyphPath}
-              fill="none"
-              stroke={style.stroke}
-              strokeWidth={1.2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </g>
-        </g>
-      );
-    }
-
-    const ux = dx / dist;
-    const uy = dy / dist;
-    const nx = -uy;
-    const ny = ux;
-    const startTrim = isIntraHex ? 9 : 11;
-    const endTrim = isIntraHex ? 10 : 13;
-    const sx = x1 + ux * Math.min(startTrim, dist * 0.28);
-    const sy = y1 + uy * Math.min(startTrim, dist * 0.28);
-    const ex = x2 - ux * Math.min(endTrim, dist * 0.28);
-    const ey = y2 - uy * Math.min(endTrim, dist * 0.28);
-
-    const curveMagnitude = isIntraHex ? 12 + (index % 2) * 5 : Math.min(22, dist * 0.22);
-    const cx = (sx + ex) / 2 + nx * curveMagnitude;
-    const cy = (sy + ey) / 2 + ny * curveMagnitude;
-
-    const midX = 0.25 * sx + 0.5 * cx + 0.25 * ex;
-    const midY = 0.25 * sy + 0.5 * cy + 0.25 * ey;
-    const pathD = `M ${sx} ${sy} Q ${cx} ${cy} ${ex} ${ey}`;
-
-    return (
-      <g
-        key={`${flow.demeId}-${flow.fromHexId}-${flow.toHexId}-${index}`}
-        className="pointer-events-none"
-      >
-        <path
-          d={pathD}
-          fill="none"
-          stroke="#020617"
-          strokeWidth={strokeWidth + 2}
-          strokeLinecap="round"
-          opacity={0.7}
-        />
-        <path
-          d={pathD}
-          fill="none"
-          stroke={style.stroke}
-          strokeWidth={strokeWidth}
-          strokeDasharray={style.dash}
-          markerEnd={`url(#flow-arrow-${flow.type})`}
-          opacity={0.95}
-          className="flow-arc-animated"
-        />
-        <g transform={`translate(${midX}, ${midY})`}>
-          <circle r={4.8} fill={style.bg} stroke={style.stroke} strokeWidth={1.1} />
-          <path
-            d={style.glyphPath}
-            fill="none"
-            stroke={style.stroke}
-            strokeWidth={1.2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </g>
       </g>
     );
   }
@@ -775,11 +857,11 @@ export function HexMapCanvas() {
     if (hovered === null || hoveredCell === undefined) {
       return null;
     }
-    const residents = hoveredCell.demeIds
-      .map((id) => world.demes[id])
-      .filter((d): d is Deme => d !== undefined);
-    const cellFlows = world.currentTurnFlows.filter(
-      (flow) => flow.fromHexId === hoveredCell.id || flow.toHexId === hoveredCell.id
+    const residentVillages = hoveredCell.demeIds
+      .map((id) => scene.villagesByDemeId[id])
+      .filter((v): v is VillageSettlement3D => v !== undefined);
+    const cellStructures = scene.structures.filter(
+      (s) => s.fromHexId === hoveredCell.id || s.toHexId === hoveredCell.id
     );
 
     return (
@@ -806,12 +888,12 @@ export function HexMapCanvas() {
           </div>
         )}
         <div className="mt-1.5 border-t border-slate-800 pt-1.5 space-y-1">
-          {residents.length === 0 ? (
+          {residentVillages.length === 0 ? (
             <span className="text-slate-500">{t("map.uninhabited")}</span>
           ) : (
-            residents.map((deme) => {
-              const status = getDemeStatus(deme);
-              const archetype = resolveDominantArchetype(deme);
+            residentVillages.map((village) => {
+              const { deme, vitalStatus, dominantArchetype, tier, tierRoman } = village;
+              const tierVisual = VILLAGE_TIER_VISUALS[tier];
               return (
                 <div key={deme.id} className="flex items-center justify-between gap-1.5">
                   <div className="flex min-w-0 items-center gap-1.5">
@@ -819,40 +901,52 @@ export function HexMapCanvas() {
                       className="h-2.5 w-2.5 shrink-0 rounded-full border"
                       style={{
                         backgroundColor: deme.color,
-                        borderColor: DEME_STATUS_RINGS[status]
+                        borderColor: DEME_STATUS_RINGS[vitalStatus]
                       }}
                     />
                     <span className="truncate font-medium text-slate-100">{deme.name}</span>
+                    <span
+                      className={`shrink-0 rounded border px-1 py-0.2 font-mono text-[9px] font-bold ${tierVisual.badgeClass}`}
+                    >
+                      {tierRoman}
+                    </span>
                   </div>
                   <span
                     className="shrink-0 text-[10px] font-medium"
-                    style={{ color: DECISION_ARCHETYPE_VISUALS[archetype].color }}
+                    style={{ color: DECISION_ARCHETYPE_VISUALS[dominantArchetype].color }}
                   >
-                    {t(`catalogLab.archetypes.${archetype}`)}
+                    {t(`catalogLab.archetypes.${dominantArchetype}`)}
                   </span>
                 </div>
               );
             })
           )}
         </div>
-        {cellFlows.length > 0 && (
+        {cellStructures.length > 0 && (
           <div className="mt-1.5 border-t border-slate-800 pt-1.5">
             <div className="text-[10px] uppercase tracking-wider text-slate-400">
               {t("map.activeInteractions")}
             </div>
             <div className="mt-0.5 flex flex-wrap gap-1">
-              {cellFlows.slice(0, 3).map((flow, idx) => (
-                <span
-                  key={`${flow.demeId}-${flow.type}-${idx}`}
-                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
-                  style={{
-                    backgroundColor: FLOW_STYLES[flow.type].bg,
-                    color: FLOW_STYLES[flow.type].stroke
-                  }}
-                >
-                  {t(`map.flows.${flow.type}`)}
-                </span>
-              ))}
+              {cellStructures.slice(0, 3).map((structure) => {
+                const style = INFRASTRUCTURE_3D_STYLES[structure.kind];
+                return (
+                  <span
+                    key={structure.id}
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                    style={{
+                      backgroundColor: style.sideColor,
+                      color: style.accentColor
+                    }}
+                  >
+                    {t(
+                      structure.status === "disused"
+                        ? "map.infrastructures.disusedRoad"
+                        : style.labelKey
+                    )}
+                  </span>
+                );
+              })}
             </div>
           </div>
         )}
@@ -867,18 +961,21 @@ export function HexMapCanvas() {
 
   return (
     <div
-      className="relative h-full w-full overflow-hidden bg-slate-950 select-none"
+      tabIndex={0}
+      onKeyDown={handleCanvasKeyDown}
+      onContextMenu={(e) => e.preventDefault()}
+      className="relative h-full w-full overflow-hidden bg-slate-950 select-none outline-none"
       onPointerUp={() => {
         setIsPointerDown(false);
-        setPanDrag(null);
+        setDragState(null);
       }}
       onPointerLeave={() => {
         setIsPointerDown(false);
-        setPanDrag(null);
+        setDragState(null);
         setHovered(null);
       }}
     >
-      {highlightedLineageId !== null && (
+      {highlightedLineageId !== null && world.lineageTree[highlightedLineageId] !== undefined && (
         <div className="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg bg-slate-900/95 border border-amber-500/50 px-3 py-1.5 text-xs text-amber-200 shadow-lg">
           <span>{world.lineageTree[highlightedLineageId]!.name}</span>
           <button
@@ -899,9 +996,34 @@ export function HexMapCanvas() {
       >
         <button
           type="button"
+          aria-label={t("map.rotateLeft")}
+          onClick={() => rotateCameraBy(-30)}
+          className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          aria-label={t("map.rotateRight")}
+          onClick={() => rotateCameraBy(30)}
+          className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+        >
+          <RotateCw className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          aria-label={t("map.tiltView")}
+          onClick={cycleCameraTilt}
+          className="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 font-mono text-[11px] text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+        >
+          <Eye className="h-3 w-3" />
+          {Math.round(scene.camera.pitchDeg)}°
+        </button>
+        <button
+          type="button"
           aria-label={t("map.zoomOut")}
-          disabled={zoom <= MIN_ZOOM}
-          onClick={() => adjustZoom(zoom - ZOOM_STEP)}
+          disabled={scene.camera.zoom <= MIN_ZOOM_3D}
+          onClick={() => adjustZoom(scene.camera.zoom - ZOOM_STEP)}
           className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
         >
           <Minus className="h-3.5 w-3.5" />
@@ -912,14 +1034,14 @@ export function HexMapCanvas() {
           onClick={resetCamera}
           className="inline-flex items-center gap-1 rounded-lg px-2 py-1 font-mono text-[11px] text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
         >
-          <RotateCcw className="h-3 w-3" />
-          {Math.round(zoom * 100)}%
+          <Compass className="h-3 w-3" />
+          {Math.round(scene.camera.zoom * 100)}%
         </button>
         <button
           type="button"
           aria-label={t("map.zoomIn")}
-          disabled={zoom >= MAX_ZOOM}
-          onClick={() => adjustZoom(zoom + ZOOM_STEP)}
+          disabled={scene.camera.zoom >= MAX_ZOOM_3D}
+          onClick={() => adjustZoom(scene.camera.zoom + ZOOM_STEP)}
           className="rounded-lg p-1.5 text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -927,142 +1049,22 @@ export function HexMapCanvas() {
       </div>
 
       <svg
-        viewBox={activeViewBox}
+        viewBox={`${baseMinX} ${baseMinY} ${baseWidth} ${baseHeight}`}
         aria-label={t("map.label")}
         onWheel={handleWheel}
         onPointerDown={handleSvgPointerDown}
         onPointerMove={handleSvgPointerMove}
         className={`h-full w-full ${
-          isPainting ? "cursor-crosshair" : panDrag?.moved ? "cursor-grabbing" : "cursor-grab"
+          isPainting ? "cursor-crosshair" : dragState?.moved ? "cursor-grabbing" : "cursor-grab"
         }`}
       >
-        <defs>
-          {(
-            [
-              "tropical_forest",
-              "savanna",
-              "arid_steppe",
-              "tundra",
-              "high_mountain",
-              "coastal_shallows",
-              "ocean"
-            ] as const
-          ).map((biome) => (
-            <radialGradient key={biome} id={`biome-grad-${biome}`} cx="38%" cy="32%" r="72%">
-              <stop offset="0%" stopColor={BIOME_RELIEF_COLORS[biome].topHighlight} />
-              <stop offset="100%" stopColor={BIOME_STYLES[biome].fill} />
-            </radialGradient>
-          ))}
-          {(["migration", "exchange", "dispute"] as const).map((flowType) => (
-            <marker
-              key={flowType}
-              id={`flow-arrow-${flowType}`}
-              viewBox="0 0 10 10"
-              refX="7"
-              refY="5"
-              markerWidth="4.5"
-              markerHeight="4.5"
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 1 L 10 5 L 0 9 z" fill={FLOW_STYLES[flowType].stroke} />
-            </marker>
-          ))}
-        </defs>
-
         <g onPointerLeave={() => setHovered(null)}>
-          {cellList.map((cell) => {
-            const geom = cellGeometries[cell.id]!;
-            const relief = BIOME_RELIEF_COLORS[cell.biome];
-            return (
-              <g
-                key={cell.id}
-                onPointerDown={() => handleHexPointerDown(cell.id)}
-                onClick={() => handleHexClick(cell.id)}
-                onPointerEnter={(e) => handleHexPointerEnter(cell.id, e)}
-                className={isPainting ? "cursor-crosshair" : "cursor-pointer"}
-              >
-                {geom.elevationPx > 0 && (
-                  <>
-                    <polygon
-                      points={geom.leftSkirtPoints}
-                      fill={relief.skirtLeft}
-                      stroke="#020617"
-                      strokeWidth={0.7}
-                    />
-                    <polygon
-                      points={geom.rightSkirtPoints}
-                      fill={relief.skirtRight}
-                      stroke="#020617"
-                      strokeWidth={0.7}
-                    />
-                  </>
-                )}
-                <polygon
-                  points={geom.topPolygonPoints}
-                  fill={computeCellFill(cell, mapLens)}
-                  fillOpacity={0.86 + cell.altitude * 0.14}
-                  stroke={BIOME_STYLES[cell.biome].stroke}
-                  strokeOpacity={mapLens === "biome" ? 0.78 : 0.35}
-                  strokeWidth={1.15}
-                />
-                {mapLens === "biome" && renderBiomeMotif(cell.biome, geom.centerX, geom.topCenterY)}
-                {renderCoastalShorelines(cell, geom)}
-                {renderEcologicalOverlay(cell, geom)}
-              </g>
-            );
-          })}
+          {scene.territories.map((territory) => renderTerritoryColumn(territory))}
         </g>
 
-        <g className="pointer-events-none">
-          {brushPreviewIds.map((hexId) => {
-            const geom = cellGeometries[hexId]!;
-            return (
-              <polygon
-                key={`preview-${hexId}`}
-                points={geom.topPolygonPoints}
-                fill="#ffffff"
-                fillOpacity={0.14}
-                stroke="#ffffff"
-                strokeWidth={2}
-                strokeDasharray="5 3"
-              />
-            );
-          })}
-          {selectedHexId !== null && cellGeometries[selectedHexId] !== undefined && (
-            <polygon
-              points={cellGeometries[selectedHexId]!.topPolygonPoints}
-              fill="none"
-              stroke="#f8fafc"
-              strokeWidth={2.6}
-            />
-          )}
-          {[...eventHexIds].map((hexId) => {
-            const geom = cellGeometries[hexId];
-            if (geom === undefined) {
-              return null;
-            }
-            return (
-              <circle
-                key={`event-${hexId}-${world.generation}`}
-                cx={geom.centerX}
-                cy={geom.topCenterY}
-                r={HEX_SIZE * 0.8}
-                fill="none"
-                stroke="#fbbf24"
-                strokeWidth={3}
-                className="event-pulse"
-              />
-            );
-          })}
-        </g>
-
-        <g>{world.currentTurnFlows.map((flow, index) => renderFlowVector(flow, index))}</g>
-
-        <g className={isPainting ? "pointer-events-none" : undefined}>
-          {cellList.map((cell) => (
-            <g key={`demes-${cell.id}`}>{renderCellDemes(cell)}</g>
-          ))}
-        </g>
+        {renderInterVillageStructuresLayer()}
+        {renderBrushAndSelectionOverlays()}
+        {renderOcclusionSafeVillageBillboards()}
       </svg>
 
       {renderHoverCard()}

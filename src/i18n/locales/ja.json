@@ -331,10 +331,31 @@
     "zoomIn": "拡大",
     "zoomOut": "縮小",
     "resetView": "表示をリセット",
+    "rotateLeft": "左へ回転 (Q)",
+    "rotateRight": "右へ回転 (E)",
+    "tiltView": "カメラ傾き切替 (R/F)",
     "vitalStatus": "生存状態",
     "actions": "主な行動",
     "cultureBadge": "文化的伝統",
-    "activeInteractions": "現在の相互作用"
+    "activeInteractions": "現在の相互作用",
+    "villageScale": "集落の規模",
+    "villageTiers": {
+      "camp": "野営地",
+      "hamlet": "小集落",
+      "village": "発展した村",
+      "settlement": "複合定住地"
+    },
+    "infrastructureTitle": "3Dインフラ",
+    "infrastructures": {
+      "road": "ブロック街道",
+      "ramp": "階段スロープ",
+      "bridge": "3D橋梁",
+      "disusedRoad": "廃道",
+      "disputeFront": "防備された紛争前線",
+      "expedition": "移住遠征隊",
+      "totem": "文化モノリス",
+      "ruins": "崩壊した遺跡"
+    }
   },
   "panel": {
     "label": "詳細",

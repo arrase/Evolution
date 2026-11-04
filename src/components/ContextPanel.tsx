@@ -10,9 +10,15 @@ import {
   ScrollText
 } from "lucide-react";
 import { demeHasCulturalCapacity } from "../catalog/baseTraits";
+import { getVillageTier } from "../engine/world3d";
 import { useSimulationStore } from "../store/useSimulationStore";
 import type { Deme, HexCell } from "../types/simulation";
-import { type DemeVitalStatus, getDemeStatus, habitatHealthRatio } from "./palette";
+import {
+  type DemeVitalStatus,
+  getDemeStatus,
+  habitatHealthRatio,
+  VILLAGE_TIER_VISUALS
+} from "./palette";
 import { InfoHint } from "./Tooltip";
 
 const STATUS_STYLES: Record<DemeVitalStatus, string> = {
@@ -119,26 +125,36 @@ export function ContextPanel() {
           <p className="text-xs text-slate-400">{t("panel.noPopulations")}</p>
         ) : (
           <ul className="max-h-44 space-y-0.5 overflow-y-auto pr-1">
-            {demes.map((deme) => (
-              <li key={deme.id}>
-                <button
-                  type="button"
-                  aria-pressed={deme.id === selectedDemeId}
-                  onClick={() => selectDeme(deme.id)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs cursor-pointer ${
-                    deme.id === selectedDemeId ? "bg-slate-700 text-white" : "text-slate-300 hover:bg-slate-800"
-                  }`}
-                >
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: deme.color }} />
-                  <span className="flex-1 truncate">{deme.name}</span>
-                  <span className="font-mono text-slate-300">{deme.population}</span>
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${STATUS_DOTS[getDemeStatus(deme)]}`}
-                    aria-label={t(`panel.status.${getDemeStatus(deme)}`)}
-                  />
-                </button>
-              </li>
-            ))}
+            {demes.map((deme) => {
+              const tierInfo = getVillageTier(deme.population);
+              const tierVisual = VILLAGE_TIER_VISUALS[tierInfo.tier];
+              return (
+                <li key={deme.id}>
+                  <button
+                    type="button"
+                    aria-pressed={deme.id === selectedDemeId}
+                    onClick={() => selectDeme(deme.id)}
+                    className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs cursor-pointer ${
+                      deme.id === selectedDemeId ? "bg-slate-700 text-white" : "text-slate-300 hover:bg-slate-800"
+                    }`}
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: deme.color }} />
+                    <span className="flex-1 truncate">{deme.name}</span>
+                    <span
+                      className={`shrink-0 rounded border px-1 py-0.5 font-mono text-[9px] font-bold leading-none ${tierVisual.badgeClass}`}
+                      title={t(`map.villageTiers.${tierInfo.tier}`)}
+                    >
+                      {tierInfo.tierRoman}
+                    </span>
+                    <span className="font-mono text-slate-300">{deme.population}</span>
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${STATUS_DOTS[getDemeStatus(deme)]}`}
+                      aria-label={t(`panel.status.${getDemeStatus(deme)}`)}
+                    />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
@@ -199,15 +215,24 @@ export function ContextPanel() {
     const needsCulturalCapacity =
       chosenTrait !== undefined && chosenTrait.category === "cultural" && !hasCulturalCapacity;
     const isFamilyHighlighted = highlightedLineageId === deme.lineageId;
+    const tierInfo = getVillageTier(deme.population);
+    const tierVisual = VILLAGE_TIER_VISUALS[tierInfo.tier];
 
     return (
       <div className="space-y-3">
         {/* Identity & status */}
         <div className={SECTION_CLASS}>
           <div className="flex items-start justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ backgroundColor: deme.color }} />
-              <h3 className="truncate text-sm font-semibold text-white">{deme.name}</h3>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ backgroundColor: deme.color }} />
+                <h3 className="truncate text-sm font-semibold text-white">{deme.name}</h3>
+              </div>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold ${tierVisual.badgeClass}`}>
+                  {tierInfo.tierRoman} · {t(`map.villageTiers.${tierInfo.tier}`)}
+                </span>
+              </div>
             </div>
             <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLES[status]}`}>
               {t(`panel.status.${status}`)}

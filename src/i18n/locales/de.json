@@ -331,10 +331,31 @@
     "zoomIn": "Vergrößern",
     "zoomOut": "Verkleinern",
     "resetView": "Ansicht zurücksetzen",
+    "rotateLeft": "Nach links drehen (Q)",
+    "rotateRight": "Nach rechts drehen (E)",
+    "tiltView": "Kamera neigen (R/F)",
     "vitalStatus": "Vitalstatus",
     "actions": "Dominantes Verhalten",
     "cultureBadge": "Kulturelle Traditionen",
-    "activeInteractions": "Aktive Interaktionen"
+    "activeInteractions": "Aktive Interaktionen",
+    "villageScale": "Dorfgröße",
+    "villageTiers": {
+      "camp": "Lager",
+      "hamlet": "Weiler",
+      "village": "Gefestigtes Dorf",
+      "settlement": "Komplexe Siedlung"
+    },
+    "infrastructureTitle": "3D-Infrastrukturen",
+    "infrastructures": {
+      "road": "Blockstraße",
+      "ramp": "Stufenrampe",
+      "bridge": "3D-Brücke",
+      "disusedRoad": "Stillgelegte Route",
+      "disputeFront": "Befestigte Konfliktfront",
+      "expedition": "Migrationsexpedition",
+      "totem": "Kulturmonolith",
+      "ruins": "Eingestürzte Ruinen"
+    }
   },
   "panel": {
     "label": "Details",

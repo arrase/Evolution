@@ -45,8 +45,32 @@
   }
 }
 
+@keyframes voxel-caravan-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1.8px);
+  }
+}
+
+@keyframes lineage-beacon-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.82;
+  }
+}
+
 .event-pulse {
   opacity: 0;
+}
+
+.lineage-beacon-pulse {
+  opacity: 0.6;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -56,5 +80,23 @@
 
   .flow-arc-animated {
     animation: flow-dash 1.2s linear infinite;
+  }
+
+  .voxel-caravan-animated {
+    animation: voxel-caravan-bob 1.5s ease-in-out infinite;
+  }
+
+  .lineage-beacon-pulse {
+    animation: lineage-beacon-pulse 2.2s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .event-pulse,
+  .flow-arc-animated,
+  .voxel-caravan-animated,
+  .lineage-beacon-pulse {
+    animation: none !important;
+    transition: none !important;
   }
 }

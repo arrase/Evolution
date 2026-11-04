@@ -331,10 +331,31 @@
     "zoomIn": "放大地图",
     "zoomOut": "缩小地图",
     "resetView": "重置视图",
+    "rotateLeft": "向左旋转 (Q)",
+    "rotateRight": "向右旋转 (E)",
+    "tiltView": "调整俯仰角 (R/F)",
     "vitalStatus": "生存状态",
     "actions": "主导行为",
     "cultureBadge": "文化传统",
-    "activeInteractions": "当前互动"
+    "activeInteractions": "当前互动",
+    "villageScale": "聚落规模",
+    "villageTiers": {
+      "camp": "营地",
+      "hamlet": "小村落",
+      "village": "稳固村庄",
+      "settlement": "复合定居点"
+    },
+    "infrastructureTitle": "3D 基础设施",
+    "infrastructures": {
+      "road": "方块道路",
+      "ramp": "阶梯坡道",
+      "bridge": "3D 桥梁",
+      "disusedRoad": "废弃路线",
+      "disputeFront": "防御冲突前线",
+      "expedition": "迁徙远征队",
+      "totem": "文化方尖碑",
+      "ruins": "坍塌遗迹"
+    }
   },
   "panel": {
     "label": "详情",
