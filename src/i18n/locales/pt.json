@@ -1,0 +1,392 @@
+{
+  "app": {
+    "title": "Simulador Evolutivo de Populações",
+    "subtitle": "Sandbox Bio-Cultural e Evolutivo em Ecossistemas Hexagonais",
+    "shortTitle": "Evolution"
+  },
+  "topBar": {
+    "newWorld": "Novo mundo…",
+    "exportJson": "Salvar mundo em arquivo",
+    "importJson": "Carregar mundo de arquivo",
+    "play": "Jogar",
+    "pause": "Pausa",
+    "playHint": "Deixe as gerações passarem sozinhas (Espaço)",
+    "stepOneGen": "+1 ger",
+    "stepHint": "Avança exatamente uma geração",
+    "speed": "Velocidade",
+    "speedNormal": "1×",
+    "speedFast": "3×",
+    "generation": "Geração",
+    "seasons": {
+      "wet_warm": "Estação chuvosa",
+      "dry_cold": "Estação seca"
+    },
+    "aiOffline": "IA offline",
+    "aiOfflineHint": "A simulação precisa do motor de IA local (Ollama). Abra o status da IA para ver como iniciá-lo."
+  },
+  "biomes": {
+    "tropical_forest": "Floresta Tropical",
+    "savanna": "Savana",
+    "arid_steppe": "Estepe Árida",
+    "tundra": "Tundra",
+    "high_mountain": "Alta Montanha",
+    "coastal_shallows": "Baixios Costeiros",
+    "ocean": "Oceano"
+  },
+  "presets": {
+    "preset-rift-savanna": {
+      "name": "O Rift e a Savana",
+      "description": "Uma falha tectônica divide uma floresta tropical estável a oeste de um mosaico de savana em aridificação a leste.",
+      "scientificHypothesis": "Os demes orientais sob aridificação sazonal elevam a cooperação e migração, disparando assimilação de Baldwin ou inovação cultural enquanto o oeste mantém o forrageamento conservador.",
+      "tryThis": "Pressione Jogar e compare as duas populações: a savana oriental que seca leva à cooperação e migração, enquanto a floresta permanece conservadora."
+    },
+    "preset-darwin-archipelago": {
+      "name": "Arquipélago de Darwin",
+      "description": "Ilhas vulcânicas conectadas por pontes terrestres costeiras rasas que emergem e submergem com os ciclos glaciais do nível do mar.",
+      "scientificHypothesis": "Os demes dispersam-se por pontes terrestres durante o nível do mar baixo e sofrem especiação alopátrica quando a subida do mar isola as populações insulares.",
+      "tryThis": "Use a ferramenta Mar para inundar as pontes de terra e isolar as ilhas. Após cerca de 10 gerações pode surgir uma nova espécie."
+    },
+    "preset-finite-island": {
+      "name": "A Ilha Finita",
+      "description": "Uma ilha rica em recursos, mas geograficamente confinada por um oceano profundo intransponível.",
+      "scientificHypothesis": "Sem normas de conservação comunal, a competição e a superexploração intensiva degradam a capacidade de suporte K abaixo de 60% de Kmax, causando uma Tragédia dos Comuns.",
+      "tryThis": "Observe a saúde do habitat da ilha. Sem conservação, as populações a sobre-exploram; experimente adicionar o traço Normas de Conservação Comunal."
+    }
+  },
+  "catalog": {
+    "decisions": {
+      "dec-conservative-forage": {
+        "name": "Forrageamento Conservador",
+        "semanticDescriptor": "Coleta sustentável de flora e pequena fauna locais dentro dos limites de regeneração natural, preservando a capacidade de suporte."
+      },
+      "dec-intensive-overexploit": {
+        "name": "Superexploração Intensiva",
+        "semanticDescriptor": "Extração agressiva do máximo de biomassa imediata para suprir déficits calóricos ou superar rivais, degradando severamente a capacidade de suporte K."
+      },
+      "dec-selective-migration": {
+        "name": "Migração Seletiva",
+        "semanticDescriptor": "Dispersão coordenada para hexágonos adjacentes transitáveis com maior capacidade de suporte ecológica ou menor adensamento demográfico."
+      },
+      "dec-cooperate-store": {
+        "name": "Cooperação e Armazenamento",
+        "semanticDescriptor": "Partilha coletiva de recursos, racionamento sazonal e proteção mútua para amortecer flutuações ambientais e secas."
+      },
+      "dec-exchange-symbiosis": {
+        "name": "Intercâmbio / Simbiose",
+        "semanticDescriptor": "Reciprocidade pacífica de recursos e transmissão cultural horizontal com demes coabitantes ou vizinhos."
+      },
+      "dec-territorial-dispute": {
+        "name": "Disputa Territorial",
+        "semanticDescriptor": "Estratégia Falcão de defesa ou captura forçada da capacidade de suporte local contra demes concorrentes sob alto risco metabólico e mortal."
+      },
+      "dec-explore-innovate": {
+        "name": "Exploração / Inovação",
+        "semanticDescriptor": "Experimentação cognitiva e comportamental de alto custo para descobrir novos nichos ecológicos, ferramentas ou tradições sociais."
+      }
+    },
+    "traits": {
+      "bio-r-strategy": {
+        "name": "Estratégia r (Prolífica)",
+        "semanticDescriptor": "Alta fecundidade, maturação rápida e baixo investimento energético por descendente, permitindo rápida recuperação demográfica.",
+        "affinityCondition": "Ambientes voláteis com mortalidade frequente ou habitats abertos recém-colonizados."
+      },
+      "bio-k-strategy": {
+        "name": "Estratégia K (Longevidade e Cuidado Parental)",
+        "semanticDescriptor": "Longevidade estendida, alto investimento parental e forte sobrevivência intragrupal perto dos limites da capacidade de suporte.",
+        "affinityCondition": "Habitats estáveis e competitivos próximos da capacidade de suporte K."
+      },
+      "bio-digestive-spec": {
+        "name": "Especialização Digestiva Onívora",
+        "semanticDescriptor": "Adaptações enzimáticas e intestinais que permitem metabolizar eficientemente tubérculos fibrosos, sementes e diversas fontes tróficas.",
+        "affinityCondition": "Savanas escassas em recursos, estepes ou biomas sazonais com vegetação fibrosa."
+      },
+      "bio-thermal-tolerance": {
+        "name": "Tolerância Térmica e Hídrica",
+        "semanticDescriptor": "Mecanismos fisiológicos de termorregulação e retenção hídrica que reduzem o estresse metabólico em climas extremos.",
+        "affinityCondition": "Estepes áridas, tundras congelantes ou corredores de alta montanha."
+      },
+      "bio-encephalization": {
+        "name": "Encefalização (Tecido Neural Custoso)",
+        "semanticDescriptor": "Expansão neocortical que habilita raciocínio causal, plasticidade comportamental e transmissão cultural cumulativa a alto custo calórico.",
+        "affinityCondition": "Ambientes complexos e mutáveis que exigem inovação, uso de ferramentas ou coordenação estratégica."
+      },
+      "bio-social-instinct": {
+        "name": "Sociabilidade Instintiva (Gregarismo)",
+        "semanticDescriptor": "Vínculos neuroendócrinos e reconhecimento de parentesco que promovem coalizões, vigilância partilhada e aprendizado social.",
+        "affinityCondition": "Habitats com múltiplos demes ou savanas fragmentadas onde a defesa grupal e cooperação aumentam a sobrevivência."
+      },
+      "cul-fire-processing": {
+        "name": "Domínio do Fogo e Cocção Térmica",
+        "semanticDescriptor": "Uso controlado do fogo para cozimento, destoxificação e aquecimento, reduzindo o custo digestivo enquanto consome biomassa lenhosa.",
+        "affinityCondition": "Estações frias ou habitats com recursos brutos que requerem processamento térmico."
+      },
+      "cul-extraction-tools": {
+        "name": "Ferramentas Especializadas de Extração",
+        "semanticDescriptor": "Implementos líticos, ósseos e de madeira transmitidos entre gerações para multiplicar o rendimento de coleta e caça.",
+        "affinityCondition": "Ecossistemas de alta biomassa ou difícil extração onde a alavancagem tecnológica maximiza o ganho calórico."
+      },
+      "cul-communal-conservation": {
+        "name": "Normas de Conservação Comunal",
+        "semanticDescriptor": "Tabus consuetudinários, coleta rotativa e sanções contra a superexploração que preservam e restauram a capacidade de suporte K.",
+        "affinityCondition": "Ilhas confinadas ou ecossistemas frágeis vulneráveis à Tragédia dos Comuns."
+      },
+      "cul-interdeme-barter": {
+        "name": "Redes de Escambo Inter-Deme",
+        "semanticDescriptor": "Protocolos comerciais ritualizados e troca simbólica de presentes que permitem complementaridade pacífica de recursos e difusão horizontal.",
+        "affinityCondition": "Zonas de contato com demes coabitantes ou adjacentes detentores de traços complementares."
+      },
+      "cul-warrior-expansion": {
+        "name": "Tradição Guerreira / Expansionista",
+        "semanticDescriptor": "Organização marcial, coesão territorial e mobilização ofensiva para deslocar subpopulações rivais.",
+        "affinityCondition": "Territórios saturados com severa competição por recursos entre linhagens distintas."
+      }
+    }
+  },
+  "axes": {
+    "metabolicCost": "Custo Metabólico",
+    "extractionEfficiency": "Eficiência de Extração",
+    "ecologicalImpact": "Impacto Ecológico",
+    "spatialMobility": "Mobilidade Espacial",
+    "socialCohesion": "Coesão Social",
+    "transmissionThreshold": "Limiar de Transmissão"
+  },
+  "catalogLab": {
+    "title": "Lab: traços e comportamentos",
+    "tabs": {
+      "biological_trait": "Traços biológicos",
+      "cultural_trait": "Tradições culturais",
+      "decision": "Comportamentos"
+    },
+    "createNew": "Novo item em branco",
+    "nameLabel": "Nome",
+    "archetypeLabel": "Tipo de comportamento",
+    "semanticDescriptorLabel": "Descrição (lida pelo modelo de decisão)",
+    "affinityConditionLabel": "Onde ajuda",
+    "enablesCulturalTransmission": "Permite transmissão cultural (habilita tradições culturais)",
+    "biophysicalAxesTitle": "Ajuste fino biofísico (avançado)",
+    "biophysicalAxesHint": "Seis efeitos sobre a população. Vantagens devem ser pagas com custo metabólico, exceto no sandbox livre.",
+    "thermodynamicStatus": "Balanço energético",
+    "thermodynamicBalanced": "Equilibrado",
+    "thermodynamicAdjusted": "Custo metabólico ajustado automaticamente",
+    "freeSandboxToggle": "Ignorar o balanço energético (sandbox livre)",
+    "advantages": "Vantagens",
+    "currentCost": "Custo atual",
+    "requiredCost": "Custo necessário",
+    "adjustedMetabolicCost": "Custo metabólico ajustado",
+    "aiCoDesignTitle": "Descreva uma ideia e a IA a projetará",
+    "aiConceptPlaceholder": "ex. Pesca sazonal com redes cooperativas",
+    "aiGenerateButton": "Projetar",
+    "aiGenerating": "Projetando…",
+    "aiFailed": "O motor de IA não está disponível. Verifique seu status nas Configurações.",
+    "emptyTitle": "Crie ou edite um item",
+    "emptyHint": "Descreva uma ideia acima, escolha um item da lista ou comece de um item em branco.",
+    "saveToCatalog": "Salvar",
+    "injectIntoSelectedDeme": "Salvar e adicionar a {{name}}",
+    "saved": "Salvo. Vale a partir da próxima geração.",
+    "archetypes": {
+      "forage": "Coleta",
+      "overexploit": "Sobre-exploração",
+      "migrate": "Migração",
+      "cooperate": "Cooperação",
+      "exchange": "Troca",
+      "dispute": "Conflito",
+      "innovate": "Inovação",
+      "custom": "Personalizado"
+    },
+    "origins": {
+      "base": "Embutido",
+      "user": "Personalizado",
+      "emergent": "Evoluído"
+    }
+  },
+  "phyloTree": {
+    "title": "Árvore genealógica",
+    "extinctGen": "Ger Extinção",
+    "living": "Linhagem Viva",
+    "founderHex": "Hexágono Fundador",
+    "clearHighlight": "Limpar Destaque do Mapa",
+    "highlightHint": "Clique em uma linhagem para destacar suas populações vivas no mapa.",
+    "reasons": {
+      "initial": "Linhagem Fundadora Ancestral",
+      "allopatric_speciation": "Especiação Alopátrica",
+      "cultural_schism": "Cisma Cultural",
+      "baldwin_assimilation": "Assimilação Genética de Baldwin"
+    },
+    "populationsCount": "{{count}} populações"
+  },
+  "notebook": {
+    "title": "Crônica",
+    "emptyFeed": "Nada notável aconteceu ainda. Pressione Jogar e os eventos importantes serão registrados aqui.",
+    "milestoneBannerTitle": "Novo marco evolutivo",
+    "generationBadge": "Geração",
+    "types": {
+      "baldwin_trait": "Assimilação de Baldwin",
+      "cultural_innovation": "Inovação Cultural",
+      "allopatric_speciation": "Especiação Alopátrica",
+      "cultural_loss": "Gargalo Cultural",
+      "extinction": "Extinção de Linhagem",
+      "tragedy_of_commons": "Tragédia dos Comuns",
+      "symbiosis": "Simbiose Inter-Deme"
+    },
+    "readEntry": "Ler na crônica",
+    "showOnMap": "Ver no mapa"
+  },
+  "diagnostics": {
+    "title": "Status do motor de IA",
+    "close": "Fechar",
+    "statusConnected": "Conectado ao motor de IA local (Ollama)",
+    "statusDisconnected": "Não foi possível contactar o motor de IA local (Ollama) ou faltam modelos",
+    "hostLabel": "Host do Ollama",
+    "systemOneLabel": "Modelo de decisão: roda a cada geração",
+    "systemTwoLabel": "Modelo criativo: marcos, Lab e crônica",
+    "ready": "Pronto",
+    "missing": "Ausente",
+    "instructionsTitle": "Execute os seguintes comandos no terminal para preparar os modelos necessários:",
+    "retryTurnButton": "Tentar Turno Novamente",
+    "refreshStatusButton": "Atualizar Status da Conexão"
+  },
+  "common": {
+    "close": "Fechar",
+    "dismiss": "Dispensar"
+  },
+  "settings": {
+    "title": "Configurações",
+    "language": "Idioma",
+    "autoPauseMilestones": "Pausar em marcos",
+    "autoPauseHint": "Para a reprodução quando uma população desenvolve algo novo.",
+    "unlimitedBudget": "Energia ilimitada",
+    "unlimitedBudgetHint": "Sandbox livre: alterar o ambiente não custa nada.",
+    "aiEngine": "Motor de IA",
+    "aiReady": "pronto",
+    "aiOffline": "offline",
+    "aiDetails": "Detalhes"
+  },
+  "tools": {
+    "label": "Ferramentas",
+    "energy": "Energia",
+    "energyHint": "Cada mudança que você faz no ambiente custa energia. Você recupera {{regen}} por geração.",
+    "perGeneration": "+{{regen}}/ger",
+    "observe": "Observar",
+    "observeHint": "Clique em populações e lugares para saber mais (Esc)",
+    "climate": "Clima",
+    "climateHint": "Pinte outro bioma no mapa",
+    "climateTitle": "Mudar o clima",
+    "climateDescription": "Escolha um bioma e clique ou arraste sobre o mapa para pintá-lo.",
+    "terrain": "Relevo",
+    "terrainHint": "Erga montanhas ou afunde bacias",
+    "terrainTitle": "Moldar o terreno",
+    "terrainDescription": "Altas montanhas e o mar são barreiras: podem dividir uma população em duas.",
+    "food": "Alimento",
+    "foodHint": "Torne um lugar mais rico ou mais pobre",
+    "foodTitle": "Mudar o alimento",
+    "foodDescription": "Mais alimento deixa as populações crescerem; menos as obriga a se adaptar ou partir.",
+    "sea": "Mar",
+    "seaHint": "Suba ou baixe o nível do mar do mundo todo",
+    "seaTitle": "Nível do mar",
+    "seaDescription": "Afeta o mundo inteiro de uma vez. Mares mais altos inundam terras baixas e podem isolar populações em ilhas.",
+    "raiseLand": "Elevar terreno",
+    "lowerLand": "Rebaixar terreno",
+    "addFood": "Adicionar alimento",
+    "removeFood": "Remover alimento",
+    "currentSeaLevel": "Nível do mar atual",
+    "raiseSea": "Subir mar",
+    "lowerSea": "Baixar mar",
+    "brushSize": "Tamanho do pincel",
+    "brushSmall": "Pequeno",
+    "brushLarge": "Grande",
+    "costPerClick": "{{cost}} de energia por clique",
+    "costPerChange": "{{cost}} de energia por mudança",
+    "notEnoughEnergy": "Energia insuficiente. Ela se recupera a cada geração.",
+    "chronicle": "Crônica",
+    "chronicleHint": "Eventos marcantes da história do seu mundo",
+    "familyTree": "Família",
+    "familyTreeHint": "Árvore genealógica de linhagens e espécies",
+    "lab": "Lab",
+    "labHint": "Crie ou edite traços e comportamentos"
+  },
+  "map": {
+    "label": "Mapa do mundo",
+    "legend": "Legenda do mapa",
+    "lens": "Visão do mapa",
+    "lenses": {
+      "biome": "Bioma",
+      "food": "Alimento",
+      "health": "Saúde"
+    },
+    "low": "Baixo",
+    "high": "Alto",
+    "flows": {
+      "migration": "Migração",
+      "exchange": "Troca",
+      "dispute": "Conflito"
+    },
+    "food": "Alimento",
+    "health": "Saúde do habitat",
+    "uninhabited": "Desabitado",
+    "individuals": "{{count}} indivíduos"
+  },
+  "panel": {
+    "label": "Detalhes",
+    "collapse": "Ocultar painel",
+    "expand": "Mostrar painel",
+    "populations": "Populações",
+    "noPopulations": "Todas as populações foram extintas. Comece um novo mundo pelo menu do mundo.",
+    "status": {
+      "thriving": "Prosperando",
+      "stable": "Estável",
+      "struggling": "Em dificuldade",
+      "starving": "Fome"
+    },
+    "population": "População",
+    "reserves": "Reservas",
+    "trend": "Tendência",
+    "showFamily": "Destacar família no mapa",
+    "hideFamily": "Parar de destacar a família",
+    "behaviorTitle": "O que provavelmente farão",
+    "behaviorHint": "Probabilidade de cada comportamento nesta geração, calculada pelo modelo de decisão a partir do habitat e dos traços da população.",
+    "mostly": "Principalmente:",
+    "showAll": "Ver todos ({{count}})",
+    "whyTitle": "Por quê",
+    "biological": "Biológicos",
+    "cultural": "Culturais",
+    "noTraits": "Nenhum ainda",
+    "addTrait": "Adicionar um traço (experimento)",
+    "addTraitHint": "Dê um traço diretamente a esta população para ver como seu comportamento muda.",
+    "addTraitButton": "Adicionar",
+    "selectTraitPlaceholder": "Escolha um traço…",
+    "culturalCapacityRequired": "Tradições culturais precisam antes de um traço que permita cultura (ex. Encefalização ou Sociabilidade instintiva).",
+    "milestonesTitle": "Próximo marco evolutivo",
+    "geneticAdaptation": "Adaptação genética",
+    "geneticAdaptationHint": "Efeito Baldwin: um comportamento mantido por 8 gerações sob pressão torna-se um traço herdado.",
+    "culturalInnovation": "Inovação cultural",
+    "culturalInnovationHint": "Explorar e inovar se acumula até que uma nova tradição seja inventada (requer capacidade cultural).",
+    "isolation": "Isolamento",
+    "isolationHint": "Especiação alopátrica: 10 gerações separadas dos parentes podem originar uma nova espécie.",
+    "habitatTitle": "Habitat",
+    "temperature": "Temperatura",
+    "humidity": "Umidade",
+    "altitude": "Altitude",
+    "food": "Alimento",
+    "foodHint": "Biomassa disponível agora para comer (R).",
+    "health": "Saúde do habitat",
+    "healthHint": "Capacidade de suporte K comparada ao seu máximo (K / Kmax). A sobre-exploração a reduz.",
+    "nobodyHere": "Nenhuma população vive aqui."
+  },
+  "welcome": {
+    "title": "Bem-vindo ao Evolution",
+    "tagline": "Você é a própria natureza. Molde o terreno, o clima e o alimento, e veja as populações se adaptarem, migrarem, se dividirem em novas espécies e inventarem culturas.",
+    "chooseWorld": "Escolha um mundo para começar",
+    "tryThis": "Experimente",
+    "start": "Começar"
+  },
+  "firstSteps": {
+    "title": "Primeiros passos",
+    "play": "Pressione Jogar",
+    "select": "Clique em uma população",
+    "tool": "Mude seu ambiente com uma ferramenta",
+    "dismiss": "Ocultar primeiros passos"
+  },
+  "toasts": {
+    "show": "Ver"
+  }
+}
