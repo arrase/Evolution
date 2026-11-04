@@ -1,9 +1,22 @@
 import { useTranslation } from "react-i18next";
 import { useSimulationStore, type MapLens } from "../store/useSimulationStore";
-import { BiomeTypeSchema, HexEdgeFlowTypeSchema } from "../types/simulation";
-import { BIOME_STYLES, FLOW_STYLES, FOOD_SCALE, HEALTH_SCALE } from "./palette";
+import {
+  BiomeTypeSchema,
+  DecisionArchetypeSchema,
+  HexEdgeFlowTypeSchema
+} from "../types/simulation";
+import {
+  BIOME_STYLES,
+  DECISION_ARCHETYPE_VISUALS,
+  DEME_STATUS_RINGS,
+  type DemeVitalStatus,
+  FLOW_STYLES,
+  FOOD_SCALE,
+  HEALTH_SCALE
+} from "./palette";
 
 const LENSES: MapLens[] = ["biome", "food", "health"];
+const VITAL_STATUSES: DemeVitalStatus[] = ["thriving", "stable", "struggling", "starving"];
 
 export function MapLegend() {
   const { t } = useTranslation();
@@ -15,7 +28,7 @@ export function MapLegend() {
   return (
     <section
       aria-label={t("map.legend")}
-      className="absolute bottom-3 left-3 z-10 w-64 space-y-2.5 rounded-xl border border-slate-800 bg-slate-900/90 p-3 text-xs text-slate-300 shadow-lg backdrop-blur"
+      className="absolute bottom-3 left-3 z-10 w-68 max-h-[75vh] overflow-y-auto space-y-2.5 rounded-xl border border-slate-800 bg-slate-900/90 p-3 text-xs text-slate-300 shadow-lg backdrop-blur"
     >
       <div role="group" aria-label={t("map.lens")} className="flex gap-1 rounded-lg bg-slate-950 p-0.5">
         {LENSES.map((lens) => (
@@ -62,6 +75,56 @@ export function MapLegend() {
               </div>
             </div>
           )}
+
+          <div className="border-t border-slate-800 pt-2">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {t("map.vitalStatus")}
+            </div>
+            <ul className="grid grid-cols-2 gap-x-2 gap-y-1">
+              {VITAL_STATUSES.map((status) => (
+                <li key={status} className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full border-2 bg-slate-950"
+                    style={{ borderColor: DEME_STATUS_RINGS[status] }}
+                  />
+                  <span className="truncate text-[11px]">{t(`panel.status.${status}`)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-purple-200">
+              <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full border border-purple-400 bg-purple-950">
+                <span className="h-1.5 w-1.5 rounded-full bg-purple-200" />
+              </span>
+              <span className="truncate">{t("map.cultureBadge")}</span>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-800 pt-2">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {t("map.actions")}
+            </div>
+            <ul className="grid grid-cols-2 gap-x-2 gap-y-1">
+              {DecisionArchetypeSchema.options.map((archetype) => {
+                const visual = DECISION_ARCHETYPE_VISUALS[archetype];
+                return (
+                  <li key={archetype} className="flex items-center gap-1.5 min-w-0">
+                    <svg width="14" height="14" viewBox="-6 -6 12 12" aria-hidden="true" className="shrink-0">
+                      <circle r="5.5" fill={visual.bg} stroke={visual.color} strokeWidth="1" />
+                      <path
+                        d={visual.glyphPath}
+                        fill="none"
+                        stroke={visual.color}
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <span className="truncate text-[11px]">{t(`catalogLab.archetypes.${archetype}`)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
 
           <ul className="flex flex-wrap gap-x-3 gap-y-1 border-t border-slate-800 pt-2">
             {HexEdgeFlowTypeSchema.options.map((flowType) => (

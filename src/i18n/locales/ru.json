@@ -327,7 +327,14 @@
     "health": "Здоровье среды",
     "uninhabited": "Необитаемо",
     "individuals": "Особей: {{count}}",
-    "individuals_one": "Особей: {{count}}"
+    "individuals_one": "Особей: {{count}}",
+    "zoomIn": "Приблизить",
+    "zoomOut": "Отдалить",
+    "resetView": "Сбросить вид",
+    "vitalStatus": "Жизненный статус",
+    "actions": "Основное поведение",
+    "cultureBadge": "Культурные традиции",
+    "activeInteractions": "Активные взаимодействия"
   },
   "panel": {
     "label": "Подробности",

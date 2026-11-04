@@ -327,7 +327,14 @@
     "health": "Lebensraumgesundheit",
     "uninhabited": "Unbewohnt",
     "individuals": "{{count}} Individuen",
-    "individuals_one": "{{count}} Individuum"
+    "individuals_one": "{{count}} Individuum",
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern",
+    "resetView": "Ansicht zurücksetzen",
+    "vitalStatus": "Vitalstatus",
+    "actions": "Dominantes Verhalten",
+    "cultureBadge": "Kulturelle Traditionen",
+    "activeInteractions": "Aktive Interaktionen"
   },
   "panel": {
     "label": "Details",

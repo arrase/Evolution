@@ -228,4 +228,43 @@ describe("Scientific Presets 30-Generation Integration Benchmarks (FR-014, SC-00
     expect(reachedTerminalOutcome).toBe(true);
     useSimulationStore.getState().setPlaybackMode("paused");
   });
+
+  it("deduplicates equivalent System 1 evaluations within the same turn while formatting deme-specific justifications and caps System 2 synthesis to at most 1 per turn (T007, T008, FR-003, FR-006)", async () => {
+    const baseProvider = new MockCognitiveProvider();
+    let evalCallCount = 0;
+    let milestoneCallCount = 0;
+
+    const instrumentedProvider: MockCognitiveProvider = {
+      checkStatus: () => baseProvider.checkStatus(),
+      evaluateDemeDecisions: async (input) => {
+        evalCallCount += 1;
+        return baseProvider.evaluateDemeDecisions(input);
+      },
+      synthesizeMilestone: async (input) => {
+        milestoneCallCount += 1;
+        return baseProvider.synthesizeMilestone(input);
+      },
+      coDesignCatalogItem: (input) => baseProvider.coDesignCatalogItem(input)
+    };
+
+    const world = getPresetById("preset-finite-island").createInitialWorld();
+    const demeIds = Object.keys(world.demes);
+    expect(demeIds.length).toBe(3);
+
+    for (const id of demeIds) {
+      const deme = world.demes[id]!;
+      deme.population = 320;
+      deme.energyReserves = 75;
+      deme.lastEnergyDelta = 0;
+      deme.biologicalTraitIds = ["bio-r-strategy", "bio-encephalization"];
+      deme.culturalTraitIds = ["cul-extraction-tools"];
+      deme.baldwinCounters = { "dec-intensive-overexploit": 7 };
+      deme.innovationCounter = 1.2;
+    }
+
+    const nextWorld = await executeGenerationalTurn(world, instrumentedProvider, "en");
+    expect(evalCallCount).toBe(1);
+    expect(milestoneCallCount).toBe(1);
+    expect(Object.keys(nextWorld.demes).length).toBeGreaterThanOrEqual(2);
+  });
 });

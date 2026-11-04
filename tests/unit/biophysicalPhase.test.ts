@@ -11,7 +11,8 @@ import { createHexGridCoordinates } from "../../src/engine/hexGrid";
 import {
   applySynthesizedMilestone,
   detectEvolutionaryMilestones,
-  evaluateMacroEvolutionaryOutcome
+  evaluateMacroEvolutionaryOutcome,
+  prioritizeEvolutionaryMilestones
 } from "../../src/engine/milestonePhase";
 import type {
   Deme,
@@ -238,6 +239,11 @@ describe("Phase 3: Biophysical & Demographic Resolution", () => {
     expect(nextState.demes["deme-2"]!.population).toBeLessThan(85);
     expect(nextState.demes["deme-1"]!.lastEnergyDelta).toBeLessThan(0);
     expect(nextState.currentTurnFlows.some((flow) => flow.type === "dispute")).toBe(true);
+    expect(
+      nextState.currentTurnFlows.some(
+        (flow) => flow.type === "dispute" && flow.demeId === "deme-1" && flow.targetDemeId === "deme-2"
+      )
+    ).toBe(true);
   });
 
   it("applies Hawk-Dove resource capture weighted by socialCohesion", () => {
@@ -272,6 +278,11 @@ describe("Phase 3: Biophysical & Demographic Resolution", () => {
     expect(nextState.demes["deme-1"]!.lastEnergyDelta).toBeGreaterThan(
       nextState.demes["deme-2"]!.lastEnergyDelta
     );
+    expect(
+      nextState.currentTurnFlows.some(
+        (flow) => flow.type === "dispute" && flow.demeId === "deme-1" && flow.targetDemeId === "deme-2"
+      )
+    ).toBe(true);
   });
 
   it("applies Symbiosis +20% energy bonus and horizontal cultural diffusion when transmissionThreshold is met", () => {
@@ -317,7 +328,38 @@ describe("Phase 3: Biophysical & Demographic Resolution", () => {
       withoutSymbiosis.demes["deme-1"]!.lastEnergyDelta
     );
     expect(nextState.chronicle.some((entry) => entry.type === "symbiosis")).toBe(true);
-    expect(nextState.currentTurnFlows.some((flow) => flow.type === "exchange")).toBe(true);
+    expect(
+      nextState.currentTurnFlows.some(
+        (flow) => flow.type === "exchange" && flow.demeId === "deme-1" && flow.targetDemeId === "deme-2"
+      )
+    ).toBe(true);
+
+    const interHexState = createTestWorldState();
+    interHexState.demes["deme-1"]!.biologicalTraitIds = ["bio-encephalization", "bio-social-instinct"];
+    interHexState.demes["deme-1"]!.culturalTraitIds = ["cul-fire-processing"];
+    interHexState.demes["deme-neighbor"] = {
+      ...interHexState.demes["deme-1"]!,
+      id: "deme-neighbor",
+      name: "Adjacent Exchangers",
+      hexId: "1,0",
+      culturalTraitIds: []
+    };
+    interHexState.cells["1,0"]!.demeIds.push("deme-neighbor");
+
+    const afterInterHexExchange = resolveBiophysicalAndDemographicPhase(interHexState, {
+      "deme-1": makeDecisionEval("dec-exchange-symbiosis", exchangeProbs),
+      "deme-neighbor": makeDecisionEval("dec-exchange-symbiosis", exchangeProbs)
+    });
+    expect(
+      afterInterHexExchange.currentTurnFlows.some(
+        (flow) =>
+          flow.type === "exchange" &&
+          flow.fromHexId === "0,0" &&
+          flow.toHexId === "1,0" &&
+          flow.demeId === "deme-1" &&
+          flow.targetDemeId === "deme-neighbor"
+      )
+    ).toBe(true);
   });
 
   it("blocks horizontal cultural diffusion during Symbiosis when receiver socialCohesion is below transmissionThreshold", () => {
@@ -433,7 +475,11 @@ describe("Phase 3: Biophysical & Demographic Resolution", () => {
     expect(afterFission.chronicle.some((e) => e.type === "cultural_loss")).toBe(false);
     expect(daughter.baldwinCounters).toEqual({});
     expect(daughter.innovationCounter).toBe(0);
-    expect(afterFission.currentTurnFlows.some((f) => f.type === "migration")).toBe(true);
+    expect(
+      afterFission.currentTurnFlows.some(
+        (f) => f.type === "migration" && f.demeId === "deme-1" && f.targetDemeId === daughter.id
+      )
+    ).toBe(true);
 
     afterFission.cells["1,0"]!.demeIds = [];
     afterFission.cells["0,0"]!.demeIds.push(daughter.id);
@@ -522,6 +568,63 @@ describe("Phase 3: Biophysical & Demographic Resolution", () => {
     expect(afterExtinction.lineageTree["lineage-root"]!.extinctGeneration).toBe(0);
     expect(afterExtinction.chronicle.some((e) => e.type === "extinction")).toBe(true);
   });
+
+  it("prevents stationary low-migration micro-fission (pMigrate < 0.15) while allowing emergency evacuation and merging same-lineage demes with divergence < 0.25 (T004, FR-004)", () => {
+    const state = createTestWorldState();
+    const deme = state.demes["deme-1"]!;
+    deme.population = 350;
+    deme.energyReserves = 90;
+    state.cells["0,0"]!.currentResources = 420;
+    state.cells["1,0"]!.currentResources = 480;
+
+    const afterStationaryTurn = resolveBiophysicalAndDemographicPhase(state, {
+      "deme-1": makeDecisionEval("dec-conservative-forage", {
+        "dec-conservative-forage": 0.90,
+        "dec-selective-migration": 0.10
+      })
+    });
+
+    expect(Object.keys(afterStationaryTurn.demes)).toHaveLength(1);
+
+    afterStationaryTurn.cells["0,0"]!.currentResources = 20;
+    const afterEmergencyTurn = resolveBiophysicalAndDemographicPhase(afterStationaryTurn, {
+      "deme-1": makeDecisionEval("dec-conservative-forage", {
+        "dec-conservative-forage": 0.90,
+        "dec-selective-migration": 0.10
+      })
+    });
+    expect(Object.keys(afterEmergencyTurn.demes).length).toBeGreaterThanOrEqual(2);
+
+    const mergeState = createTestWorldState();
+    const demeA = mergeState.demes["deme-1"]!;
+    demeA.biologicalTraitIds = [
+      "bio-k-strategy",
+      "bio-social-instinct",
+      "bio-encephalization",
+      "bio-bipedal-gait"
+    ];
+    demeA.culturalTraitIds = ["cul-fire-processing"];
+    const demeB: Deme = {
+      ...demeA,
+      id: "deme-1-kin",
+      population: 80,
+      culturalTraitIds: []
+    };
+    expect(computeDemeDivergence(demeA, demeB)).toBeCloseTo(0.20, 2);
+    mergeState.demes["deme-1-kin"] = demeB;
+    mergeState.cells["0,0"]!.demeIds.push("deme-1-kin");
+
+    const afterKinMerge = resolveBiophysicalAndDemographicPhase(mergeState, {
+      "deme-1": makeDecisionEval("dec-conservative-forage", {
+        "dec-conservative-forage": 1.0
+      }),
+      "deme-1-kin": makeDecisionEval("dec-conservative-forage", {
+        "dec-conservative-forage": 1.0
+      })
+    });
+
+    expect(Object.keys(afterKinMerge.demes)).toHaveLength(1);
+  });
 });
 
 describe("Phase 4: Evolutionary & Cultural Milestones", () => {
@@ -608,5 +711,28 @@ describe("Phase 4: Evolutionary & Cultural Milestones", () => {
     expect(
       afterSingleSurvivor.chronicle.some((entry) => entry.type === "single_survivor")
     ).toBe(true);
+  });
+
+  it("prioritizes allopatric_speciation > baldwin_assimilation > cultural_innovation and deduplicates 1 candidate per deme (T005, T013)", () => {
+    const state = createTestWorldState();
+    const deme = state.demes["deme-1"]!;
+    deme.biologicalTraitIds = ["bio-k-strategy", "bio-encephalization", "bio-thermal-tolerance"];
+    deme.baldwinCounters = { "dec-selective-migration": 8 };
+    deme.innovationCounter = 1.25;
+    deme.isolationTurns = 10;
+    deme.lastDecisionProbabilities = {
+      "dec-selective-migration": 0.6,
+      "dec-explore-innovate": 0.4
+    };
+    deme.lastDominantDecisionId = "dec-selective-migration";
+
+    const rawCandidates = detectEvolutionaryMilestones(state, "en");
+    expect(rawCandidates).toHaveLength(3);
+    expect(rawCandidates[0]!.season).toBe("wet_warm");
+    expect(rawCandidates[0]!.cell.currentResources).toBe(300);
+
+    const prioritized = prioritizeEvolutionaryMilestones(rawCandidates);
+    expect(prioritized).toHaveLength(1);
+    expect(prioritized[0]!.triggerType).toBe("allopatric_speciation");
   });
 });

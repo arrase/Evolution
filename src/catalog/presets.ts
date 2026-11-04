@@ -34,7 +34,7 @@ function createRiftSavannaWorld(): WorldState {
         humidity: 0.25,
         altitude: 0.88,
         currentResources: 70,
-        carryingCapacity: 90,
+        carryingCapacity: 108,
         carryingCapacityMax: 120,
         seasonalRegenRate: 0.08,
         demeIds: []
@@ -65,7 +65,7 @@ function createRiftSavannaWorld(): WorldState {
         humidity: 0.30,
         altitude: 0.42,
         currentResources: 260,
-        carryingCapacity: 320,
+        carryingCapacity: 335,
         carryingCapacityMax: 380,
         seasonalRegenRate: 0.16,
         demeIds: []
@@ -191,7 +191,7 @@ function createDarwinArchipelagoWorld(): WorldState {
         humidity: 0.75,
         altitude: 0.40,
         currentResources: 320,
-        carryingCapacity: 380,
+        carryingCapacity: 395,
         carryingCapacityMax: 450,
         seasonalRegenRate: 0.24,
         demeIds: []
@@ -206,7 +206,7 @@ function createDarwinArchipelagoWorld(): WorldState {
         humidity: 0.65,
         altitude: 0.18,
         currentResources: 200,
-        carryingCapacity: 220,
+        carryingCapacity: 230,
         carryingCapacityMax: 260,
         seasonalRegenRate: 0.22,
         demeIds: []

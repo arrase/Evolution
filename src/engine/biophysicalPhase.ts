@@ -228,7 +228,9 @@ export function resolveBiophysicalAndDemographicPhase(
 
     if (residentDemes.length >= 2) {
       if (hawks.length >= 2) {
-        for (const hawk of hawks) {
+        for (let i = 0; i < hawks.length; i += 1) {
+          const hawk = hawks[i]!;
+          const opponentHawk = hawks[(i + 1) % hawks.length]!;
           hawk.population = Math.max(1, Math.floor(hawk.population * 0.85));
           hawkPenaltyByDemeId[hawk.id] = 1.25;
           const vEff = getEffectiveVector(hawk);
@@ -240,6 +242,7 @@ export function resolveBiophysicalAndDemographicPhase(
             fromHexId: cell.id,
             toHexId: cell.id,
             demeId: hawk.id,
+            targetDemeId: opponentHawk.id,
             color: hawk.color,
             type: "dispute",
             intensity: 0.75
@@ -277,6 +280,7 @@ export function resolveBiophysicalAndDemographicPhase(
             fromHexId: cell.id,
             toHexId: cell.id,
             demeId: hawk.id,
+            targetDemeId: doves[0]!.id,
             color: hawk.color,
             type: "dispute",
             intensity: 0.65
@@ -305,7 +309,9 @@ export function resolveBiophysicalAndDemographicPhase(
     if (exchangers.length >= 2) {
       let loggedSymbiosisInCell = false;
 
-      for (const exchanger of exchangers) {
+      for (let i = 0; i < exchangers.length; i += 1) {
+        const exchanger = exchangers[i]!;
+        const partner = exchangers[(i + 1) % exchangers.length]!;
         const baseExtracted = getNumericEntry(extractedEnergyByDemeId, exchanger.id);
         extractedEnergyByDemeId[exchanger.id] = Number((baseExtracted * 1.20).toFixed(4));
         symbiosisBonusAppliedDemeIds.add(exchanger.id);
@@ -313,6 +319,7 @@ export function resolveBiophysicalAndDemographicPhase(
           fromHexId: cell.id,
           toHexId: cell.id,
           demeId: exchanger.id,
+          targetDemeId: partner.id,
           color: exchanger.color,
           type: "exchange",
           intensity: 0.60
@@ -373,7 +380,8 @@ export function resolveBiophysicalAndDemographicPhase(
     );
 
     if (
-      totalExtracted > naturalRegen &&
+      (totalExtracted > naturalRegen ||
+        (cell.currentResources === 0 && totalDemand > naturalRegen)) &&
       (sumEcoImpact < -0.15 || (hasIntensiveOverexploit && sumEcoImpact < -0.10))
     ) {
       const degradedK = Math.max(
@@ -450,6 +458,7 @@ export function resolveBiophysicalAndDemographicPhase(
           fromHexId: donorCell.id,
           toHexId: neighborCell.id,
           demeId: donor.id,
+          targetDemeId: receiver.id,
           color: donor.color,
           type: "exchange",
           intensity: 0.55
@@ -560,20 +569,27 @@ export function resolveBiophysicalAndDemographicPhase(
       continue;
     }
 
-    const pMigrate = getArchetypeProb(deme, state.decisionsCatalog, "migrate");
-    const migrants = Math.floor(deme.population * pMigrate * 0.45);
-
-    if (migrants < 10 || deme.population - migrants < 10) {
-      continue;
-    }
-
     const currentCell = cells[deme.hexId];
     if (currentCell === undefined) {
       continue;
     }
-    const vEffMobility = getEffectiveVector(deme).spatialMobility;
 
-    const isEmergencyEvacuation = currentCell.currentResources < deme.population * 0.20;
+    const pMigrate = getArchetypeProb(deme, state.decisionsCatalog, "migrate");
+    const migrants = Math.floor(deme.population * pMigrate * 0.45);
+    const isEmergencyEvacuation =
+      currentCell.currentResources < deme.population * 0.20 &&
+      deme.energyReserves < deme.population * 0.35;
+    const hasIntentionalMigration =
+      pMigrate >= 0.15 ||
+      deme.lastDominantDecisionId === "dec-selective-migration" ||
+      currentCell.biome === "coastal_shallows" ||
+      isEmergencyEvacuation;
+
+    if (!hasIntentionalMigration || migrants < 10 || deme.population - migrants < 10) {
+      continue;
+    }
+
+    const vEffMobility = getEffectiveVector(deme).spatialMobility;
     const candidateNeighbors = getExistingNeighborCells(currentCell, cells)
       .filter((neighbor) => {
         if (!isHexPassableForDeme(neighbor, vEffMobility)) {
@@ -588,7 +604,7 @@ export function resolveBiophysicalAndDemographicPhase(
             return (
               other !== undefined &&
               other.lineageId === deme.lineageId &&
-              computeDemeDivergence(deme, other) < 0.10
+              computeDemeDivergence(deme, other) < 0.25
             );
           });
           if (hasCompatibleSameLineage) {
@@ -618,9 +634,10 @@ export function resolveBiophysicalAndDemographicPhase(
     deme.energyReserves = Math.max(0, Number((deme.energyReserves - energyFraction).toFixed(2)));
 
     const daughterId = `${deme.id}-m${state.generation}-${targetCell.q}_${targetCell.r}`;
+    const baseDemeName = deme.name.replace(/\s+\(-?\d+,-?\d+\)$/, "");
     const daughterDeme: Deme = {
       id: daughterId,
-      name: `${deme.name} (${targetCell.id})`.slice(0, 60),
+      name: `${baseDemeName} (${targetCell.id})`.slice(0, 60),
       lineageId: deme.lineageId,
       color: deme.color,
       hexId: targetCell.id,
@@ -647,6 +664,7 @@ export function resolveBiophysicalAndDemographicPhase(
       fromHexId: currentCell.id,
       toHexId: targetCell.id,
       demeId: deme.id,
+      targetDemeId: daughterId,
       color: deme.color,
       type: "migration",
       intensity: Number(clamp(migrants / originalPop, 0.05, 1.0).toFixed(2))
@@ -684,10 +702,13 @@ export function resolveBiophysicalAndDemographicPhase(
 
     const initialPop = getNumericEntry(initialPopulationByDemeId, deme.id);
     const lostHalfOrMore = deme.population <= initialPop * 0.50;
+    const sufferedSmallPopBottleneck =
+      deme.population < 50 &&
+      (deme.population <= initialPop || initialPop >= 50 || state.generation === 0);
 
     if (
       !newlyCreatedDemeIds.has(deme.id) &&
-      (lostHalfOrMore || deme.population < 50) &&
+      (lostHalfOrMore || sufferedSmallPopBottleneck) &&
       deme.culturalTraitIds.length > 0
     ) {
       let highestTraitId = "";
@@ -737,7 +758,7 @@ export function resolveBiophysicalAndDemographicPhase(
           demeA !== undefined &&
           demeB !== undefined &&
           demeA.lineageId === demeB.lineageId &&
-          computeDemeDivergence(demeA, demeB) < 0.10
+          computeDemeDivergence(demeA, demeB) < 0.25
         ) {
           const totalPop = demeA.population + demeB.population;
           const weightA = demeA.population / totalPop;
@@ -774,6 +795,15 @@ export function resolveBiophysicalAndDemographicPhase(
           initialPopulationByDemeId[demeA.id] =
             getNumericEntry(initialPopulationByDemeId, demeA.id) +
             getNumericEntry(initialPopulationByDemeId, demeB.id);
+
+          for (const flow of currentTurnFlows) {
+            if (flow.targetDemeId === demeB.id) {
+              flow.targetDemeId = demeA.id;
+            }
+            if (flow.demeId === demeB.id && flow.fromHexId !== flow.toHexId) {
+              flow.targetDemeId = demeA.id;
+            }
+          }
 
           delete demes[demeB.id];
           cell.demeIds.splice(j, 1);

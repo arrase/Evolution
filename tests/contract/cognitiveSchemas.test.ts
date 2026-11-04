@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { LiveCognitiveProvider, MockCognitiveProvider } from "../../src/ai/cognitiveProvider";
 import {
+  buildMilestoneSynthesisPrompt,
+  ensureUniqueTraitName
+} from "../../src/ai/langchainSystemTwo";
+import {
+  buildCompactDecisionCriteria,
+  buildCompactSystemOneState,
   buildContextualJustification,
+  computeDemeEvaluationSignature,
   evaluateDemeWithOllamaSystemOne,
   normalizeDecisionProbabilities
 } from "../../src/ai/ollamaSystemOne";
@@ -350,6 +357,170 @@ describe("Cognitive Engine Contracts (System 1 & System 2)", () => {
         const metrics = computeThermodynamicMetrics(parsed.biophysicalVector);
         expect(metrics.isBalanced).toBe(true);
       }
+    });
+
+    it("builds a compact System 1 state and criteria reducing serialized payload size by >= 35% while exposing caloric adequacy, competition, biophysical vectors, and escape routes (T012, FR-001, FR-002, SC-001)", () => {
+      const enrichedInput = createSampleEvaluationInput({
+        deme: {
+          id: "deme-island-1",
+          name: "Basalt Clan",
+          population: 320,
+          energyReserves: 70,
+          lastEnergyDelta: -8,
+          lastDominantDecisionId: "dec-intensive-overexploit",
+          baldwinProgress: 4,
+          innovationProgress: 0.75,
+          activeBiologicalTraits: [
+            {
+              id: "bio-r-strategy",
+              name: "r-Strategy",
+              semanticDescriptor: "Fast reproduction and high demographic growth rate.",
+              affinityCondition: "Abundant or unstable habitats",
+              biophysicalVector: {
+                metabolicCost: 0.15,
+                extractionEfficiency: 0.25,
+                ecologicalImpact: -0.15,
+                spatialMobility: 0.10,
+                socialCohesion: -0.10,
+                transmissionThreshold: 0.05
+              }
+            }
+          ],
+          activeCulturalTraits: [
+            {
+              id: "cul-extraction-tools",
+              name: "Extraction Tools",
+              semanticDescriptor: "Specialized lithic and wooden harvesting tools.",
+              affinityCondition: "Resource-dense competitive cells",
+              biophysicalVector: {
+                metabolicCost: 0.15,
+                extractionEfficiency: 0.65,
+                ecologicalImpact: -0.35,
+                spatialMobility: 0.0,
+                socialCohesion: 0.05,
+                transmissionThreshold: 0.30
+              }
+            }
+          ]
+        },
+        currentCell: {
+          id: "0,0",
+          biome: "tropical_forest",
+          temperature: 0.55,
+          humidity: 0.75,
+          altitude: 0.4,
+          currentResources: 520,
+          carryingCapacity: 600,
+          carryingCapacityMax: 650,
+          cohabitingDemesCount: 2,
+          totalCellPopulation: 960,
+          rivalDemesCount: 2,
+          kinDemesCount: 0
+        },
+        neighborCells: [
+          {
+            id: "1,0",
+            biome: "ocean",
+            temperature: 0.5,
+            humidity: 1.0,
+            altitude: 0.05,
+            currentResources: 0,
+            carryingCapacity: 0,
+            demesCount: 0,
+            totalPopulation: 0,
+            isPassable: false
+          },
+          {
+            id: "0,1",
+            biome: "coastal_shallows",
+            temperature: 0.5,
+            humidity: 0.85,
+            altitude: 0.18,
+            currentResources: 210,
+            carryingCapacity: 240,
+            demesCount: 0,
+            totalPopulation: 0,
+            isPassable: true
+          }
+        ]
+      });
+
+      const rawStateJson = JSON.stringify({
+        generation: enrichedInput.generation,
+        season: enrichedInput.season,
+        deme: enrichedInput.deme,
+        currentCell: enrichedInput.currentCell,
+        neighborCells: enrichedInput.neighborCells
+      });
+      const compactState = buildCompactSystemOneState(enrichedInput);
+      const compactCriteria = buildCompactDecisionCriteria(enrichedInput.eligibleDecisions);
+
+      expect(compactState.length).toBeLessThanOrEqual(rawStateJson.length * 0.65);
+      expect(compactState).toContain("caloricAdequacy=");
+      expect(compactState).toContain("totalPop=960");
+      expect(compactState).toContain("rivals=2");
+      expect(compactState).toContain("Extraction Tools");
+      expect(compactState).toContain("coastal_shallows");
+      expect(Object.keys(compactCriteria)).toHaveLength(SAMPLE_ELIGIBLE_DECISIONS.length);
+
+      const sigA = computeDemeEvaluationSignature(enrichedInput);
+      const sigB = computeDemeEvaluationSignature({
+        ...enrichedInput,
+        deme: {
+          ...enrichedInput.deme,
+          id: "deme-island-2",
+          name: "Lagoon Clan"
+        }
+      });
+      expect(sigA).toBe(sigB);
+    });
+
+    it("prevents duplicate synthesized trait names when existingTraitNames or globalEmergentTraitNames already contain the default template name (T015, FR-006)", async () => {
+      const milestoneInput = {
+        locale: "en" as const,
+        triggerType: "baldwin_assimilation" as const,
+        generation: 12,
+        season: "dry_cold" as const,
+        deme: {
+          id: "deme-east",
+          name: "Eastern Hominids",
+          population: 180,
+          energyReserves: 64,
+          lastEnergyDelta: -4,
+          dominantDecisionName: "Cooperation & Storage",
+          existingTraitNames: ["K-Strategy", "Adaptive Homeostasis"]
+        },
+        cell: {
+          biome: "savanna",
+          temperature: 0.4,
+          humidity: 0.3,
+          altitude: 0.35,
+          currentResources: 190,
+          carryingCapacity: 260,
+          carryingCapacityMax: 300
+        },
+        globalEmergentTraitNames: [
+          "Adaptive Homeostasis",
+          "Adaptive Homeostasis (savanna G12)",
+          "Savanna Stride"
+        ],
+        recentChronicleTitles: ["Drought on the Eastern Steppe"]
+      };
+
+      const prompt = buildMilestoneSynthesisPrompt(milestoneInput);
+      expect(prompt).toContain("dry_cold");
+      expect(prompt).toContain("energyReserves=64");
+      expect(prompt).toContain("currentResources=190");
+      expect(prompt).toContain("Savanna Stride");
+      expect(prompt).toContain("Drought on the Eastern Steppe");
+
+      const proposal = await provider.synthesizeMilestone(milestoneInput);
+      const parsed = SynthesizedTraitProposalSchema.parse(proposal);
+      expect(parsed.name.toLowerCase()).not.toBe("adaptive homeostasis");
+      expect(parsed.name.toLowerCase()).not.toBe("adaptive homeostasis (savanna g12)");
+      expect(ensureUniqueTraitName("Savanna Stride", milestoneInput).toLowerCase()).not.toBe(
+        "savanna stride"
+      );
     });
   });
 });

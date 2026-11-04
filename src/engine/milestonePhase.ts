@@ -159,12 +159,38 @@ function resolveDecisionName(decisionId: string, state: WorldState): string {
   return decision !== undefined ? decision.name : decisionId;
 }
 
+const MILESTONE_TRIGGER_PRIORITY: Record<MilestoneSynthesisInput["triggerType"], number> = {
+  allopatric_speciation: 0,
+  baldwin_assimilation: 1,
+  cultural_innovation: 2
+};
+
+export function prioritizeEvolutionaryMilestones(
+  candidates: MilestoneSynthesisInput[]
+): MilestoneSynthesisInput[] {
+  const sorted = [...candidates].sort(
+    (a, b) => MILESTONE_TRIGGER_PRIORITY[a.triggerType] - MILESTONE_TRIGGER_PRIORITY[b.triggerType]
+  );
+  const seenDemeIds = new Set<string>();
+  const prioritized: MilestoneSynthesisInput[] = [];
+  for (const candidate of sorted) {
+    if (!seenDemeIds.has(candidate.deme.id)) {
+      seenDemeIds.add(candidate.deme.id);
+      prioritized.push(candidate);
+    }
+  }
+  return prioritized;
+}
+
 export function detectEvolutionaryMilestones(
   state: WorldState,
   locale?: SupportedLocale
 ): MilestoneSynthesisInput[] {
   const resolvedLocale: SupportedLocale = locale !== undefined ? locale : DEFAULT_LOCALE;
   const milestones: MilestoneSynthesisInput[] = [];
+  const globalEmergentTraitNames = Object.values(state.traitsCatalog)
+    .filter((trait) => trait.origin === "emergent")
+    .map((trait) => trait.name);
 
   for (const deme of Object.values(state.demes)) {
     const cell = state.cells[deme.hexId];
@@ -172,6 +198,10 @@ export function detectEvolutionaryMilestones(
       continue;
     }
     const existingTraitNames = resolveExistingTraitNames(deme, state);
+    const recentChronicleTitles = state.chronicle
+      .filter((entry) => entry.lineageId === deme.lineageId)
+      .slice(-3)
+      .map((entry) => entry.title);
     const emergentBioCount = deme.biologicalTraitIds.filter((id) => {
       const trait = state.traitsCatalog[id];
       return trait !== undefined && trait.origin === "emergent";
@@ -201,10 +231,13 @@ export function detectEvolutionaryMilestones(
         triggerType: "baldwin_assimilation",
         triggeredByDecisionId: triggeredBaldwinDecisionId,
         generation: state.generation,
+        season: state.season,
         deme: {
           id: deme.id,
           name: deme.name,
           population: deme.population,
+          energyReserves: deme.energyReserves,
+          lastEnergyDelta: deme.lastEnergyDelta,
           dominantDecisionName: resolveDecisionName(triggeredBaldwinDecisionId, state),
           existingTraitNames
         },
@@ -212,8 +245,13 @@ export function detectEvolutionaryMilestones(
           biome: cell.biome,
           temperature: cell.temperature,
           humidity: cell.humidity,
-          altitude: cell.altitude
-        }
+          altitude: cell.altitude,
+          currentResources: cell.currentResources,
+          carryingCapacity: cell.carryingCapacity,
+          carryingCapacityMax: cell.carryingCapacityMax
+        },
+        globalEmergentTraitNames,
+        recentChronicleTitles
       });
     }
 
@@ -226,10 +264,13 @@ export function detectEvolutionaryMilestones(
         locale: resolvedLocale,
         triggerType: "cultural_innovation",
         generation: state.generation,
+        season: state.season,
         deme: {
           id: deme.id,
           name: deme.name,
           population: deme.population,
+          energyReserves: deme.energyReserves,
+          lastEnergyDelta: deme.lastEnergyDelta,
           dominantDecisionName: resolveDecisionName(deme.lastDominantDecisionId, state),
           existingTraitNames
         },
@@ -237,8 +278,13 @@ export function detectEvolutionaryMilestones(
           biome: cell.biome,
           temperature: cell.temperature,
           humidity: cell.humidity,
-          altitude: cell.altitude
-        }
+          altitude: cell.altitude,
+          currentResources: cell.currentResources,
+          carryingCapacity: cell.carryingCapacity,
+          carryingCapacityMax: cell.carryingCapacityMax
+        },
+        globalEmergentTraitNames,
+        recentChronicleTitles
       });
     }
 
@@ -274,10 +320,13 @@ export function detectEvolutionaryMilestones(
           locale: resolvedLocale,
           triggerType: "allopatric_speciation",
           generation: state.generation,
+          season: state.season,
           deme: {
             id: deme.id,
             name: deme.name,
             population: deme.population,
+            energyReserves: deme.energyReserves,
+            lastEnergyDelta: deme.lastEnergyDelta,
             dominantDecisionName: resolveDecisionName(deme.lastDominantDecisionId, state),
             existingTraitNames
           },
@@ -285,8 +334,13 @@ export function detectEvolutionaryMilestones(
             biome: cell.biome,
             temperature: cell.temperature,
             humidity: cell.humidity,
-            altitude: cell.altitude
-          }
+            altitude: cell.altitude,
+            currentResources: cell.currentResources,
+            carryingCapacity: cell.carryingCapacity,
+            carryingCapacityMax: cell.carryingCapacityMax
+          },
+          globalEmergentTraitNames,
+          recentChronicleTitles
         });
       }
     }

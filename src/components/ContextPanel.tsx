@@ -12,19 +12,17 @@ import {
 import { demeHasCulturalCapacity } from "../catalog/baseTraits";
 import { useSimulationStore } from "../store/useSimulationStore";
 import type { Deme, HexCell } from "../types/simulation";
-import { habitatHealthRatio } from "./palette";
+import { type DemeVitalStatus, getDemeStatus, habitatHealthRatio } from "./palette";
 import { InfoHint } from "./Tooltip";
 
-type DemeStatus = "thriving" | "stable" | "struggling" | "starving";
-
-const STATUS_STYLES: Record<DemeStatus, string> = {
+const STATUS_STYLES: Record<DemeVitalStatus, string> = {
   thriving: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
   stable: "bg-sky-500/15 text-sky-300 border-sky-500/40",
   struggling: "bg-amber-500/15 text-amber-300 border-amber-500/40",
   starving: "bg-rose-500/15 text-rose-300 border-rose-500/40"
 };
 
-const STATUS_DOTS: Record<DemeStatus, string> = {
+const STATUS_DOTS: Record<DemeVitalStatus, string> = {
   thriving: "bg-emerald-400",
   stable: "bg-sky-400",
   struggling: "bg-amber-400",
@@ -35,16 +33,6 @@ const VISIBLE_BEHAVIORS = 3;
 const SECTION_CLASS = "rounded-lg border border-slate-800 bg-slate-800/40 p-3";
 const DISCLOSURE_SUMMARY_CLASS =
   "flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-slate-200 [&::-webkit-details-marker]:hidden";
-
-function getDemeStatus(deme: Deme): DemeStatus {
-  if (deme.lastEnergyDelta >= 10) {
-    return "thriving";
-  }
-  if (deme.lastEnergyDelta >= 0) {
-    return "stable";
-  }
-  return deme.energyReserves > 40 ? "struggling" : "starving";
-}
 
 function ProgressBar({ percent, colorClass }: { percent: number; colorClass: string }) {
   return (

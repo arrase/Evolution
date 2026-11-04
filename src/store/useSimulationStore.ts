@@ -766,7 +766,10 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
                   ? "arid_steppe"
                   : "high_mountain";
           cell.carryingCapacityMax = Math.max(160, cell.carryingCapacityMax);
-          cell.carryingCapacity = Math.max(80, cell.carryingCapacity);
+          cell.carryingCapacity = Math.max(
+            Math.round(cell.carryingCapacityMax * 0.88),
+            cell.carryingCapacity
+          );
           cell.currentResources = Math.max(
             cell.currentResources,
             Math.round(cell.carryingCapacity * 0.35)

@@ -199,6 +199,7 @@ export const HexEdgeFlowSchema = z.object({
   fromHexId: z.string().regex(/^-?\d+,-?\d+$/),
   toHexId: z.string().regex(/^-?\d+,-?\d+$/),
   demeId: z.string().min(1),
+  targetDemeId: z.string().min(1).optional(),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
   type: HexEdgeFlowTypeSchema,
   intensity: z.number().min(0.05).max(1.0)
@@ -258,17 +259,22 @@ export interface DemeDecisionEvaluationInput {
     population: number;
     energyReserves: number;
     lastEnergyDelta: number;
+    lastDominantDecisionId?: string;
+    baldwinProgress?: number;
+    innovationProgress?: number;
     activeBiologicalTraits: Array<{
       id: string;
       name: string;
       semanticDescriptor: string;
       affinityCondition: string;
+      biophysicalVector?: BiophysicalVector;
     }>;
     activeCulturalTraits: Array<{
       id: string;
       name: string;
       semanticDescriptor: string;
       affinityCondition: string;
+      biophysicalVector?: BiophysicalVector;
     }>;
   };
   currentCell: {
@@ -281,6 +287,9 @@ export interface DemeDecisionEvaluationInput {
     carryingCapacity: number;
     carryingCapacityMax: number;
     cohabitingDemesCount: number;
+    totalCellPopulation?: number;
+    rivalDemesCount?: number;
+    kinDemesCount?: number;
   };
   neighborCells: Array<{
     id: string;
@@ -291,12 +300,15 @@ export interface DemeDecisionEvaluationInput {
     currentResources: number;
     carryingCapacity: number;
     demesCount: number;
+    totalPopulation?: number;
     isPassable: boolean;
   }>;
   eligibleDecisions: Array<{
     id: string;
     name: string;
     semanticDescriptor: string;
+    archetype?: DecisionArchetype;
+    biophysicalVector?: BiophysicalVector;
   }>;
 }
 
@@ -311,11 +323,14 @@ export interface MilestoneSynthesisInput {
   locale: SupportedLocale;
   triggerType: "baldwin_assimilation" | "cultural_innovation" | "allopatric_speciation";
   generation: number;
+  season?: SeasonType;
   triggeredByDecisionId?: string;
   deme: {
     id: string;
     name: string;
     population: number;
+    energyReserves?: number;
+    lastEnergyDelta?: number;
     dominantDecisionName: string;
     existingTraitNames: string[];
   };
@@ -324,7 +339,12 @@ export interface MilestoneSynthesisInput {
     temperature: number;
     humidity: number;
     altitude: number;
+    currentResources?: number;
+    carryingCapacity?: number;
+    carryingCapacityMax?: number;
   };
+  globalEmergentTraitNames?: string[];
+  recentChronicleTitles?: string[];
 }
 
 export const SynthesizedTraitProposalSchema = z.object({

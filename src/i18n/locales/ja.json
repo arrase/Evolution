@@ -327,7 +327,14 @@
     "health": "生息地の健全度",
     "uninhabited": "無人",
     "individuals": "{{count}} 個体",
-    "individuals_one": "{{count}} 個体"
+    "individuals_one": "{{count}} 個体",
+    "zoomIn": "拡大",
+    "zoomOut": "縮小",
+    "resetView": "表示をリセット",
+    "vitalStatus": "生存状態",
+    "actions": "主な行動",
+    "cultureBadge": "文化的伝統",
+    "activeInteractions": "現在の相互作用"
   },
   "panel": {
     "label": "詳細",

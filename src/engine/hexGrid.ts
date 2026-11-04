@@ -76,6 +76,19 @@ export function getHexIdsInRadius(
     .filter((id) => id in cells);
 }
 
+export interface Hex25DGeometry {
+  centerX: number;
+  centerY: number;
+  topCenterY: number;
+  elevationPx: number;
+  corners: Array<{ x: number; y: number }>;
+  topCorners: Array<{ x: number; y: number }>;
+  polygonPoints: string;
+  topPolygonPoints: string;
+  leftSkirtPoints: string;
+  rightSkirtPoints: string;
+}
+
 export function computeHexPixelGeometry(
   q: number,
   r: number
@@ -94,6 +107,61 @@ export function computeHexPixelGeometry(
     corners,
     polygonPoints
   };
+}
+
+export function computeHex25DGeometry(
+  q: number,
+  r: number,
+  altitude: number,
+  isOcean: boolean
+): Hex25DGeometry {
+  const base = computeHexPixelGeometry(q, r);
+  const clampedAltitude = Math.min(1, Math.max(0, altitude));
+  const elevationPx = isOcean ? 0 : Math.min(10, Math.max(2, Math.round(2 + clampedAltitude * 8)));
+  const topCenterY = base.centerY - elevationPx;
+  const topCorners = base.corners.map((point) => ({
+    x: point.x,
+    y: point.y - elevationPx
+  }));
+  const topPolygonPoints = topCorners.map((point) => `${point.x},${point.y}`).join(" ");
+
+  const lowerBaseCorners = base.corners
+    .filter((point) => point.y > base.centerY)
+    .sort((a, b) => a.x - b.x);
+  const lowerLeft = lowerBaseCorners[0]!;
+  const bottom = lowerBaseCorners[1]!;
+  const lowerRight = lowerBaseCorners[2]!;
+
+  const leftSkirtPoints = [
+    `${lowerLeft.x},${lowerLeft.y - elevationPx}`,
+    `${bottom.x},${bottom.y - elevationPx}`,
+    `${bottom.x},${bottom.y}`,
+    `${lowerLeft.x},${lowerLeft.y}`
+  ].join(" ");
+
+  const rightSkirtPoints = [
+    `${bottom.x},${bottom.y - elevationPx}`,
+    `${lowerRight.x},${lowerRight.y - elevationPx}`,
+    `${lowerRight.x},${lowerRight.y}`,
+    `${bottom.x},${bottom.y}`
+  ].join(" ");
+
+  return {
+    centerX: base.centerX,
+    centerY: base.centerY,
+    topCenterY,
+    elevationPx,
+    corners: base.corners,
+    topCorners,
+    polygonPoints: base.polygonPoints,
+    topPolygonPoints,
+    leftSkirtPoints,
+    rightSkirtPoints
+  };
+}
+
+export function sortCellsFor25DPainterOrder(cells: HexCell[]): HexCell[] {
+  return [...cells].sort((a, b) => (a.r !== b.r ? a.r - b.r : a.q - b.q));
 }
 
 export function computeCellsViewBox(cells: HexCell[], padding: number): string {

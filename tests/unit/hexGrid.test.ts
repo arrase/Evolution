@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeCellsViewBox,
+  computeHex25DGeometry,
   computeHexDistance,
   computeHexPixelGeometry,
   createHexGridCoordinates,
@@ -10,7 +11,8 @@ import {
   getHexNeighborCoordinates,
   HEX_SIZE,
   isHexPassableForDeme,
-  parseHexId
+  parseHexId,
+  sortCellsFor25DPainterOrder
 } from "../../src/engine/hexGrid";
 import type { HexCell } from "../../src/types/simulation";
 
@@ -156,5 +158,29 @@ describe("hexGrid geometry helpers", () => {
     expect(parts).toHaveLength(4);
     expect(parts[2]).toBeCloseTo((HEX_SIZE + 10) * 2, 5);
     expect(parts[3]).toBeCloseTo((HEX_SIZE + 10) * 2, 5);
+  });
+
+  it("computes 2.5D elevation skirts proportional to altitude and sorts cells in back-to-front painter's order", () => {
+    const oceanGeom = computeHex25DGeometry(0, 0, 0.08, true);
+    expect(oceanGeom.elevationPx).toBe(0);
+    expect(oceanGeom.topCenterY).toBe(oceanGeom.centerY);
+
+    const lowlandGeom = computeHex25DGeometry(0, 0, 0.1, false);
+    const mountainGeom = computeHex25DGeometry(0, 0, 0.95, false);
+    expect(lowlandGeom.elevationPx).toBeGreaterThanOrEqual(2);
+    expect(mountainGeom.elevationPx).toBeGreaterThan(lowlandGeom.elevationPx);
+    expect(mountainGeom.elevationPx).toBeLessThanOrEqual(10);
+    expect(mountainGeom.topCenterY).toBe(mountainGeom.centerY - mountainGeom.elevationPx);
+    expect(mountainGeom.leftSkirtPoints.split(" ")).toHaveLength(4);
+    expect(mountainGeom.rightSkirtPoints.split(" ")).toHaveLength(4);
+
+    const cells = [
+      createTestCell({ q: 1, r: 2 }),
+      createTestCell({ q: -1, r: -2 }),
+      createTestCell({ q: 2, r: 0 }),
+      createTestCell({ q: -1, r: 0 })
+    ];
+    const sorted = sortCellsFor25DPainterOrder(cells);
+    expect(sorted.map((c) => c.id)).toEqual(["-1,-2", "-1,0", "2,0", "1,2"]);
   });
 });

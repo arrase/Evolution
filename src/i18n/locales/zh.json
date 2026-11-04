@@ -327,7 +327,14 @@
     "health": "栖息地健康",
     "uninhabited": "无人居住",
     "individuals": "{{count}} 个个体",
-    "individuals_one": "{{count}} 个个体"
+    "individuals_one": "{{count}} 个个体",
+    "zoomIn": "放大地图",
+    "zoomOut": "缩小地图",
+    "resetView": "重置视图",
+    "vitalStatus": "生存状态",
+    "actions": "主导行为",
+    "cultureBadge": "文化传统",
+    "activeInteractions": "当前互动"
   },
   "panel": {
     "label": "详情",

@@ -327,7 +327,14 @@
     "health": "Santé de l'habitat",
     "uninhabited": "Inhabité",
     "individuals": "{{count}} individus",
-    "individuals_one": "{{count}} individu"
+    "individuals_one": "{{count}} individu",
+    "zoomIn": "Zoomer",
+    "zoomOut": "Dézoomer",
+    "resetView": "Réinitialiser la vue",
+    "vitalStatus": "État vital",
+    "actions": "Comportement dominant",
+    "cultureBadge": "Traditions culturelles",
+    "activeInteractions": "Interactions actives"
   },
   "panel": {
     "label": "Détails",

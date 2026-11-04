@@ -1,4 +1,3 @@
-import { Ollama } from "ollama/browser";
 import { validateAndBalanceThermodynamics } from "../engine/thermodynamics";
 import {
   BiophysicalVector,
@@ -19,6 +18,7 @@ import {
   coDesignCatalogItemWithGemma,
   DEFAULT_SYSTEM_TWO_MODEL,
   DEFAULT_SYSTEM_TWO_TIMEOUT_MS,
+  ensureUniqueTraitName,
   synthesizeMilestoneWithGemma
 } from "./langchainSystemTwo";
 import {
@@ -27,6 +27,7 @@ import {
   DEFAULT_SYSTEM_ONE_MODEL,
   DEFAULT_SYSTEM_ONE_TIMEOUT_MS,
   evaluateDemeWithOllamaSystemOne,
+  getOllamaClient,
   normalizeDecisionProbabilities
 } from "./ollamaSystemOne";
 
@@ -139,14 +140,7 @@ export class LiveCognitiveProvider implements CognitiveProvider {
   }
 
   async checkStatus(): Promise<OllamaStatusReport> {
-    const client = new Ollama({
-      host: this.host,
-      fetch: (url, init) =>
-        fetch(url, {
-          ...init,
-          signal: AbortSignal.timeout(3000)
-        })
-    });
+    const client = getOllamaClient(this.host);
 
     try {
       const listResponse = await client.list();
@@ -253,6 +247,17 @@ export class MockCognitiveProvider implements CognitiveProvider {
     const hasExtractionTools = culturalIds.has("cul-extraction-tools");
     const hasCommunalConservation = culturalIds.has("cul-communal-conservation");
 
+    const totalCellPopulation =
+      currentCell.totalCellPopulation !== undefined
+        ? currentCell.totalCellPopulation
+        : deme.population * (1 + currentCell.cohabitingDemesCount);
+    const resourceAdequacyRatio =
+      currentCell.currentResources / Math.max(10, totalCellPopulation * 0.48);
+    const rivalDemesCount =
+      currentCell.rivalDemesCount !== undefined
+        ? currentCell.rivalDemesCount
+        : currentCell.cohabitingDemesCount;
+
     const hasOpenLandBridge =
       currentCell.biome === "coastal_shallows" ||
       (currentCell.id === "0,0" &&
@@ -275,11 +280,11 @@ export class MockCognitiveProvider implements CognitiveProvider {
 
     if (hasExtractionTools && !hasCommunalConservation) {
       baseWeights = {
-        "dec-intensive-overexploit": 0.58,
-        "dec-territorial-dispute": 0.14,
+        "dec-intensive-overexploit": rivalDemesCount > 0 ? 0.58 : 0.54,
+        "dec-territorial-dispute": rivalDemesCount > 0 ? 0.14 : 0.12,
         "dec-conservative-forage": 0.1,
         "dec-cooperate-store": 0.06,
-        "dec-selective-migration": 0.04,
+        "dec-selective-migration": rivalDemesCount > 0 ? 0.04 : 0.1,
         "dec-exchange-symbiosis": 0.04,
         "dec-explore-innovate": 0.04
       };
@@ -296,9 +301,9 @@ export class MockCognitiveProvider implements CognitiveProvider {
         };
       } else {
         baseWeights = {
-          "dec-cooperate-store": 0.44,
-          "dec-conservative-forage": 0.26,
-          "dec-selective-migration": 0.12,
+          "dec-cooperate-store": 0.4,
+          "dec-conservative-forage": 0.24,
+          "dec-selective-migration": 0.18,
           "dec-explore-innovate": 0.08,
           "dec-exchange-symbiosis": 0.04,
           "dec-intensive-overexploit": 0.03,
@@ -322,6 +327,16 @@ export class MockCognitiveProvider implements CognitiveProvider {
         "dec-explore-innovate": 0.14,
         "dec-conservative-forage": 0.12,
         "dec-exchange-symbiosis": 0.08,
+        "dec-intensive-overexploit": 0.04,
+        "dec-territorial-dispute": 0.04
+      };
+    } else if (resourceAdequacyRatio < 0.7 && rivalDemesCount > 0) {
+      baseWeights = {
+        "dec-cooperate-store": 0.36,
+        "dec-conservative-forage": 0.28,
+        "dec-selective-migration": 0.16,
+        "dec-exchange-symbiosis": 0.08,
+        "dec-explore-innovate": 0.04,
         "dec-intensive-overexploit": 0.04,
         "dec-territorial-dispute": 0.04
       };
@@ -374,7 +389,8 @@ export class MockCognitiveProvider implements CognitiveProvider {
     const category = input.triggerType === "cultural_innovation" ? "cultural" : "biological";
     const baseName =
       category === "cultural" ? template.culturalName : template.biologicalName;
-    const name = `${baseName} (${input.cell.biome} G${input.generation})`.slice(0, 60);
+    const candidateName = `${baseName} (${input.cell.biome} G${input.generation})`.slice(0, 60);
+    const name = ensureUniqueTraitName(candidateName, input);
 
     const rawVector: BiophysicalVector =
       category === "cultural"

@@ -21,7 +21,7 @@ export function deserializeWorldState(jsonPayload: string): WorldState {
 }
 
 export function saveWorldToLocalStorage(world: WorldState): void {
-  localStorage.setItem(WORLD_STORAGE_KEY, serializeWorldState(world));
+  localStorage.setItem(WORLD_STORAGE_KEY, JSON.stringify(world));
 }
 
 export function loadWorldFromLocalStorage(): WorldState | null {

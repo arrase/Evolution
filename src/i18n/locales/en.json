@@ -327,7 +327,14 @@
     "health": "Habitat health",
     "uninhabited": "Uninhabited",
     "individuals": "{{count}} individuals",
-    "individuals_one": "{{count}} individual"
+    "individuals_one": "{{count}} individual",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetView": "Reset view",
+    "vitalStatus": "Vital status",
+    "actions": "Dominant behaviour",
+    "cultureBadge": "Cultural traditions",
+    "activeInteractions": "Active interactions"
   },
   "panel": {
     "label": "Details",

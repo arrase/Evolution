@@ -54,10 +54,136 @@ export const LOCALE_LANGUAGE_NAMES: Record<SupportedLocale, string> = {
   ru: "Russian"
 };
 
+const chatOllamaClientsByKey = new Map<string, ChatOllama>();
+
+export function getChatOllamaClient(
+  baseUrl: string = DEFAULT_SYSTEM_TWO_BASE_URL,
+  modelTag: string = DEFAULT_SYSTEM_TWO_MODEL
+): ChatOllama {
+  const key = `${baseUrl}|${modelTag}`;
+  const existing = chatOllamaClientsByKey.get(key);
+  if (existing) {
+    return existing;
+  }
+  const client = new ChatOllama({
+    model: modelTag,
+    baseUrl,
+    temperature: 0.35,
+    think: false,
+    numPredict: 260,
+    keepAlive: "30m"
+  });
+  chatOllamaClientsByKey.set(key, client);
+  return client;
+}
+
 function clampTextLength(text: string, minLength: number, maxLength: number, padSuffix: string): string {
   const trimmed = text.trim();
   const padded = trimmed.length < minLength ? `${trimmed} ${padSuffix}`.trim() : trimmed;
   return padded.slice(0, maxLength);
+}
+
+export function ensureUniqueTraitName(
+  proposedName: string,
+  input: MilestoneSynthesisInput
+): string {
+  const forbidden = new Set(
+    [
+      ...input.deme.existingTraitNames,
+      ...(input.globalEmergentTraitNames ? input.globalEmergentTraitNames : [])
+    ].map((name) => name.trim().toLowerCase())
+  );
+
+  const trimmed = proposedName.trim();
+  if (trimmed.length > 0 && !forbidden.has(trimmed.toLowerCase())) {
+    return trimmed.slice(0, 60);
+  }
+
+  const baseText = (trimmed || "Adaptation").replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const candidates = [
+    `${baseText} (${input.cell.biome} G${input.generation})`,
+    `${baseText} (${input.cell.biome} ${input.deme.name.slice(0, 12).trim()} G${input.generation})`,
+    `${baseText} (${input.cell.biome} G${input.generation} II)`,
+    `${baseText} (${input.cell.biome} G${input.generation} III)`
+  ];
+
+  for (const candidate of candidates) {
+    const sliced = candidate.slice(0, 60).trim();
+    if (!forbidden.has(sliced.toLowerCase())) {
+      return sliced;
+    }
+  }
+
+  return `${baseText.slice(0, 38).trim()} (${input.deme.id.slice(0, 10)} G${input.generation})`.slice(
+    0,
+    60
+  );
+}
+
+export function buildMilestoneSynthesisPrompt(input: MilestoneSynthesisInput): string {
+  const expectedCategory = input.triggerType === "cultural_innovation" ? "cultural" : "biological";
+  const languageName = LOCALE_LANGUAGE_NAMES[input.locale];
+  const seasonSuffix = input.season ? ` (season: ${input.season})` : "";
+
+  const energyDetails: string[] = [];
+  if (input.deme.energyReserves !== undefined) {
+    energyDetails.push(`energyReserves=${Math.round(input.deme.energyReserves)}`);
+  }
+  if (input.deme.lastEnergyDelta !== undefined) {
+    const sign = input.deme.lastEnergyDelta >= 0 ? "+" : "";
+    energyDetails.push(`lastEnergyDelta=${sign}${Math.round(input.deme.lastEnergyDelta)}`);
+  }
+  const energySuffix = energyDetails.length > 0 ? `, ${energyDetails.join(", ")}` : "";
+
+  const resourceDetails: string[] = [];
+  if (input.cell.currentResources !== undefined) {
+    resourceDetails.push(`currentResources=${Math.round(input.cell.currentResources)}`);
+  }
+  if (input.cell.carryingCapacity !== undefined) {
+    resourceDetails.push(`carryingCapacity=${Math.round(input.cell.carryingCapacity)}`);
+  }
+  if (
+    input.cell.carryingCapacity !== undefined &&
+    input.cell.carryingCapacityMax !== undefined
+  ) {
+    const healthPct = Math.round(
+      (input.cell.carryingCapacity / Math.max(1, input.cell.carryingCapacityMax)) * 100
+    );
+    resourceDetails.push(
+      `health=${healthPct}% of Kmax=${Math.round(input.cell.carryingCapacityMax)}`
+    );
+  }
+  const resourceSuffix = resourceDetails.length > 0 ? `, ${resourceDetails.join(", ")}` : "";
+
+  const allForbiddenNames = Array.from(
+    new Set([
+      ...input.deme.existingTraitNames,
+      ...(input.globalEmergentTraitNames ? input.globalEmergentTraitNames : [])
+    ])
+  );
+
+  const lines = [
+    `You are the Evolutionary & Socio-Cultural Naturalist Engine (System 2).`,
+    `Write ALL text fields (name, semanticDescriptor, affinityCondition, chronicleTitle, chronicleBody) strictly in ${languageName} (locale: ${input.locale}).`,
+    `Keep all text fields concise (1-2 sentences max: name <= 60 chars, semanticDescriptor 20-150 chars, affinityCondition 10-100 chars, chronicleBody 30-180 chars).`,
+    `Milestone trigger: ${input.triggerType} at generation ${input.generation}${seasonSuffix}.`,
+    `Required category: "${expectedCategory}".`,
+    `Deme "${input.deme.name}" (population: ${input.deme.population}${energySuffix}) repeatedly selected "${input.deme.dominantDecisionName}".`,
+    `Existing traits (do NOT duplicate any of these names): ${allForbiddenNames.join(", ") || "none"}.`,
+    `Hex cell environment: biome=${input.cell.biome}, temperature=${input.cell.temperature}, humidity=${input.cell.humidity}, altitude=${input.cell.altitude}${resourceSuffix}.`
+  ];
+
+  if (input.recentChronicleTitles && input.recentChronicleTitles.length > 0) {
+    lines.push(
+      `Recent lineage chronicles: ${input.recentChronicleTitles.slice(0, 3).join(" | ")}.`
+    );
+  }
+
+  lines.push(
+    `Synthesize a unique, scientifically grounded emergent ${expectedCategory} adaptation with a balanced 6-axis biophysicalVector (metabolicCost, extractionEfficiency, ecologicalImpact, spatialMobility, socialCohesion in [-1, 1], transmissionThreshold in [0, 1]) and a concise causal Naturalist Notebook chronicle.`
+  );
+
+  return lines.join("\n");
 }
 
 export async function synthesizeMilestoneWithGemma(
@@ -69,30 +195,13 @@ export async function synthesizeMilestoneWithGemma(
   const timeoutMs = options?.timeoutMs ? options.timeoutMs : DEFAULT_SYSTEM_TWO_TIMEOUT_MS;
 
   const expectedCategory = input.triggerType === "cultural_innovation" ? "cultural" : "biological";
-  const languageName = LOCALE_LANGUAGE_NAMES[input.locale];
-
-  const llm = new ChatOllama({
-    model: modelTag,
-    baseUrl,
-    temperature: 0.4,
-    think: false,
-    keepAlive: "30m"
-  });
+  const llm = getChatOllamaClient(baseUrl, modelTag);
 
   const structuredLlm = llm.withStructuredOutput(RawSynthesizedTraitProposalSchema, {
     method: "jsonSchema"
   });
 
-  const prompt = [
-    `You are the Evolutionary & Socio-Cultural Naturalist Engine (System 2).`,
-    `Write ALL text fields (name, semanticDescriptor, affinityCondition, chronicleTitle, chronicleBody) strictly in ${languageName} (locale: ${input.locale}).`,
-    `Milestone trigger: ${input.triggerType} at generation ${input.generation}.`,
-    `Required category: "${expectedCategory}".`,
-    `Deme "${input.deme.name}" (population: ${input.deme.population}) repeatedly selected "${input.deme.dominantDecisionName}".`,
-    `Existing traits: ${input.deme.existingTraitNames.join(", ")}.`,
-    `Hex cell environment: biome=${input.cell.biome}, temperature=${input.cell.temperature}, humidity=${input.cell.humidity}, altitude=${input.cell.altitude}.`,
-    `Synthesize a scientifically grounded emergent ${expectedCategory} adaptation with a balanced 6-axis biophysicalVector (metabolicCost, extractionEfficiency, ecologicalImpact, spatialMobility, socialCohesion in [-1, 1], transmissionThreshold in [0, 1]) and a causal Naturalist Notebook chronicle.`
-  ].join("\n");
+  const prompt = buildMilestoneSynthesisPrompt(input);
 
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -108,7 +217,10 @@ export async function synthesizeMilestoneWithGemma(
     ]);
 
     const { balancedVector } = validateAndBalanceThermodynamics(rawProposal.biophysicalVector, false);
-    const cleanName = clampTextLength(rawProposal.name, 1, 60, "Adaptation");
+    const cleanName = ensureUniqueTraitName(
+      clampTextLength(rawProposal.name, 1, 60, "Adaptation"),
+      input
+    );
     const cleanDesc = clampTextLength(
       rawProposal.semanticDescriptor,
       10,
@@ -146,13 +258,7 @@ export async function coDesignCatalogItemWithGemma(
   const timeoutMs = options?.timeoutMs ? options.timeoutMs : DEFAULT_SYSTEM_TWO_TIMEOUT_MS;
   const languageName = LOCALE_LANGUAGE_NAMES[input.locale];
 
-  const llm = new ChatOllama({
-    model: modelTag,
-    baseUrl,
-    temperature: 0.4,
-    think: false,
-    keepAlive: "30m"
-  });
+  const llm = getChatOllamaClient(baseUrl, modelTag);
 
   const structuredLlm = llm.withStructuredOutput(RawUserCoDesignOutputSchema, {
     method: "jsonSchema"
@@ -161,7 +267,7 @@ export async function coDesignCatalogItemWithGemma(
   const prompt = [
     `You are the Evolutionary & Socio-Cultural Catalog Co-Design Assistant (System 2).`,
     `Write ALL text fields (name, semanticDescriptor, affinityCondition) strictly in ${languageName} (locale: ${input.locale}).`,
-    `Field length constraints: name max 60 characters, semanticDescriptor 10-300 characters, affinityCondition 5-200 characters.`,
+    `Keep all text fields concise (1-2 sentences max: name <= 60 chars, semanticDescriptor 20-150 chars, affinityCondition 10-100 chars).`,
     `Target catalog item type: "${input.targetType}".`,
     `User concept: "${input.userConcept}".`,
     `Generate a scientifically grounded catalog definition with a 6-axis biophysicalVector (metabolicCost, extractionEfficiency, ecologicalImpact, spatialMobility, socialCohesion in [-1.0, 1.0], transmissionThreshold in [0.0, 1.0]) respecting thermodynamic trade-offs (high advantages in extractionEfficiency, spatialMobility, or socialCohesion require commensurate metabolicCost or negative ecologicalImpact).`

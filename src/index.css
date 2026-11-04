@@ -36,6 +36,15 @@
   }
 }
 
+@keyframes flow-dash {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 .event-pulse {
   opacity: 0;
 }
@@ -43,5 +52,9 @@
 @media (prefers-reduced-motion: no-preference) {
   .event-pulse {
     animation: event-pulse 1.4s ease-out 3;
+  }
+
+  .flow-arc-animated {
+    animation: flow-dash 1.2s linear infinite;
   }
 }
