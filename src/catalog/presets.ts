@@ -152,7 +152,8 @@ function createRiftSavannaWorld(): WorldState {
     selectivePressurePoints: 30,
     selectivePressureRegenPerTurn: 15,
     unlimitedPressureMode: false,
-    autoPauseOnMilestone: true,
+    autoPauseOnMilestone: false,
+    quietTurns: 0,
     mapRadius,
     cells,
     demes: {
@@ -323,7 +324,8 @@ function createDarwinArchipelagoWorld(): WorldState {
     selectivePressurePoints: 30,
     selectivePressureRegenPerTurn: 15,
     unlimitedPressureMode: false,
-    autoPauseOnMilestone: true,
+    autoPauseOnMilestone: false,
+    quietTurns: 0,
     mapRadius,
     cells,
     demes: {
@@ -510,7 +512,8 @@ function createFiniteIslandWorld(): WorldState {
     selectivePressurePoints: 30,
     selectivePressureRegenPerTurn: 15,
     unlimitedPressureMode: false,
-    autoPauseOnMilestone: true,
+    autoPauseOnMilestone: false,
+    quietTurns: 0,
     mapRadius,
     cells,
     demes: {

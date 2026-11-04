@@ -471,7 +471,9 @@ export function resolveBiophysicalAndDemographicPhase(
     }
     growthRate = clamp(growthRate, -0.45, 0.35);
 
-    deme.population = Math.round(deme.population * (1 + growthRate));
+    const nextPop = Math.round(deme.population * (1 + growthRate));
+    deme.population =
+      effectiveDeltaE < 0 && nextPop >= deme.population ? deme.population - 1 : nextPop;
 
     for (const [decisionId, prob] of Object.entries(deme.lastDecisionProbabilities)) {
       if (decisionId !== "dec-conservative-forage" && prob >= 0.35) {
@@ -508,12 +510,29 @@ export function resolveBiophysicalAndDemographicPhase(
     }
     const vEffMobility = getEffectiveVector(deme).spatialMobility;
 
+    const isEmergencyEvacuation = currentCell.currentResources < deme.population * 0.20;
     const candidateNeighbors = getExistingNeighborCells(currentCell, cells)
       .filter((neighbor) => {
         if (!isHexPassableForDeme(neighbor, vEffMobility)) {
           return false;
         }
-        return neighbor.demeIds.length < 3;
+        if (neighbor.demeIds.length >= 3) {
+          return false;
+        }
+        if (!isEmergencyEvacuation) {
+          const hasCompatibleSameLineage = neighbor.demeIds.some((id) => {
+            const other = demes[id];
+            return (
+              other !== undefined &&
+              other.lineageId === deme.lineageId &&
+              computeDemeDivergence(deme, other) < 0.10
+            );
+          });
+          if (hasCompatibleSameLineage) {
+            return false;
+          }
+        }
+        return true;
       })
       .sort(
         (a, b) =>

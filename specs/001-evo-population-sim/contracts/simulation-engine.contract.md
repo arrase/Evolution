@@ -31,6 +31,12 @@ export function applySynthesizedMilestone(
   proposal: SynthesizedTraitProposal
 ): WorldState;
 
+export function evaluateMacroEvolutionaryOutcome(
+  previousState: WorldState,
+  nextState: WorldState,
+  locale?: SupportedLocale
+): WorldState;
+
 export function validateAndBalanceThermodynamics(
   vector: BiophysicalVector,
   freeSandboxMode: boolean
@@ -79,11 +85,11 @@ $$\vec{V}_{\text{eff}}(d) = \text{clamp}_{[-1.5, 1.5]}\left(\vec{V}_{\text{trait
    - **Delta Energético y Crecimiento Poblacional**:
      $$\Delta E(d) = E_{\text{extraída}}(d) - C_{\text{met}}(d)$$
      $$E_{\text{reserves}, t+1}(d) = \max(0,\; E_{\text{reserves}, t}(d) + \Delta E(d))$$
-     La tasa de crecimiento neto $g(d) \in [-0.45, +0.35]$ es proporcional a $\frac{\Delta E(d)}{\text{population}_d}$ modulada por la estrategia reproductiva (`bio-r-strategy` amplifica tanto el crecimiento en superávit como la caída en déficit en $\times 1.35$; `bio-k-strategy` amortigua las oscilaciones en $\times 0.75$).
+     La tasa de crecimiento neto $g(d) \in [-0.45, +0.35]$ es proporcional a $\frac{\Delta E(d)}{\text{population}_d}$ modulada por la estrategia reproductiva (`bio-r-strategy` amplifica tanto el crecimiento en superávit como la caída en déficit en $\times 1.35$; `bio-k-strategy` amortigua las oscilaciones en $\times 0.75$). Cuando el balance efectivo $\Delta E_{\text{eff}}(d) < 0$, la población decrece en al menos $1$ individuo ($\min(\text{population}_d - 1, \text{round}(\text{population}_d \cdot (1 + g(d))))$) para evitar estancamientos por redondeo en poblaciones pequeñas.
 
 3. **Fisión Migratoria y Colonización (`FR-004`)**:
    - La fracción migrante es $M(d) = \lfloor \text{population}_d \cdot P_{\text{migrate}} \cdot 0.45 \rfloor$.
-   - Si $M(d) \ge 10$, se evalúan los 6 hexágonos vecinos buscando aquel que sea **transitable** (`biome !== 'ocean'` y `altitude - 0.50 <= V_eff_mobility(d)`), tenga $< 3$ *demes* (o contenga un *deme* del mismo `lineageId` con divergencia $< 0.10$) y maximice $\frac{\text{currentResources}}{\text{demesCount} + 1}$.
+   - Si $M(d) \ge 10$, se evalúan los 6 hexágonos vecinos buscando aquel que sea **transitable** (`biome !== 'ocean'` y `altitude - 0.50 <= V_eff_mobility(d)`), tenga $< 3$ *demes*, no albergue ya un *deme* del mismo `lineageId` con divergencia $< 0.10$ (salvo evacuación por agotamiento en la celda origen con `currentResources < population * 0.20`) y maximice $\frac{\text{currentResources}}{\text{demesCount} + 1}$.
    - Si existe hexágono destino válido:
      - Se descuenta $M(d)$ de `population` del *deme* origen.
      - Se registra un `HexEdgeFlow` de tipo `'migration'` entre origen y destino.
@@ -97,14 +103,18 @@ $$\vec{V}_{\text{eff}}(d) = \text{clamp}_{[-1.5, 1.5]}\left(\vec{V}_{\text{trait
 
 ---
 
-### Fase 4: Umbrales de Hitos Evolutivos y Culturales (`detectEvolutionaryMilestones` — `FR-013`)
+### Fase 4: Umbrales de Hitos Evolutivos, Culturales y Desenlaces Macro-Evolutivos (`detectEvolutionaryMilestones`, `evaluateMacroEvolutionaryOutcome` — `FR-005`, `FR-013`)
 
 1. **Efecto Baldwin (`baldwin_assimilation`)**:
-   Si la decisión dominante $i^*$ del *deme* (distinta de `dec-conservative-forage`) tiene $P_{i^*} \ge 0.35$, se incrementa `baldwinCounters[i^*] += 1`. Cuando `baldwinCounters[i^*] >= 8`, se emite un `MilestoneSynthesisInput` de tipo `'baldwin_assimilation'` y se reinicia ese contador a `0`.
+   Si la decisión dominante $i^*$ del *deme* (distinta de `dec-conservative-forage`) tiene $P_{i^*} \ge 0.35$, se incrementa `baldwinCounters[i^*] += 1`. Cuando `baldwinCounters[i^*] >= 8` y el *deme* posee $< 3$ rasgos biológicos con `origin === 'emergent'`, se emite un `MilestoneSynthesisInput` de tipo `'baldwin_assimilation'` y se reinicia ese contador a `0`.
 2. **Innovación Cultural (`cultural_innovation`)**:
-   En cada turno, `innovationCounter = Math.min(2.0, innovationCounter + P_innovate * 0.45)`. Si `innovationCounter >= 1.0` y el *deme* posee al menos un rasgo con `enablesCulturalTransmission === true`, se emite un `MilestoneSynthesisInput` de tipo `'cultural_innovation'` y se resta `1.0` al acumulador.
+   En cada turno, `innovationCounter = Math.min(2.0, innovationCounter + P_innovate * 0.45)`. Si `innovationCounter >= 1.0`, el *deme* posee al menos un rasgo con `enablesCulturalTransmission === true` y posee $< 3$ tradiciones culturales con `origin === 'emergent'`, se emite un `MilestoneSynthesisInput` de tipo `'cultural_innovation'` y se resta `1.0` al acumulador.
 3. **Especiación Alopátrica (`allopatric_speciation`)**:
    Si un *deme* no ha tenido flujo migratorio ni fusión con ningún otro *deme* de su mismo `lineageId` en el turno (y reside en un hexágono sin otros *demes* de su linaje ni en celdas vecinas), `isolationTurns += 1` (en caso contrario se reinicia a `0`). Si `isolationTurns >= 10` y su divergencia respecto al nodo fundador de su `lineageId` es $\ge 0.30$ (o ha adquirido al menos 1 rasgo biológico nuevo desde su separación), se crea un nuevo `LineageNode` hijo en `lineageTree`, se actualiza el `lineageId` y `color` del *deme*, y se registra en el Cuaderno del Naturalista.
+4. **Desenlaces Macro-Evolutivos (`evaluateMacroEvolutionaryOutcome`)**:
+   Al cierre de la Fase 4:
+   - **Superviviente Único (`single_survivor`)**: Si hay al menos 1 *deme* vivo, existe al menos una entrada `'extinction'` en `chronicle`, aún no se ha registrado `'single_survivor'`, y queda un único *deme* vivo (`Object.keys(demes).length === 1`) o un único `lineageId` vivo tras haberse extinguido al menos otro linaje de `lineageTree`, añade una `ChronicleEntry` de tipo `'single_survivor'`.
+   - **Equilibrio Ecológico (`ecological_equilibrium`)**: Si no hubo fisiones migratorias, ni nuevas entradas en `chronicle`, el conjunto de *demes* vivos se mantuvo idéntico al turno previo y cada *deme* tuvo variación poblacional $|\Delta P| / P \le 0.10$, incrementa `quietTurns += 1` (en caso contrario `quietTurns = 0`). Cuando `generation >= 30`, `quietTurns >= 8` y aún no se ha registrado `'ecological_equilibrium'`, añade una `ChronicleEntry` de tipo `'ecological_equilibrium'`.
 
 ---
 

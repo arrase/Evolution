@@ -6,7 +6,7 @@ import {
   type WorldState
 } from "../types/simulation";
 
-export const WORLD_STORAGE_KEY = "evolution_sim_world_v1";
+export const WORLD_STORAGE_KEY = "evolution_sim_world_v2";
 export const LOCALE_STORAGE_KEY = "evolution_sim_locale_v1";
 export const FIRST_STEPS_STORAGE_KEY = "evolution_sim_first_steps_dismissed_v1";
 

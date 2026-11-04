@@ -10,7 +10,8 @@ import { runEnvironmentalPhase } from "../../src/engine/environmentalPhase";
 import { createHexGridCoordinates } from "../../src/engine/hexGrid";
 import {
   applySynthesizedMilestone,
-  detectEvolutionaryMilestones
+  detectEvolutionaryMilestones,
+  evaluateMacroEvolutionaryOutcome
 } from "../../src/engine/milestonePhase";
 import type {
   Deme,
@@ -448,5 +449,45 @@ describe("Phase 4: Evolutionary & Cultural Milestones", () => {
     expect(updatedDeme.lineageId).not.toBe("lineage-root");
     expect(afterSpeciation.lineageTree[updatedDeme.lineageId]!.parentId).toBe("lineage-root");
     expect(afterSpeciation.chronicle.some((e) => e.type === "allopatric_speciation")).toBe(true);
+  });
+
+  it("evaluates macro-evolutionary outcomes (single_survivor after rival extinction and ecological_equilibrium after 8 quiet turns at gen >= 30)", () => {
+    const prevState = createTestWorldState();
+    prevState.generation = 29;
+    prevState.quietTurns = 7;
+
+    const nextState: WorldState = {
+      ...prevState,
+      generation: 30,
+      currentTurnFlows: []
+    };
+
+    const afterEquilibrium = evaluateMacroEvolutionaryOutcome(prevState, nextState, "es");
+    expect(afterEquilibrium.quietTurns).toBe(8);
+    expect(
+      afterEquilibrium.chronicle.some((entry) => entry.type === "ecological_equilibrium")
+    ).toBe(true);
+
+    const survivorState: WorldState = {
+      ...prevState,
+      generation: 18,
+      chronicle: [
+        {
+          id: "chronicle-extinct-18-deme-2",
+          generation: 18,
+          type: "extinction",
+          title: "Rival Clan Extinct",
+          body: "Rival Clan fell below minimum viable population.",
+          demeId: "deme-2",
+          lineageId: "lineage-rival",
+          hexId: "1,0"
+        }
+      ]
+    };
+
+    const afterSingleSurvivor = evaluateMacroEvolutionaryOutcome(prevState, survivorState, "es");
+    expect(
+      afterSingleSurvivor.chronicle.some((entry) => entry.type === "single_survivor")
+    ).toBe(true);
   });
 });

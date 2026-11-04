@@ -174,7 +174,9 @@ export const ChronicleEntryTypeSchema = z.enum([
   "cultural_loss",
   "extinction",
   "tragedy_of_commons",
-  "symbiosis"
+  "symbiosis",
+  "single_survivor",
+  "ecological_equilibrium"
 ]);
 export type ChronicleEntryType = z.infer<typeof ChronicleEntryTypeSchema>;
 
@@ -215,6 +217,7 @@ export const WorldStateSchema = z.object({
   selectivePressureRegenPerTurn: z.number().int().min(0),
   unlimitedPressureMode: z.boolean(),
   autoPauseOnMilestone: z.boolean(),
+  quietTurns: z.number().int().min(0).optional(),
   mapRadius: z.number().int().min(4).max(7),
   cells: z.record(z.string(), HexCellSchema),
   demes: z.record(z.string(), DemeSchema),

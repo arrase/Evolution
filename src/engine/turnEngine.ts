@@ -14,7 +14,8 @@ import { runEnvironmentalPhase } from "./environmentalPhase";
 import { getExistingNeighborCells, isHexPassableForDeme } from "./hexGrid";
 import {
   applySynthesizedMilestone,
-  detectEvolutionaryMilestones
+  detectEvolutionaryMilestones,
+  evaluateMacroEvolutionaryOutcome
 } from "./milestonePhase";
 
 export async function executeGenerationalTurn(
@@ -125,5 +126,5 @@ export async function executeGenerationalTurn(
     afterBio = applySynthesizedMilestone(afterBio, milestoneInput, proposal);
   }
 
-  return afterBio;
+  return evaluateMacroEvolutionaryOutcome(state, afterBio, activeLocale);
 }

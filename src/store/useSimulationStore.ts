@@ -92,6 +92,11 @@ const MILESTONE_CHRONICLE_TYPES = new Set<ChronicleEntry["type"]>([
   "allopatric_speciation"
 ]);
 
+const MACRO_OUTCOME_CHRONICLE_TYPES = new Set<ChronicleEntry["type"]>([
+  "single_survivor",
+  "ecological_equilibrium"
+]);
+
 let activeCognitiveProvider: CognitiveProvider = new LiveCognitiveProvider();
 let autoPlayTimerId: ReturnType<typeof setTimeout> | null = null;
 let isTurnInFlight = false;
@@ -311,7 +316,11 @@ function persistFirstStepsDismissedIfAvailable(): void {
 
 function buildEventToasts(entries: ChronicleEntry[]): Toast[] {
   return entries
-    .filter((entry) => !MILESTONE_CHRONICLE_TYPES.has(entry.type))
+    .filter(
+      (entry) =>
+        !MILESTONE_CHRONICLE_TYPES.has(entry.type) &&
+        !MACRO_OUTCOME_CHRONICLE_TYPES.has(entry.type)
+    )
     .map((entry): Toast => ({ id: entry.id, kind: "event", entry }));
 }
 
@@ -400,6 +409,10 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
         .reverse()
         .find((entry) => MILESTONE_CHRONICLE_TYPES.has(entry.type));
       const latestMilestone = foundMilestone !== undefined ? foundMilestone : null;
+      const foundOutcome = [...addedChronicleEntries]
+        .reverse()
+        .find((entry) => MACRO_OUTCOME_CHRONICLE_TYPES.has(entry.type));
+      const latestOutcome = foundOutcome !== undefined ? foundOutcome : null;
 
       let nextSelectedDemeId = get().selectedDemeId;
       const currentSelectedHexId = get().selectedHexId;
@@ -418,6 +431,7 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
       }
 
       const allDemesExtinct = Object.keys(nextWorld.demes).length === 0;
+      const shouldOutcomePause = allDemesExtinct || latestOutcome !== null;
       const shouldMilestonePause =
         latestMilestone !== null && nextWorld.autoPauseOnMilestone;
 
@@ -426,7 +440,7 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
       const stillAutoPlaying =
         liveMode === "playing_normal" || liveMode === "playing_fast";
 
-      if (allDemesExtinct) {
+      if (shouldOutcomePause) {
         clearAutoPlayTimer();
         nextPlaybackMode = "paused";
       } else if (shouldMilestonePause) {
@@ -439,12 +453,23 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
         nextPlaybackMode = "paused";
       }
 
+      const foundTerminalExtinction = allDemesExtinct
+        ? [...addedChronicleEntries].reverse().find((entry) => entry.type === "extinction")
+        : undefined;
+      const nextBannerChronicle =
+        latestOutcome !== null
+          ? latestOutcome
+          : latestMilestone !== null
+            ? latestMilestone
+            : foundTerminalExtinction !== undefined
+              ? foundTerminalExtinction
+              : get().latestMilestoneChronicle;
+
       set({
         world: nextWorld,
         playbackMode: nextPlaybackMode,
         selectedDemeId: nextSelectedDemeId,
-        latestMilestoneChronicle:
-          latestMilestone !== null ? latestMilestone : get().latestMilestoneChronicle,
+        latestMilestoneChronicle: nextBannerChronicle,
         lastError: null,
         toasts: [...get().toasts, ...buildEventToasts(addedChronicleEntries)].slice(
           -MAX_VISIBLE_TOASTS

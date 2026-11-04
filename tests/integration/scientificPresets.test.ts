@@ -18,6 +18,7 @@ describe("Scientific Presets 30-Generation Integration Benchmarks (FR-014, SC-00
       const parsed = WorldStateSchema.parse(initialWorld);
       expect(parsed.presetId).toBe(preset.id);
       expect(parsed.generation).toBe(0);
+      expect(parsed.autoPauseOnMilestone).toBe(false);
     }
   });
 
@@ -187,5 +188,42 @@ describe("Scientific Presets 30-Generation Integration Benchmarks (FR-014, SC-00
     useSimulationStore.getState().importWorldJson(exportedJson);
     expect(useSimulationStore.getState().world.presetId).toBe("preset-rift-savanna");
     expect(useSimulationStore.getState().world.generation).toBe(1);
+  });
+
+  it("runs auto-play continuously across milestones by default (autoPauseOnMilestone=false) and stops automatically on macro-evolutionary outcomes", async () => {
+    setSimulationCognitiveProvider(new MockCognitiveProvider());
+    const store = useSimulationStore.getState();
+
+    store.loadPreset("preset-rift-savanna");
+    expect(useSimulationStore.getState().world.autoPauseOnMilestone).toBe(false);
+
+    useSimulationStore.getState().setPlaybackMode("playing_fast");
+    for (let gen = 1; gen <= 10; gen += 1) {
+      await useSimulationStore.getState().stepGeneration();
+    }
+
+    const stateAtGen10 = useSimulationStore.getState();
+    expect(stateAtGen10.world.chronicle.some((e) => e.type === "baldwin_trait")).toBe(true);
+    expect(stateAtGen10.playbackMode).toBe("playing_fast");
+
+    useSimulationStore.getState().setPlaybackMode("paused");
+
+    store.loadPreset("preset-finite-island");
+    useSimulationStore.getState().setPlaybackMode("playing_fast");
+    for (let step = 1; step <= 60; step += 1) {
+      if (useSimulationStore.getState().playbackMode !== "playing_fast") {
+        break;
+      }
+      await useSimulationStore.getState().stepGeneration();
+    }
+
+    const terminalIslandState = useSimulationStore.getState();
+    expect(terminalIslandState.playbackMode).toBe("paused");
+    const reachedTerminalOutcome =
+      Object.keys(terminalIslandState.world.demes).length <= 1 ||
+      terminalIslandState.world.chronicle.some(
+        (e) => e.type === "single_survivor" || e.type === "ecological_equilibrium"
+      );
+    expect(reachedTerminalOutcome).toBe(true);
   });
 });

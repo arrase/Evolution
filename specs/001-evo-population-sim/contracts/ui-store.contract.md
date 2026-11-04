@@ -11,7 +11,7 @@ La aplicación se renderiza en un único viewport (`100vw x 100vh`) con **inglé
 1. **Barra Superior de Control Temporal y Estado (`TopControlBar.tsx`)**:
    - Selector de Preset Científico (`"El Rift y la Sabana"`, `"Archipiélago de Darwin"`, `"La Isla Finita"`) y **Selector de Idioma (`en` por defecto, `es`, `zh`, `fr`, `de`, `pt`, `ja`, `ru`)**.
    - Indicadores de `Generación`, `Estación Climática` (`Húmeda/Cálida` vs. `Seca/Fría`), `Nivel del Mar` y `Estado de Ollama` (`d3:4b` + `gemma4:e4b-it-qat`).
-   - Controles de reproducción (`Pausa`, `Paso +1 Gen`, `Auto-Play Normal [1.5s]`, `Auto-Play Rápido [0.3s]`) e interruptor `Auto-Pausa en Hitos`.
+   - Controles de reproducción (`Pausa`, `Paso +1 Gen`, `Auto-Play Normal [1.5s]`, `Auto-Play Rápido [0.3s]`) e interruptor opcional `Auto-Pausa en Hitos` (**desactivado por defecto**, `autoPauseOnMilestone: false`, de modo que el `Auto-Play` corre continuamente hasta alcanzar un desenlace macro-evolutivo: `total_extinction`, `single_survivor` o `ecological_equilibrium`).
    - Botones para abrir el **Laboratorio de Catálogo**, el **Árbol Filo-Cultural**, el **Cuaderno del Naturalista** y **Exportar / Importar JSON**.
 2. **Lienzo Central del Mapa Hexagonal (`HexMapCanvas.tsx`)**:
    - `<svg>` interactivo generado con `honeycomb-grid@4.1.5` mostrando las **5 capas visuales de cada hexágono** (`FR-001`):

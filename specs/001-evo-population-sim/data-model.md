@@ -141,9 +141,9 @@ Si no se cumple, el validador incrementa automáticamente `metabolicCost` hasta 
 - **`ChronicleEntry`**:
   - `id: string`
   - `generation: number`
-  - `type: 'baldwin_trait' | 'cultural_innovation' | 'allopatric_speciation' | 'cultural_loss' | 'extinction' | 'tragedy_of_commons' | 'symbiosis'`
+  - `type: 'baldwin_trait' | 'cultural_innovation' | 'allopatric_speciation' | 'cultural_loss' | 'extinction' | 'tragedy_of_commons' | 'symbiosis' | 'single_survivor' | 'ecological_equilibrium'`
   - `title: string`
-  - `body: string` (crónica naturalista redactada por `gemma4:e4b-it-qat` o plantilla determinista en eventos de colapso)
+  - `body: string` (crónica naturalista redactada por `gemma4:e4b-it-qat` o plantilla determinista en eventos de colapso y desenlaces macro-evolutivos)
   - `demeId: string`
   - `lineageId: string`
   - `hexId: string`
@@ -164,7 +164,8 @@ Si no se cumple, el validador incrementa automáticamente `metabolicCost` hasta 
   - `selectivePressurePoints: number` (entero $\ge 0$)
   - `selectivePressureRegenPerTurn: number` (por defecto `15`)
   - `unlimitedPressureMode: boolean`
-  - `autoPauseOnMilestone: boolean`
+  - `autoPauseOnMilestone: boolean` (por defecto `false` en todos los presets)
+  - `quietTurns?: number` (entero $\ge 0$, por defecto `0`; generaciones consecutivas en estabilidad estacionaria sin migraciones, extinciones ni nuevos hitos)
   - `mapRadius: number` (`4..7`)
   - `cells: Record<string, HexCell>`
   - `demes: Record<string, Deme>`
@@ -226,3 +227,7 @@ Si no se cumple, el validador incrementa automáticamente `metabolicCost` hasta 
 1. **Creación / Fisión (`Deme`)**: Un `Deme` se instancia al cargar un `PresetScenario` o durante la Fase 3 cuando la población migrante ($P_{\text{actual}} \times P_{\text{migrate}} \ge 10$) se desplaza a una `HexCell` vecina transitable que tenga $< 3$ *demes* (o donde exista un *deme* del mismo `lineageId` con divergencia de Jaccard $< 0.10$, en cuyo caso se fusiona directamente).
 2. **Cuello de Botella Cultural**: Si al finalizar la Fase 3 un `Deme` vivo ($\ge 10$ individuos) ha perdido $\ge 50\%$ de su población respecto al inicio del turno o queda con `population < 50`, y posee al menos una tradición en `culturalTraitIds`, se elimina la tradición con mayor `transmissionThreshold` y se añade una `ChronicleEntry` de tipo `'cultural_loss'`.
 3. **Extinción (`Deme` y `LineageNode`)**: Si `population < 10`, el `Deme` se elimina de `WorldState.demes` y de `HexCell.demeIds`, añadiendo una `ChronicleEntry` de tipo `'extinction'`. Si ningún otro `Deme` activo referencia ese `lineageId`, se marca `LineageNode.extinctGeneration = worldState.generation`.
+4. **Desenlaces Macro-Evolutivos (`total_extinction`, `single_survivor`, `ecological_equilibrium`)**:
+   - **Extinción Total**: Cuando `Object.keys(worldState.demes).length === 0`, el `Auto-Play` pasa a `'paused'`.
+   - **Superviviente Único / Hegemonía (`single_survivor`)**: Si al cierre del turno existe al menos una `'extinction'` previa en `chronicle`, aún no se ha registrado una entrada `'single_survivor'`, y queda un único `Deme` vivo (`Object.keys(demes).length === 1`) o un único `lineageId` vivo tras haberse extinguido al menos otro linaje de `lineageTree`, se registra una `ChronicleEntry` de tipo `'single_survivor'` y se pausa el `Auto-Play`.
+   - **Equilibrio Ecológico y Demográfico (`ecological_equilibrium`)**: Si durante `quietTurns >= 8` generaciones consecutivas (con `generation >= 30`) no se producen fisiones migratorias, extinciones, colapsos ni nuevos hitos evolutivos/culturales y las poblaciones oscilan de forma estacionaria ($\le 10\%$ de variación por turno), se registra una `ChronicleEntry` de tipo `'ecological_equilibrium'` y se pausa el `Auto-Play`.

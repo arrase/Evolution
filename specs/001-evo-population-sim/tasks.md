@@ -139,6 +139,16 @@ description: "Actionable, dependency-ordered task list for Evolution Population 
 
 ---
 
+## Phase 8: Convergence
+
+- [X] T043 [US1] Set `autoPauseOnMilestone: false` by default across all 3 scientific presets in `src/catalog/presets.ts` and extend `ChronicleEntryTypeSchema` (`'single_survivor' | 'ecological_equilibrium'`) and `WorldStateSchema` (`quietTurns?: number`) in `src/types/simulation.ts` per `FR-005` (`contradicts`)
+- [X] T044 [US1] Enforce minimum 1-individual decline on net caloric deficit (`effectiveDeltaE < 0`) and prevent redundant migration-fusion ping-pong into hexes already hosting a `< 0.10` divergent same-lineage deme in `src/engine/biophysicalPhase.ts` per `FR-004` (`partial`)
+- [X] T045 [US4] Cap emergent trait synthesis at `< 3` per category per deme and implement `evaluateMacroEvolutionaryOutcome` (`single_survivor` and `ecological_equilibrium` after `quietTurns >= 8` at `generation >= 30`) in `src/engine/milestonePhase.ts` and `src/engine/turnEngine.ts` per `FR-005` and `FR-013` (`missing`)
+- [X] T046 [P] [US4] Update `stepGeneration` in `src/store/useSimulationStore.ts` and localized chronicle type labels in `src/i18n/locales/{en,es,zh,fr,de,pt,ja,ru}.json` so `Auto-Play` runs continuously across milestones by default and pauses automatically on `total_extinction`, `single_survivor`, or `ecological_equilibrium` per `FR-005` and `FR-015` (`partial`)
+- [X] T047 [US1] Add unit and integration tests verifying `autoPauseOnMilestone === false` default, continuous `Auto-Play` through milestones, and automatic stop on `total_extinction`, `single_survivor`, and `ecological_equilibrium` in `tests/unit/biophysicalPhase.test.ts` and `tests/integration/scientificPresets.test.ts` per `FR-005` (`missing`)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

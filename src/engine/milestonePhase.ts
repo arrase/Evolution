@@ -23,6 +23,81 @@ const SPECIATION_PALETTE = [
   "#00F5D4"
 ];
 
+const OUTCOME_TEXTS: Record<
+  SupportedLocale,
+  {
+    singleSurvivorTitle: (name: string) => string;
+    singleSurvivorBody: (name: string, pop: number) => string;
+    equilibriumTitle: string;
+    equilibriumBody: (demeCount: number, totalPop: number) => string;
+  }
+> = {
+  en: {
+    singleSurvivorTitle: (name) => `Evolutionary Hegemony: ${name}`,
+    singleSurvivorBody: (name, pop) =>
+      `After competitive and environmental extinctions eliminated rival populations, ${name} (${pop} individuals) remains as the sole surviving lineage.`,
+    equilibriumTitle: "Ecological & Demographic Equilibrium Reached",
+    equilibriumBody: (demeCount, totalPop) =>
+      `Across 8 consecutive generations (4 full seasonal cycles), ${demeCount} active subpopulations (${totalPop} total individuals) stabilized in dynamic equilibrium with local carrying capacity.`
+  },
+  es: {
+    singleSurvivorTitle: (name) => `Hegemonía Evolutiva: ${name}`,
+    singleSurvivorBody: (name, pop) =>
+      `Tras la extinción competitiva y ambiental de las demás poblaciones, ${name} (${pop} individuos) prevalece como único superviviente.`,
+    equilibriumTitle: "Equilibrio Ecológico y Demográfico Alcanzado",
+    equilibriumBody: (demeCount, totalPop) =>
+      `Durante 8 generaciones consecutivas (4 ciclos estacionales completos), ${demeCount} subpoblaciones activas (${totalPop} individuos en total) se estabilizaron en equilibrio dinámico con la capacidad de carga local.`
+  },
+  zh: {
+    singleSurvivorTitle: (name) => `进化主导：${name}`,
+    singleSurvivorBody: (name, pop) =>
+      `在竞争与环境灭绝淘汰了其他种群后，${name}（${pop} 个体）成为唯一幸存的世系。`,
+    equilibriumTitle: "已达到生态与人口平衡",
+    equilibriumBody: (demeCount, totalPop) =>
+      `在连续 8 代（4 个完整季节周期）中，${demeCount} 个活跃亚群（共 ${totalPop} 个体）与当地环境承载力达到了动态平衡。`
+  },
+  fr: {
+    singleSurvivorTitle: (name) => `Hégémonie Évolutive : ${name}`,
+    singleSurvivorBody: (name, pop) =>
+      `Après l'extinction des populations rivales, ${name} (${pop} individus) demeure la seule population survivante.`,
+    equilibriumTitle: "Équilibre Écologique et Démographique Atteint",
+    equilibriumBody: (demeCount, totalPop) =>
+      `Sur 8 générations consécutives (4 cycles saisonniers complets), ${demeCount} sous-populations actives (${totalPop} individus au total) se sont stabilisées en équilibre dynamique avec la capacité de charge locale.`
+  },
+  de: {
+    singleSurvivorTitle: (name) => `Evolutionäre Hegemonie: ${name}`,
+    singleSurvivorBody: (name, pop) =>
+      `Nach dem Aussterben konkurrierender Populationen verbleibt ${name} (${pop} Individuen) als einzige überlebende Linie.`,
+    equilibriumTitle: "Ökologisches und Demografisches Gleichgewicht Erreicht",
+    equilibriumBody: (demeCount, totalPop) =>
+      `Über 8 aufeinanderfolgende Generationen (4 vollständige Saisonzyklen) haben sich ${demeCount} aktive Subpopulationen (insgesamt ${totalPop} Individuen) im dynamischen Gleichgewicht mit der lokalen Tragfähigkeit stabilisiert.`
+  },
+  pt: {
+    singleSurvivorTitle: (name) => `Hegemonia Evolutiva: ${name}`,
+    singleSurvivorBody: (name, pop) =>
+      `Após a extinção competitiva e ambiental das populações rivais, ${name} (${pop} indivíduos) permanece como única sobrevivente.`,
+    equilibriumTitle: "Equilíbrio Ecológico e Demográfico Alcançado",
+    equilibriumBody: (demeCount, totalPop) =>
+      `Durante 8 gerações consecutivas (4 ciclos sazonais completos), ${demeCount} subpopulações ativas (${totalPop} indivíduos no total) estabilizaram-se em equilíbrio dinâmico com a capacidade de suporte local.`
+  },
+  ja: {
+    singleSurvivorTitle: (name) => `進化的覇権：${name}`,
+    singleSurvivorBody: (name, pop) =>
+      `競合他集団の絶滅を経て、${name}（${pop} 個体）が唯一の生存系統として残りました。`,
+    equilibriumTitle: "生態学的・人口学的均衡に到達",
+    equilibriumBody: (demeCount, totalPop) =>
+      `連続8世代（4季節サイクル）にわたり、${demeCount} 個の活動デーム（計 ${totalPop} 個体）が地域の環境収容力と動的均衡に達しました。`
+  },
+  ru: {
+    singleSurvivorTitle: (name) => `Эволюционная гегемония: ${name}`,
+    singleSurvivorBody: (name, pop) =>
+      `После вымирания конкурирующих популяций ${name} (${pop} особей) остается единственной выжившей линией.`,
+    equilibriumTitle: "Достигнуто экологическое и демографическое равновесие",
+    equilibriumBody: (demeCount, totalPop) =>
+      `На протяжении 8 поколений подряд (4 полных сезонных цикла) ${demeCount} активных субпопуляций (всего ${totalPop} особей) стабилизировались в динамическом равновесии с локальной емкостью среды.`
+  }
+};
+
 function computeTraitSetDivergence(setA: Set<string>, setB: Set<string>): number {
   const union = new Set([...setA, ...setB]);
   if (union.size === 0) {
@@ -97,6 +172,14 @@ export function detectEvolutionaryMilestones(
       continue;
     }
     const existingTraitNames = resolveExistingTraitNames(deme, state);
+    const emergentBioCount = deme.biologicalTraitIds.filter((id) => {
+      const trait = state.traitsCatalog[id];
+      return trait !== undefined && trait.origin === "emergent";
+    }).length;
+    const emergentCulturalCount = deme.culturalTraitIds.filter((id) => {
+      const trait = state.traitsCatalog[id];
+      return trait !== undefined && trait.origin === "emergent";
+    }).length;
 
     let triggeredBaldwinDecisionId: string | null = null;
     for (const [decisionId, count] of Object.entries(deme.baldwinCounters)) {
@@ -112,7 +195,7 @@ export function detectEvolutionaryMilestones(
       }
     }
 
-    if (triggeredBaldwinDecisionId !== null) {
+    if (triggeredBaldwinDecisionId !== null && emergentBioCount < 3) {
       milestones.push({
         locale: resolvedLocale,
         triggerType: "baldwin_assimilation",
@@ -133,7 +216,11 @@ export function detectEvolutionaryMilestones(
       });
     }
 
-    if (deme.innovationCounter >= 1.0 && demeHasCulturalCapacity(deme, state.traitsCatalog)) {
+    if (
+      deme.innovationCounter >= 1.0 &&
+      demeHasCulturalCapacity(deme, state.traitsCatalog) &&
+      emergentCulturalCount < 3
+    ) {
       milestones.push({
         locale: resolvedLocale,
         triggerType: "cultural_innovation",
@@ -318,5 +405,120 @@ export function applySynthesizedMilestone(
     demes,
     lineageTree,
     chronicle
+  };
+}
+
+export function evaluateMacroEvolutionaryOutcome(
+  previousState: WorldState,
+  nextState: WorldState,
+  locale?: SupportedLocale
+): WorldState {
+  const resolvedLocale: SupportedLocale = locale !== undefined ? locale : DEFAULT_LOCALE;
+  const texts = OUTCOME_TEXTS[resolvedLocale];
+  const livingDemes = Object.values(nextState.demes);
+
+  if (livingDemes.length === 0) {
+    return {
+      ...nextState,
+      quietTurns: 0
+    };
+  }
+
+  const hasPriorExtinction = nextState.chronicle.some((entry) => entry.type === "extinction");
+  const alreadyLoggedSingleSurvivor = nextState.chronicle.some(
+    (entry) => entry.type === "single_survivor"
+  );
+  const livingLineageIds = new Set(livingDemes.map((deme) => deme.lineageId));
+  const hasExtinctLineage = Object.values(nextState.lineageTree).some(
+    (node) => node.extinctGeneration !== null
+  );
+  const isSingleSurvivorDeme = livingDemes.length === 1;
+  const isSingleSurvivingLineage =
+    Object.keys(nextState.lineageTree).length > 1 &&
+    hasExtinctLineage &&
+    livingLineageIds.size === 1;
+
+  if (
+    hasPriorExtinction &&
+    !alreadyLoggedSingleSurvivor &&
+    (isSingleSurvivorDeme || isSingleSurvivingLineage)
+  ) {
+    const survivor = livingDemes[0]!;
+    const totalSurvivorPop = livingDemes.reduce((sum, d) => sum + d.population, 0);
+    const lineageNode = nextState.lineageTree[survivor.lineageId];
+    const displayName =
+      isSingleSurvivorDeme || lineageNode === undefined ? survivor.name : lineageNode.name;
+
+    return {
+      ...nextState,
+      quietTurns: 0,
+      chronicle: [
+        ...nextState.chronicle,
+        {
+          id: `chronicle-single-survivor-${nextState.generation}-${survivor.id}`,
+          generation: nextState.generation,
+          type: "single_survivor",
+          title: texts.singleSurvivorTitle(displayName),
+          body: texts.singleSurvivorBody(displayName, totalSurvivorPop),
+          demeId: survivor.id,
+          lineageId: survivor.lineageId,
+          hexId: survivor.hexId
+        }
+      ]
+    };
+  }
+
+  const hadMigration = nextState.currentTurnFlows.some((flow) => flow.type === "migration");
+  const hadChronicleEvent = nextState.chronicle.length > previousState.chronicle.length;
+  const prevDemeIds = Object.keys(previousState.demes);
+  const nextDemeIds = Object.keys(nextState.demes);
+  const sameDemeSet =
+    prevDemeIds.length === nextDemeIds.length &&
+    nextDemeIds.every((id) => previousState.demes[id] !== undefined);
+
+  const populationsStable =
+    sameDemeSet &&
+    livingDemes.every((deme) => {
+      const prevDeme = previousState.demes[deme.id];
+      if (prevDeme === undefined) {
+        return false;
+      }
+      return Math.abs(deme.population - prevDeme.population) / prevDeme.population <= 0.10;
+    });
+
+  const prevQuietTurns = previousState.quietTurns !== undefined ? previousState.quietTurns : 0;
+  const nextQuietTurns =
+    !hadMigration && !hadChronicleEvent && populationsStable ? prevQuietTurns + 1 : 0;
+
+  const alreadyLoggedEquilibrium = nextState.chronicle.some(
+    (entry) => entry.type === "ecological_equilibrium"
+  );
+
+  if (nextState.generation >= 30 && nextQuietTurns >= 8 && !alreadyLoggedEquilibrium) {
+    const primaryDeme = livingDemes[0]!;
+    const totalPop = livingDemes.reduce((sum, d) => sum + d.population, 0);
+
+    return {
+      ...nextState,
+      quietTurns: nextQuietTurns,
+      chronicle: [
+        ...nextState.chronicle,
+        {
+          id: `chronicle-equilibrium-${nextState.generation}-${primaryDeme.id}`,
+          generation: nextState.generation,
+          type: "ecological_equilibrium",
+          title: texts.equilibriumTitle,
+          body: texts.equilibriumBody(livingDemes.length, totalPop),
+          demeId: primaryDeme.id,
+          lineageId: primaryDeme.lineageId,
+          hexId: primaryDeme.hexId
+        }
+      ]
+    };
+  }
+
+  return {
+    ...nextState,
+    quietTurns: nextQuietTurns
   };
 }

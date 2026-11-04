@@ -89,7 +89,7 @@ src/
 │   ├── thermodynamics.ts                    # 6-axis thermodynamic conservation validator & balancer
 │   ├── environmentalPhase.ts                # Phase 1: seasonality, sea-level land bridges, K regen
 │   ├── biophysicalPhase.ts                  # Phase 3: extraction, Hawk-Dove, fission, fusion, collapse
-│   ├── milestonePhase.ts                    # Phase 4: Baldwin, innovation, allopatric speciation
+│   ├── milestonePhase.ts                    # Phase 4: Baldwin, innovation, speciation & macro outcomes
 │   └── turnEngine.ts                        # Complete 4-phase generational orchestrator
 ├── ai/
 │   ├── ollamaSystemOne.ts                   # d3:4b decision scoring via ollama/browser systemone()
@@ -97,7 +97,7 @@ src/
 │   └── cognitiveProvider.ts                 # Live & Deterministic Mock providers + health check
 ├── store/
 │   ├── persistence.ts                       # JSON export/import and localStorage persistence
-│   └── useSimulationStore.ts                # Zustand store, playback loop & selective pressure actions
+│   └── useSimulationStore.ts                # Zustand store, continuous auto-play (autoPauseOnMilestone=false default) & selective pressure actions
 ├── components/
 │   ├── TopControlBar.tsx                    # Presets, turn playback controls, season/sea indicators
 │   ├── HexMapCanvas.tsx                     # Interactive SVG hex grid with 5 visual layers & flows

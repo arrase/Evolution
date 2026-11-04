@@ -23,7 +23,9 @@ export const CHRONICLE_BADGE_STYLES: Record<ChronicleEntryType, string> = {
   cultural_loss: "bg-orange-950/80 text-orange-300 border-orange-500/40",
   extinction: "bg-rose-950/80 text-rose-300 border-rose-500/40",
   tragedy_of_commons: "bg-red-950/80 text-red-300 border-red-500/40",
-  symbiosis: "bg-sky-950/80 text-sky-300 border-sky-500/40"
+  symbiosis: "bg-sky-950/80 text-sky-300 border-sky-500/40",
+  single_survivor: "bg-fuchsia-950/80 text-fuchsia-300 border-fuchsia-500/40",
+  ecological_equilibrium: "bg-teal-950/80 text-teal-300 border-teal-500/40"
 };
 
 export const FOOD_SCALE = ["#3b2a17", "#4d7c0f", "#a3e635"] as const;

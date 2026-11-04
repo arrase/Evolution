@@ -226,7 +226,9 @@
       "cultural_loss": "Cultural Bottleneck",
       "extinction": "Lineage Extinction",
       "tragedy_of_commons": "Tragedy of the Commons",
-      "symbiosis": "Inter-Deme Symbiosis"
+      "symbiosis": "Inter-Deme Symbiosis",
+      "single_survivor": "Evolutionary Hegemony",
+      "ecological_equilibrium": "Ecological Equilibrium"
     },
     "readEntry": "Read in chronicle",
     "showOnMap": "Show on map"

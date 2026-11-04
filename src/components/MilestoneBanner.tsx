@@ -21,7 +21,7 @@ export function MilestoneBanner() {
         <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
         <div className="min-w-0">
           <div className="text-xs font-semibold uppercase tracking-wider text-amber-300">
-            {t("notebook.milestoneBannerTitle")} · {t("notebook.generationBadge")} {latestMilestoneChronicle.generation}
+            {t(`notebook.types.${latestMilestoneChronicle.type}`)} · {t("notebook.generationBadge")} {latestMilestoneChronicle.generation}
           </div>
           <div className="truncate text-sm font-medium text-white">{latestMilestoneChronicle.title}</div>
         </div>
