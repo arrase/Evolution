@@ -5,8 +5,9 @@ import { getPresetById } from "../catalog/presets";
 import { getExistingNeighborCells, getHexIdsInRadius } from "../engine/hexGrid";
 import { validateAndBalanceThermodynamics } from "../engine/thermodynamics";
 import { executeGenerationalTurn } from "../engine/turnEngine";
-import { changeAppLocale, detectBrowserLocale } from "../i18n";
+import { changeAppLocale } from "../i18n";
 import {
+  DEFAULT_LOCALE,
   DecisionDefinitionSchema,
   TraitDefinitionSchema,
   type BiomeType,
@@ -100,6 +101,8 @@ const MACRO_OUTCOME_CHRONICLE_TYPES = new Set<ChronicleEntry["type"]>([
 let activeCognitiveProvider: CognitiveProvider = new LiveCognitiveProvider();
 let autoPlayTimerId: ReturnType<typeof setTimeout> | null = null;
 let isTurnInFlight = false;
+let worldEpoch = 0;
+let errorToastSeq = 0;
 
 export function setSimulationCognitiveProvider(provider: CognitiveProvider): void {
   activeCognitiveProvider = provider;
@@ -116,13 +119,15 @@ function clearAutoPlayTimer(): void {
   }
 }
 
-function scheduleNextAutoPlayStep(get: () => ExtendedSimulationStore): void {
+function scheduleNextAutoPlayStep(
+  mode: PlaybackMode,
+  get: () => ExtendedSimulationStore
+): void {
   clearAutoPlayTimer();
-  const currentMode = get().playbackMode;
-  if (currentMode !== "playing_normal" && currentMode !== "playing_fast") {
+  if (mode !== "playing_normal" && mode !== "playing_fast") {
     return;
   }
-  const intervalMs = currentMode === "playing_fast" ? 300 : 1500;
+  const intervalMs = mode === "playing_fast" ? 300 : 1500;
   autoPlayTimerId = setTimeout(() => {
     autoPlayTimerId = null;
     void get().stepGeneration();
@@ -144,6 +149,36 @@ function resolveInitialSelection(world: WorldState): {
     selectedHexId: "0,0" in world.cells ? "0,0" : null,
     selectedDemeId: null
   };
+}
+
+function reconcileSelection(
+  world: WorldState,
+  preferredHexId: string | null,
+  preferredDemeId: string | null
+): {
+  selectedHexId: string | null;
+  selectedDemeId: string | null;
+} {
+  if (preferredDemeId !== null && world.demes[preferredDemeId] !== undefined) {
+    return {
+      selectedHexId: world.demes[preferredDemeId].hexId,
+      selectedDemeId: preferredDemeId
+    };
+  }
+  if (preferredHexId !== null && world.cells[preferredHexId] !== undefined) {
+    const firstInHex = world.cells[preferredHexId].demeIds[0];
+    if (firstInHex !== undefined) {
+      return {
+        selectedHexId: preferredHexId,
+        selectedDemeId: firstInHex
+      };
+    }
+    return {
+      selectedHexId: preferredHexId,
+      selectedDemeId: null
+    };
+  }
+  return resolveInitialSelection(world);
 }
 
 function displaceSubmergedDemes(
@@ -277,7 +312,7 @@ function editWorldTerrain(
 
 function resolveInitialLocale(): SupportedLocale {
   if (typeof localStorage === "undefined") {
-    return detectBrowserLocale();
+    return DEFAULT_LOCALE;
   }
   return loadLocaleFromLocalStorage();
 }
@@ -357,6 +392,8 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
   },
 
   loadPreset: (presetId: string) => {
+    worldEpoch += 1;
+    isTurnInFlight = false;
     clearAutoPlayTimer();
     const preset = getPresetById(presetId);
     const freshWorld = preset.createInitialWorld();
@@ -380,6 +417,7 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
       return;
     }
 
+    const turnEpoch = worldEpoch;
     const preTurnState = get();
     const wasAutoPlaying =
       preTurnState.playbackMode === "playing_normal" ||
@@ -402,6 +440,16 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
         preTurnState.locale
       );
 
+      if (turnEpoch !== worldEpoch) {
+        return;
+      }
+      isTurnInFlight = false;
+
+      const currentOllamaStatus = get().ollamaStatus;
+      if (currentOllamaStatus === null || !currentOllamaStatus.connected) {
+        void get().refreshOllamaStatus();
+      }
+
       persistWorldIfAvailable(nextWorld);
 
       const addedChronicleEntries = nextWorld.chronicle.slice(previousChronicleLength);
@@ -414,20 +462,19 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
         .find((entry) => MACRO_OUTCOME_CHRONICLE_TYPES.has(entry.type));
       const latestOutcome = foundOutcome !== undefined ? foundOutcome : null;
 
-      let nextSelectedDemeId = get().selectedDemeId;
-      const currentSelectedHexId = get().selectedHexId;
-
-      if (nextSelectedDemeId === null || nextWorld.demes[nextSelectedDemeId] === undefined) {
-        const hexCell =
-          currentSelectedHexId !== null ? nextWorld.cells[currentSelectedHexId] : undefined;
-        const firstHexDemeId = hexCell !== undefined ? hexCell.demeIds[0] : undefined;
+      let nextSelection = reconcileSelection(
+        nextWorld,
+        get().selectedHexId,
+        get().selectedDemeId
+      );
+      if (nextSelection.selectedDemeId === null) {
         const firstGlobalDeme = Object.values(nextWorld.demes)[0];
-        nextSelectedDemeId =
-          firstHexDemeId !== undefined
-            ? firstHexDemeId
-            : firstGlobalDeme !== undefined
-              ? firstGlobalDeme.id
-              : null;
+        if (firstGlobalDeme !== undefined) {
+          nextSelection = {
+            selectedHexId: firstGlobalDeme.hexId,
+            selectedDemeId: firstGlobalDeme.id
+          };
+        }
       }
 
       const allDemesExtinct = Object.keys(nextWorld.demes).length === 0;
@@ -436,9 +483,9 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
         latestMilestone !== null && nextWorld.autoPauseOnMilestone;
 
       let nextPlaybackMode: PlaybackMode = "paused";
-      const liveMode = get().playbackMode;
-      const stillAutoPlaying =
-        liveMode === "playing_normal" || liveMode === "playing_fast";
+      const currentMode = get().playbackMode;
+      const isCurrentlyAutoPlaying =
+        currentMode === "playing_normal" || currentMode === "playing_fast";
 
       if (shouldOutcomePause) {
         clearAutoPlayTimer();
@@ -446,8 +493,8 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
       } else if (shouldMilestonePause) {
         clearAutoPlayTimer();
         nextPlaybackMode = "milestone_paused";
-      } else if (wasAutoPlaying && stillAutoPlaying) {
-        nextPlaybackMode = liveMode;
+      } else if (isCurrentlyAutoPlaying) {
+        nextPlaybackMode = currentMode;
       } else {
         clearAutoPlayTimer();
         nextPlaybackMode = "paused";
@@ -468,7 +515,8 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
       set({
         world: nextWorld,
         playbackMode: nextPlaybackMode,
-        selectedDemeId: nextSelectedDemeId,
+        selectedHexId: nextSelection.selectedHexId,
+        selectedDemeId: nextSelection.selectedDemeId,
         latestMilestoneChronicle: nextBannerChronicle,
         lastError: null,
         toasts: [...get().toasts, ...buildEventToasts(addedChronicleEntries)].slice(
@@ -477,9 +525,13 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
       });
 
       if (nextPlaybackMode === "playing_normal" || nextPlaybackMode === "playing_fast") {
-        scheduleNextAutoPlayStep(get);
+        scheduleNextAutoPlayStep(nextPlaybackMode, get);
       }
     } catch (error) {
+      if (turnEpoch !== worldEpoch) {
+        return;
+      }
+      isTurnInFlight = false;
       clearAutoPlayTimer();
       const message = error instanceof Error ? error.message : String(error);
       set({
@@ -488,8 +540,6 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
         activeModal: "ollama_diagnostics"
       });
       await get().refreshOllamaStatus();
-    } finally {
-      isTurnInFlight = false;
     }
   },
 
@@ -500,7 +550,8 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
       lastError: mode === "error_paused" ? get().lastError : null
     });
     if (mode === "playing_normal" || mode === "playing_fast") {
-      scheduleNextAutoPlayStep(get);
+      get().completeFirstStep("play");
+      scheduleNextAutoPlayStep(mode, get);
     }
   },
 
@@ -561,6 +612,10 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
           ? firstDemeInHex
           : null
     });
+
+    if (firstDemeInHex !== undefined) {
+      get().completeFirstStep("select");
+    }
   },
 
   selectDeme: (demeId: string) => {
@@ -624,10 +679,15 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
             }
             if (target.carryingCapacityMax < 120) {
               target.carryingCapacityMax = 300;
+            } else if (target.carryingCapacityMax < 220) {
+              target.carryingCapacityMax = 220;
             }
             if (target.carryingCapacity < 80) {
-              target.carryingCapacity = 220;
-              target.currentResources = 180;
+              target.carryingCapacity = Math.min(
+                target.carryingCapacityMax,
+                Math.max(target.carryingCapacity, 220)
+              );
+              target.currentResources = Math.min(target.carryingCapacity, 180);
             }
           }
         } else if (activeBrush.kind === "adjust_altitude") {
@@ -645,6 +705,13 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
           } else if (nextAlt >= 0.78) {
             target.biome = "high_mountain";
             target.temperature = Math.min(target.temperature, -0.30);
+          } else if (
+            activeBrush.delta < 0 &&
+            target.biome === "high_mountain" &&
+            nextAlt < 0.78
+          ) {
+            target.biome = nextAlt < 0.55 ? "savanna" : "arid_steppe";
+            target.temperature = Math.max(target.temperature, 0.20);
           }
         } else {
           const factor = 1 + activeBrush.deltaFactor;
@@ -652,17 +719,27 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
             clamp(target.carryingCapacity * factor, 10, target.carryingCapacityMax).toFixed(2)
           );
           target.carryingCapacity = nextK;
-          target.currentResources = Number(
-            clamp(target.currentResources * factor, 0, nextK).toFixed(2)
-          );
+          if (activeBrush.deltaFactor > 0) {
+            const addedResources = Math.max(
+              target.currentResources * factor,
+              target.currentResources + target.carryingCapacity * activeBrush.deltaFactor
+            );
+            target.currentResources = clamp(Math.round(addedResources), 0, nextK);
+          } else {
+            target.currentResources = Number(
+              clamp(target.currentResources * factor, 0, nextK).toFixed(2)
+            );
+          }
         }
       }
     });
 
+    const nextSelection = reconcileSelection(nextWorld, hexId, null);
     persistWorldIfAvailable(nextWorld);
     set({
       world: nextWorld,
-      selectedHexId: hexId
+      selectedHexId: nextSelection.selectedHexId,
+      selectedDemeId: nextSelection.selectedDemeId
     });
     get().completeFirstStep("tool");
   },
@@ -679,21 +756,36 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
         if (cell.altitude < nextSeaLevel && cell.biome !== "ocean") {
           cell.biome = "ocean";
           cell.currentResources = 0;
-        } else if (
-          cell.altitude >= nextSeaLevel &&
-          cell.altitude < 0.25 &&
-          cell.biome === "ocean"
-        ) {
-          cell.biome = "coastal_shallows";
+        } else if (cell.altitude >= nextSeaLevel && cell.biome === "ocean") {
+          cell.biome =
+            cell.altitude < 0.25
+              ? "coastal_shallows"
+              : cell.altitude < 0.55
+                ? "savanna"
+                : cell.altitude < 0.78
+                  ? "arid_steppe"
+                  : "high_mountain";
           cell.carryingCapacityMax = Math.max(160, cell.carryingCapacityMax);
           cell.carryingCapacity = Math.max(80, cell.carryingCapacity);
-          cell.currentResources = Math.max(60, cell.currentResources);
+          cell.currentResources = Math.max(
+            cell.currentResources,
+            Math.round(cell.carryingCapacity * 0.35)
+          );
         }
       }
     });
 
+    const nextSelection = reconcileSelection(
+      nextWorld,
+      get().selectedHexId,
+      get().selectedDemeId
+    );
     persistWorldIfAvailable(nextWorld);
-    set({ world: nextWorld });
+    set({
+      world: nextWorld,
+      selectedHexId: nextSelection.selectedHexId,
+      selectedDemeId: nextSelection.selectedDemeId
+    });
     get().completeFirstStep("tool");
   },
 
@@ -776,7 +868,7 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
           toasts: [
             ...get().toasts,
             {
-              id: `error-${Date.now()}`,
+              id: `error-${Date.now()}-${++errorToastSeq}`,
               kind: "error" as const,
               messageKey: "panel.culturalCapacityRequired"
             }
@@ -812,6 +904,8 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
   },
 
   importWorldJson: (jsonPayload: string) => {
+    worldEpoch += 1;
+    isTurnInFlight = false;
     clearAutoPlayTimer();
     const importedWorld = deserializeWorldState(jsonPayload);
     persistWorldIfAvailable(importedWorld);

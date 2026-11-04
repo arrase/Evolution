@@ -74,7 +74,12 @@ export function validateAndBalanceThermodynamics(
   let adjustedEcologicalImpact = clamped.ecologicalImpact;
 
   if (targetMetabolic > 1.0) {
-    adjustedEcologicalImpact = Math.max(-1.0, Number((1.0 - requiredCompensation).toFixed(4)));
+    const excess = targetMetabolic - 1.0;
+    const baseEcologicalImpact = Math.min(0, clamped.ecologicalImpact);
+    adjustedEcologicalImpact = Math.max(
+      -1.0,
+      Number((baseEcologicalImpact - excess).toFixed(4))
+    );
   }
 
   return {

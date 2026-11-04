@@ -24,10 +24,26 @@ export function App() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.code === "Space" && event.target === document.body) {
-        event.preventDefault();
-        togglePlayback();
+      if (event.code !== "Space") {
+        return;
       }
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest("button, input, select, textarea, dialog") !== null
+      ) {
+        return;
+      }
+      const { activeModal, ollamaStatus, playbackMode } = useSimulationStore.getState();
+      const isAiReady =
+        ollamaStatus !== null &&
+        ollamaStatus.connected &&
+        ollamaStatus.systemOneModelReady &&
+        ollamaStatus.systemTwoModelReady;
+      if (activeModal !== "none" || !isAiReady || playbackMode === "stepping") {
+        return;
+      }
+      event.preventDefault();
+      togglePlayback();
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);

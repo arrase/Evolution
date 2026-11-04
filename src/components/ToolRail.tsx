@@ -50,6 +50,7 @@ export function ToolRail() {
   const { t } = useTranslation();
   const world = useSimulationStore((s) => s.world);
   const activeBrush = useSimulationStore((s) => s.activeBrush);
+  const activeModal = useSimulationStore((s) => s.activeModal);
   const chronicleSeenCount = useSimulationStore((s) => s.chronicleSeenCount);
   const setActiveBrush = useSimulationStore((s) => s.setActiveBrush);
   const adjustSeaLevel = useSimulationStore((s) => s.adjustSeaLevel);
@@ -92,14 +93,14 @@ export function ToolRail() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && activeModal === "none") {
         setIsSeaOpen(false);
         setActiveBrush({ kind: "inspect" });
       }
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [setActiveBrush]);
+  }, [activeModal, setActiveBrush]);
 
   function renderBrushFooter(cost: number) {
     return (

@@ -9,6 +9,7 @@ import { computeThermodynamicMetrics } from "../../src/engine/thermodynamics";
 import {
   DemeDecisionEvaluationInput,
   SUPPORTED_LOCALES,
+  SupportedLocale,
   SynthesizedTraitProposalSchema,
   UserCoDesignOutputSchema
 } from "../../src/types/simulation";
@@ -137,7 +138,7 @@ describe("Cognitive Engine Contracts (System 1 & System 2)", () => {
       }
     });
 
-    it("handles all-zero or negative scores by assigning a normalized uniform distribution", () => {
+    it("handles all-zero, negative, or 7-way tied scores by assigning a normalized uniform distribution where dominantDecisionId >= all others", () => {
       const eligibleIds = ["dec-a", "dec-b", "dec-c"];
       const { probabilities, dominantDecisionId } = normalizeDecisionProbabilities(
         { "dec-a": 0, "dec-b": -5, "dec-c": Number.NaN },
@@ -150,9 +151,40 @@ describe("Cognitive Engine Contracts (System 1 & System 2)", () => {
       expect(probabilities["dec-a"]).toBeCloseTo(0.3334, 4);
       expect(probabilities["dec-b"]).toBeCloseTo(0.3333, 4);
       expect(probabilities["dec-c"]).toBeCloseTo(0.3333, 4);
+
+      const sevenIds = SAMPLE_ELIGIBLE_DECISIONS.map((d) => d.id);
+      const tiedResult = normalizeDecisionProbabilities({}, sevenIds);
+      const tiedTotal = Object.values(tiedResult.probabilities).reduce((acc, p) => acc + p, 0);
+      expect(Math.abs(tiedTotal - 1.0)).toBeLessThan(1e-9);
+      const dominantProb = tiedResult.probabilities[tiedResult.dominantDecisionId]!;
+      for (const id of sevenIds) {
+        expect(dominantProb).toBeGreaterThanOrEqual(tiedResult.probabilities[id]!);
+      }
     });
 
     it("builds localized contextual justifications across all 8 supported locales (SC-003, FR-015)", () => {
+      const expectedBiomeLabels: Record<SupportedLocale, string> = {
+        en: "Biome",
+        es: "Bioma",
+        zh: "生物群系",
+        fr: "Biome",
+        de: "Biom",
+        pt: "Bioma",
+        ja: "バイオーム",
+        ru: "Биом"
+      };
+      const expectedDominantLabels: Record<SupportedLocale, string> = {
+        en: "Dominant decision",
+        es: "Decisión dominante",
+        zh: "主导决策",
+        fr: "Décision dominante",
+        de: "Dominante Entscheidung",
+        pt: "Decisão dominante",
+        ja: "優位な意思決定",
+        ru: "Доминирующее решение"
+      };
+      const outputsByLocale = {} as Record<SupportedLocale, string>;
+
       for (const locale of SUPPORTED_LOCALES) {
         const input = createSampleEvaluationInput({ locale });
         const text = buildContextualJustification(
@@ -161,6 +193,9 @@ describe("Cognitive Engine Contracts (System 1 & System 2)", () => {
           0.42,
           0.88
         );
+        outputsByLocale[locale] = text;
+        expect(text).toContain(expectedBiomeLabels[locale]);
+        expect(text).toContain(expectedDominantLabels[locale]);
         expect(text).toContain("savanna");
         expect(text).toContain("180/260");
         expect(text).toContain("K-Strategy");
@@ -168,6 +203,8 @@ describe("Cognitive Engine Contracts (System 1 & System 2)", () => {
         expect(text).toContain("42.0%");
         expect(text).toContain("88%");
       }
+
+      expect(outputsByLocale.es).not.toBe(outputsByLocale.en);
     });
 
     it("fails cleanly on unreachable Ollama host or timeout without hanging (Edge Case 2)", async () => {

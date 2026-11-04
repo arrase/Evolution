@@ -34,15 +34,16 @@ export function OllamaDiagnosticsModal() {
   const isConnected = ollamaStatus !== null && ollamaStatus.connected;
   const isSystemOneReady = ollamaStatus !== null && ollamaStatus.systemOneModelReady;
   const isSystemTwoReady = ollamaStatus !== null && ollamaStatus.systemTwoModelReady;
-  const isFullyReady = isConnected && isSystemOneReady;
+  const isFullyReady = isConnected && isSystemOneReady && isSystemTwoReady;
   const hostDisplay = ollamaStatus !== null ? ollamaStatus.host : "http://127.0.0.1:11434";
 
   function handleCopyCommand(cmd: string) {
     void navigator.clipboard.writeText(cmd);
   }
 
-  function handleRetryTurn() {
+  async function handleRetryTurn() {
     setActiveModal("none");
+    await refreshOllamaStatus();
     void stepGeneration();
   }
 
@@ -96,7 +97,7 @@ export function OllamaDiagnosticsModal() {
                 <div className="font-semibold text-slate-200">
                   {t("diagnostics.systemOneLabel")}
                 </div>
-                {ollamaStatus !== null && ollamaStatus.resolvedSystemOneTag !== "" && (
+                {isSystemOneReady && ollamaStatus.resolvedSystemOneTag !== "" && (
                   <div className="text-[11px] font-mono text-slate-400">
                     {ollamaStatus.resolvedSystemOneTag}
                   </div>
@@ -118,7 +119,7 @@ export function OllamaDiagnosticsModal() {
                 <div className="font-semibold text-slate-200">
                   {t("diagnostics.systemTwoLabel")}
                 </div>
-                {ollamaStatus !== null && ollamaStatus.resolvedSystemTwoTag !== "" && (
+                {isSystemTwoReady && ollamaStatus.resolvedSystemTwoTag !== "" && (
                   <div className="text-[11px] font-mono text-slate-400">
                     {ollamaStatus.resolvedSystemTwoTag}
                   </div>
@@ -176,7 +177,7 @@ export function OllamaDiagnosticsModal() {
 
           <button
             type="button"
-            onClick={handleRetryTurn}
+            onClick={() => void handleRetryTurn()}
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3.5 py-1.5 font-semibold text-slate-950 cursor-pointer"
           >
             <Play className="w-3.5 h-3.5" />

@@ -43,7 +43,11 @@ export function TopControlBar() {
 
   const isPlaying = playbackMode === "playing_normal" || playbackMode === "playing_fast";
   const isStepping = playbackMode === "stepping";
-  const isAiReady = ollamaStatus !== null && ollamaStatus.connected && ollamaStatus.systemOneModelReady;
+  const isAiReady =
+    ollamaStatus !== null &&
+    ollamaStatus.connected &&
+    ollamaStatus.systemOneModelReady &&
+    ollamaStatus.systemTwoModelReady;
   const isAiOffline = ollamaStatus !== null && !isAiReady;
 
   function runWorldMenuAction(action: () => void) {
@@ -140,7 +144,7 @@ export function TopControlBar() {
           <button
             type="button"
             onClick={togglePlayback}
-            disabled={isAiOffline}
+            disabled={isAiOffline || isStepping}
             aria-describedby="tip-play"
             className={`inline-flex w-28 items-center justify-center gap-2 rounded-lg px-4 py-1.5 font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 ${
               isPlaying

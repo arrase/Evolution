@@ -194,6 +194,7 @@ describe("Scientific Presets 30-Generation Integration Benchmarks (FR-014, SC-00
     setSimulationCognitiveProvider(new MockCognitiveProvider());
     const store = useSimulationStore.getState();
 
+    expect(store.locale).toBe("en");
     store.loadPreset("preset-rift-savanna");
     expect(useSimulationStore.getState().world.autoPauseOnMilestone).toBe(false);
 
@@ -225,5 +226,6 @@ describe("Scientific Presets 30-Generation Integration Benchmarks (FR-014, SC-00
         (e) => e.type === "single_survivor" || e.type === "ecological_equilibrium"
       );
     expect(reachedTerminalOutcome).toBe(true);
+    useSimulationStore.getState().setPlaybackMode("paused");
   });
 });

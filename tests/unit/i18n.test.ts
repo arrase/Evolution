@@ -154,7 +154,7 @@ describe("i18n configuration and 8-locale dictionary parity (FR-015, SC-006)", (
     expect(matchSupportedLocale([])).toBe("en");
   });
 
-  it("detects browser locale from navigator and prioritizes stored localStorage locale when present", () => {
+  it("detects browser locale from navigator and resolves default 'en' or stored localStorage locale when present", () => {
     vi.stubGlobal("navigator", { languages: ["es-MX", "en-US"], language: "es-MX" });
     let storedLocale: string | null = null;
     vi.stubGlobal("localStorage", {
@@ -162,7 +162,7 @@ describe("i18n configuration and 8-locale dictionary parity (FR-015, SC-006)", (
     });
 
     expect(detectBrowserLocale()).toBe("es");
-    expect(loadLocaleFromLocalStorage()).toBe("es");
+    expect(loadLocaleFromLocalStorage()).toBe("en");
 
     storedLocale = "de";
     expect(loadLocaleFromLocalStorage()).toBe("de");

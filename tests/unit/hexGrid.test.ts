@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  computeCellsViewBox,
   computeHexDistance,
   computeHexPixelGeometry,
   createHexGridCoordinates,
@@ -144,5 +145,16 @@ describe("hexGrid geometry helpers", () => {
     expect(isHexPassableForDeme(savannaCell, 0.0)).toBe(true);
     expect(isHexPassableForDeme(highMountainCell, 0.20)).toBe(false);
     expect(isHexPassableForDeme(highMountainCell, 0.45)).toBe(true);
+  });
+
+  it("computes fallback and bounded SVG viewBox strings in computeCellsViewBox", () => {
+    expect(computeCellsViewBox([], 24)).toBe("0 0 100 100");
+
+    const singleCell = [createTestCell({ q: 0, r: 0 })];
+    const viewBox = computeCellsViewBox(singleCell, 10);
+    const parts = viewBox.split(" ").map(Number);
+    expect(parts).toHaveLength(4);
+    expect(parts[2]).toBeCloseTo((HEX_SIZE + 10) * 2, 5);
+    expect(parts[3]).toBeCloseTo((HEX_SIZE + 10) * 2, 5);
   });
 });

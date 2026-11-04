@@ -199,6 +199,7 @@ export function detectEvolutionaryMilestones(
       milestones.push({
         locale: resolvedLocale,
         triggerType: "baldwin_assimilation",
+        triggeredByDecisionId: triggeredBaldwinDecisionId,
         generation: state.generation,
         deme: {
           id: deme.id,
@@ -241,10 +242,10 @@ export function detectEvolutionaryMilestones(
       });
     }
 
-    if (deme.isolationTurns >= 10) {
-      const lineageNode = state.lineageTree[deme.lineageId];
+    if (deme.isolationTurns >= 10 && emergentBioCount < 3) {
+      const founderLineage = state.lineageTree[deme.lineageId];
       const founderTraits =
-        lineageNode !== undefined ? new Set(lineageNode.acquiredTraitIds) : new Set<string>();
+        founderLineage !== undefined ? new Set(founderLineage.acquiredTraitIds) : new Set<string>();
       const demeTraits = new Set([...deme.biologicalTraitIds, ...deme.culturalTraitIds]);
 
       const hasNovelBioTrait = deme.biologicalTraitIds.some(
@@ -252,11 +253,23 @@ export function detectEvolutionaryMilestones(
       );
       const divergenceFromFounder = computeTraitSetDivergence(demeTraits, founderTraits);
       const founderCell =
-        lineageNode !== undefined ? state.cells[lineageNode.founderHexId] : undefined;
+        founderLineage !== undefined ? state.cells[founderLineage.founderHexId] : undefined;
       const inDistinctBiomeAfterIsolation =
         founderCell !== undefined && founderCell.biome !== cell.biome;
+      const separatedFromFounderHex =
+        founderCell === undefined ||
+        founderCell.id !== cell.id ||
+        (state.generation === 0 && emergentBioCount === 0 && divergenceFromFounder >= 0.70);
 
-      if (hasNovelBioTrait || divergenceFromFounder >= 0.30 || inDistinctBiomeAfterIsolation) {
+      if (
+        separatedFromFounderHex &&
+        (hasNovelBioTrait ||
+          divergenceFromFounder >= 0.30 ||
+          (inDistinctBiomeAfterIsolation &&
+            deme.biologicalTraitIds.length > 0 &&
+            founderLineage !== undefined &&
+            founderLineage.foundedGeneration < state.generation))
+      ) {
         milestones.push({
           locale: resolvedLocale,
           triggerType: "allopatric_speciation",
@@ -294,11 +307,20 @@ export function applySynthesizedMilestone(
 
   const { balancedVector } = validateAndBalanceThermodynamics(proposal.biophysicalVector, false);
   const slug = slugifyTraitName(proposal.name);
+  const sanitizedDemeId = targetDeme.id
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   const baseTraitId = `emergent-${state.generation}-${slug}`;
-  const traitId =
+  let traitId =
     state.traitsCatalog[baseTraitId] === undefined
       ? baseTraitId
-      : `${baseTraitId}-${slugifyTraitName(targetDeme.id)}`;
+      : `${baseTraitId}-${sanitizedDemeId}`;
+  let traitSuffix = 2;
+  while (state.traitsCatalog[traitId] !== undefined) {
+    traitId = `${baseTraitId}-${sanitizedDemeId}-${traitSuffix}`;
+    traitSuffix += 1;
+  }
 
   const newTrait: TraitDefinition = {
     id: traitId,
@@ -354,21 +376,35 @@ export function applySynthesizedMilestone(
   }
 
   if (input.triggerType === "baldwin_assimilation") {
-    for (const [decisionId, count] of Object.entries(deme.baldwinCounters)) {
-      if (count >= 8) {
-        deme.baldwinCounters[decisionId] = 0;
+    if (input.triggeredByDecisionId !== undefined) {
+      deme.baldwinCounters[input.triggeredByDecisionId] = 0;
+    } else {
+      for (const [decisionId, count] of Object.entries(deme.baldwinCounters)) {
+        if (count >= 8) {
+          deme.baldwinCounters[decisionId] = 0;
+          break;
+        }
       }
     }
   } else if (input.triggerType === "cultural_innovation") {
     deme.innovationCounter = Math.max(0, Number((deme.innovationCounter - 1.0).toFixed(4)));
   } else if (input.triggerType === "allopatric_speciation") {
+    const oldLineageId = deme.lineageId;
     deme.isolationTurns = 0;
-    const newLineageId = `lineage-${state.generation}-${slug}`;
+    let newLineageId = `lineage-${state.generation}-${slug}`;
+    if (lineageTree[newLineageId] !== undefined) {
+      newLineageId = `${newLineageId}-${sanitizedDemeId}`;
+    }
+    let lineageSuffix = 2;
+    while (lineageTree[newLineageId] !== undefined) {
+      newLineageId = `lineage-${state.generation}-${slug}-${sanitizedDemeId}-${lineageSuffix}`;
+      lineageSuffix += 1;
+    }
     const nextColor = selectDistinctLineageColor(deme.color, lineageTree);
 
     const newLineageNode: LineageNode = {
       id: newLineageId,
-      parentId: deme.lineageId,
+      parentId: oldLineageId,
       name: proposal.name,
       color: nextColor,
       foundedGeneration: state.generation,
@@ -383,6 +419,17 @@ export function applySynthesizedMilestone(
     lineageTree[newLineageId] = newLineageNode;
     deme.lineageId = newLineageId;
     deme.color = nextColor;
+
+    const oldLineageNode = lineageTree[oldLineageId];
+    if (
+      oldLineageNode !== undefined &&
+      Object.values(demes).every((d) => d.lineageId !== oldLineageId)
+    ) {
+      lineageTree[oldLineageId] = {
+        ...oldLineageNode,
+        extinctGeneration: state.generation
+      };
+    }
   }
 
   const chronicleType =
@@ -424,30 +471,38 @@ export function evaluateMacroEvolutionaryOutcome(
     };
   }
 
+  const survivor = livingDemes[0]!;
   const hasPriorExtinction = nextState.chronicle.some((entry) => entry.type === "extinction");
+  const hasNonMigrantExtinction = nextState.chronicle.some(
+    (entry) =>
+      entry.type === "extinction" &&
+      (entry.lineageId !== survivor.lineageId || !/-m\d+-/.test(entry.demeId))
+  );
   const alreadyLoggedSingleSurvivor = nextState.chronicle.some(
     (entry) => entry.type === "single_survivor"
   );
   const livingLineageIds = new Set(livingDemes.map((deme) => deme.lineageId));
+  const totalLineages = Object.keys(nextState.lineageTree).length;
   const hasExtinctLineage = Object.values(nextState.lineageTree).some(
     (node) => node.extinctGeneration !== null
   );
-  const isSingleSurvivorDeme = livingDemes.length === 1;
+  const isSingleSurvivorDeme =
+    totalLineages === 1 &&
+    livingDemes.length === 1 &&
+    nextState.generation >= 15 &&
+    hasNonMigrantExtinction;
   const isSingleSurvivingLineage =
-    Object.keys(nextState.lineageTree).length > 1 &&
-    hasExtinctLineage &&
-    livingLineageIds.size === 1;
+    totalLineages > 1 && hasExtinctLineage && livingLineageIds.size === 1;
 
   if (
     hasPriorExtinction &&
     !alreadyLoggedSingleSurvivor &&
     (isSingleSurvivorDeme || isSingleSurvivingLineage)
   ) {
-    const survivor = livingDemes[0]!;
     const totalSurvivorPop = livingDemes.reduce((sum, d) => sum + d.population, 0);
     const lineageNode = nextState.lineageTree[survivor.lineageId];
     const displayName =
-      isSingleSurvivorDeme || lineageNode === undefined ? survivor.name : lineageNode.name;
+      livingDemes.length === 1 || lineageNode === undefined ? survivor.name : lineageNode.name;
 
     return {
       ...nextState,
@@ -483,7 +538,7 @@ export function evaluateMacroEvolutionaryOutcome(
       if (prevDeme === undefined) {
         return false;
       }
-      return Math.abs(deme.population - prevDeme.population) / prevDeme.population <= 0.10;
+      return Math.abs(deme.population - prevDeme.population) / prevDeme.population <= 0.05;
     });
 
   const prevQuietTurns = previousState.quietTurns !== undefined ? previousState.quietTurns : 0;

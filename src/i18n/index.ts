@@ -43,7 +43,7 @@ void i18n.use(initReactI18next).init({
 
 export function matchSupportedLocale(languageTags: readonly string[]): SupportedLocale {
   for (const tag of languageTags) {
-    const primarySubtag = tag.split("-")[0]!.toLowerCase();
+    const primarySubtag = tag.split(/[-_]/)[0]!.toLowerCase();
     const matched = SUPPORTED_LOCALES.find((locale) => locale === primarySubtag);
     if (matched !== undefined) {
       return matched;
@@ -62,6 +62,10 @@ export function detectBrowserLocale(): SupportedLocale {
 
 export async function changeAppLocale(locale: SupportedLocale): Promise<void> {
   await i18n.changeLanguage(locale);
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = locale;
+    document.title = i18n.t("app.title");
+  }
 }
 
 export { i18n };

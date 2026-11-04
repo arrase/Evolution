@@ -24,7 +24,7 @@ export function Tooltip({ id, text, side, children }: TooltipProps) {
       <span
         id={id}
         role="tooltip"
-        className={`invisible group-hover:visible group-has-focus-visible:visible absolute z-50 w-max max-w-60 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-[11px] font-normal leading-snug text-slate-200 shadow-xl normal-case tracking-normal text-left ${SIDE_CLASSES[side]}`}
+        className={`pointer-events-none invisible group-hover:visible group-has-focus-visible:visible absolute z-50 w-max max-w-60 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-[11px] font-normal leading-snug text-slate-200 shadow-xl normal-case tracking-normal text-left ${SIDE_CLASSES[side]}`}
       >
         {text}
       </span>
@@ -44,7 +44,7 @@ export function InfoHint({ text }: { text: string }) {
       </button>
       <span
         aria-hidden="true"
-        className="invisible group-hover:visible group-has-focus-visible:visible absolute z-50 top-full right-0 mt-1.5 w-56 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-[11px] font-normal leading-snug text-slate-200 shadow-xl normal-case tracking-normal"
+        className="pointer-events-none invisible group-hover:visible group-has-focus-visible:visible absolute z-50 top-full left-0 mt-1.5 w-56 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-[11px] font-normal leading-snug text-slate-200 shadow-xl normal-case tracking-normal"
       >
         {text}
       </span>

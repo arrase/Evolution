@@ -37,7 +37,7 @@
     "preset-rift-savanna": {
       "name": "大地溝帯とサバンナ",
       "description": "地殻変動による山脈が、西側の安定した熱帯雨林と東側の乾燥化が進むサバンナを分断しています。",
-      "scientificHypothesis": "季節的乾燥に晒された東側のデームは協力と移住の 비중を高め、ボールドウィン同化や文化的革新を引き起こす一方、西側は保守的採食を維持します。",
+      "scientificHypothesis": "季節的乾燥に晒された東側のデームは協力と移住の比重を高め、ボールドウィン同化や文化的革新を引き起こす一方、西側は保守的採食を維持します。",
       "tryThis": "再生を押して2つの個体群を比べましょう。乾燥する東のサバンナは協力と移住を促し、森の個体群は保守的なままです。"
     },
     "preset-darwin-archipelago": {
@@ -212,7 +212,8 @@
       "cultural_schism": "文化的分裂",
       "baldwin_assimilation": "ボールドウィン遺伝的同化"
     },
-    "populationsCount": "{{count}} 個体群"
+    "populationsCount": "{{count}} 個体群",
+    "populationsCount_one": "{{count}} 個体群"
   },
   "notebook": {
     "title": "年代記",
@@ -325,7 +326,8 @@
     "food": "食料",
     "health": "生息地の健全度",
     "uninhabited": "無人",
-    "individuals": "{{count}} 個体"
+    "individuals": "{{count}} 個体",
+    "individuals_one": "{{count}} 個体"
   },
   "panel": {
     "label": "詳細",

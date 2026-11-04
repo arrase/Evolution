@@ -75,7 +75,7 @@ export const BASE_DECISIONS: DecisionDefinition[] = [
   },
   {
     id: "dec-exchange-symbiosis",
-    name: "Inter-Deme Exchange & Symbiosis",
+    name: "Exchange / Symbiosis",
     archetype: "exchange",
     semanticDescriptor:
       "Reciprocal resource exchange, niche partitioning, and horizontal cultural transmission with cohabiting or neighboring demes, generating non-zero-sum energetic surpluses.",
@@ -111,7 +111,7 @@ export const BASE_DECISIONS: DecisionDefinition[] = [
   },
   {
     id: "dec-explore-innovate",
-    name: "Exploration & Innovation",
+    name: "Exploration / Innovation",
     archetype: "innovate",
     semanticDescriptor:
       "High-cost cognitive experimentation, tool prototyping, and ecological reconnaissance that sacrifices immediate foraging yield to accumulate cultural innovation and adaptive plasticity.",

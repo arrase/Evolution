@@ -24,7 +24,7 @@ export const BASE_BIOLOGICAL_TRAITS: TraitDefinition[] = [
   },
   {
     id: "bio-k-strategy",
-    name: "K-Strategy (Parental Investment)",
+    name: "K-Strategy (Longevity & Parental Care)",
     category: "biological",
     semanticDescriptor:
       "Life-history adaptation prioritizing extended longevity, delayed maturation, and intensive parental care that buffers demographic oscillations near habitat carrying capacity.",
@@ -87,7 +87,7 @@ export const BASE_BIOLOGICAL_TRAITS: TraitDefinition[] = [
   },
   {
     id: "bio-encephalization",
-    name: "Encephalization (Expensive Tissue)",
+    name: "Encephalization (Costly Neural Tissue)",
     category: "biological",
     semanticDescriptor:
       "Expansion of neocortical volume and executive cognition at a steep resting metabolic cost, unlocking cumulative cultural transmission, tool innovation, and complex symbolic exchange.",
@@ -132,7 +132,7 @@ export const BASE_BIOLOGICAL_TRAITS: TraitDefinition[] = [
 export const BASE_CULTURAL_TRAITS: TraitDefinition[] = [
   {
     id: "cul-fire-processing",
-    name: "Fire & Food Processing",
+    name: "Fire & Thermal Food Processing",
     category: "cultural",
     semanticDescriptor:
       "Socially transmitted mastery of controlled fire and thermal food preparation that externalizes digestion, lowers net metabolic expenditure, and increases caloric bioavailability at a slight ecological cost.",
@@ -216,7 +216,7 @@ export const BASE_CULTURAL_TRAITS: TraitDefinition[] = [
   },
   {
     id: "cul-warrior-expansion",
-    name: "Expansionist Warrior Tradition",
+    name: "Warrior / Expansionist Tradition",
     category: "cultural",
     semanticDescriptor:
       "Militarized age-set organization, coalitionary raiding doctrines, and territorial expansion norms that maximize competitive dominance in inter-deme disputes at high energetic and ecological cost.",

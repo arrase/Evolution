@@ -55,7 +55,7 @@ function createRiftSavannaWorld(): WorldState {
         demeIds: []
       };
     } else {
-      const isSavanna = (coord.q + Math.abs(coord.r)) % 2 === 0;
+      const isSavanna = Math.abs(coord.q + coord.r) % 2 === 1;
       cells[coord.id] = {
         id: coord.id,
         q: coord.q,
@@ -77,7 +77,7 @@ function createRiftSavannaWorld(): WorldState {
     id: "deme-rift-west",
     name: "Western Forest Hominids",
     lineageId: "lineage-rift-ancestral",
-    color: "#81B29A",
+    color: "#E07A5F",
     hexId: "-2,1",
     population: 140,
     energyReserves: 180,

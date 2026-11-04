@@ -154,11 +154,11 @@ export class LiveCognitiveProvider implements CognitiveProvider {
 
       const matchedD3 =
         installedNames.find((name) => name === this.resolvedSystemOneTag) ||
-        installedNames.find((name) => name.startsWith("d3"));
+        installedNames.find((name) => name === "d3" || name.startsWith("d3:"));
       const matchedGemma =
         installedNames.find((name) => name === this.resolvedSystemTwoTag) ||
         installedNames.find((name) => name.startsWith("gemma4:e4b-it-qat")) ||
-        installedNames.find((name) => name.startsWith("gemma4"));
+        installedNames.find((name) => name === "gemma4" || name.startsWith("gemma4:"));
 
       const systemOneModelReady = Boolean(matchedD3);
       const systemTwoModelReady = Boolean(matchedGemma);

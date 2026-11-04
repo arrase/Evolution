@@ -97,13 +97,18 @@ export function computeHexPixelGeometry(
 }
 
 export function computeCellsViewBox(cells: HexCell[], padding: number): string {
+  if (cells.length === 0) {
+    return "0 0 100 100";
+  }
   const centers = cells.map((cell) => computeHexPixelGeometry(cell.q, cell.r));
   const xs = centers.map((center) => center.centerX);
   const ys = centers.map((center) => center.centerY);
-  const minX = Math.min(...xs) - padding;
-  const minY = Math.min(...ys) - padding;
-  const width = Math.max(...xs) - Math.min(...xs) + padding * 2;
-  const height = Math.max(...ys) - Math.min(...ys) + padding * 2;
+  const minX = Math.min(...xs) - HEX_SIZE - padding;
+  const maxX = Math.max(...xs) + HEX_SIZE + padding;
+  const minY = Math.min(...ys) - HEX_SIZE - padding;
+  const maxY = Math.max(...ys) + HEX_SIZE + padding;
+  const width = maxX - minX;
+  const height = maxY - minY;
   return `${minX} ${minY} ${width} ${height}`;
 }
 

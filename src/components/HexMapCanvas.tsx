@@ -49,12 +49,12 @@ function formatPopulation(population: number): string {
   return population >= 1000 ? `${(population / 1000).toFixed(1)}k` : String(population);
 }
 
-function computeCellFill(cell: HexCell, lens: MapLens, maxResources: number): string {
+function computeCellFill(cell: HexCell, lens: MapLens): string {
   if (lens === "biome" || cell.biome === "ocean") {
     return BIOME_STYLES[cell.biome].fill;
   }
   if (lens === "food") {
-    return colorOnScale(FOOD_SCALE, cell.currentResources / maxResources);
+    return colorOnScale(FOOD_SCALE, cell.currentResources / cell.carryingCapacityMax);
   }
   return colorOnScale(HEALTH_SCALE, habitatHealthRatio(cell));
 }
@@ -77,7 +77,6 @@ export function HexMapCanvas() {
 
   const cellList = Object.values(world.cells);
   const viewBox = computeCellsViewBox(cellList, HEX_SIZE * 2.2);
-  const maxResources = Math.max(1, ...cellList.map((cell) => cell.currentResources));
   const isPainting = activeBrush.kind !== "inspect";
 
   const hoveredCell = hovered !== null ? world.cells[hovered.hexId] : undefined;
@@ -133,9 +132,11 @@ export function HexMapCanvas() {
 
   function renderCellDemes(cell: HexCell, centerX: number, centerY: number) {
     const presentDemes = cell.demeIds.map((id) => world.demes[id]).filter((d): d is Deme => d !== undefined);
+    const orderedDemes = presentDemes
+      .map((deme, index) => ({ deme, offset: DEME_OFFSETS[presentDemes.length]![index]! }))
+      .sort((a, b) => Number(a.deme.id === selectedDemeId) - Number(b.deme.id === selectedDemeId));
 
-    return presentDemes.map((deme, index) => {
-      const offset = DEME_OFFSETS[presentDemes.length]![index]!;
+    return orderedDemes.map(({ deme, offset }) => {
       const radius = computeDemeRadius(deme.population);
       const isSelected = deme.id === selectedDemeId;
       const isDimmed = highlightedLineageId !== null && deme.lineageId !== highlightedLineageId;
@@ -154,7 +155,7 @@ export function HexMapCanvas() {
             selectPopulation(deme);
           }}
           onKeyDown={(e) => handleDemeKeyDown(deme, e)}
-          className="cursor-pointer outline-none [&:focus-visible>circle:first-of-type]:stroke-white"
+          className={`${isPainting ? "pointer-events-none" : "cursor-pointer"} outline-none [&:focus-visible>circle:first-of-type]:stroke-white`}
         >
           <circle r={radius + 4} fill="none" stroke={isSelected ? "#ffffff" : "transparent"} strokeWidth={2.5} />
           <circle r={radius} fill={deme.color} stroke="#020617" strokeWidth={2} />
@@ -328,7 +329,7 @@ export function HexMapCanvas() {
           ))}
         </defs>
 
-        <g>
+        <g onPointerLeave={() => setHovered(null)}>
           {cellList.map((cell) => {
             const geometry = computeHexPixelGeometry(cell.q, cell.r);
             return (
@@ -340,7 +341,7 @@ export function HexMapCanvas() {
               >
                 <polygon
                   points={geometry.polygonPoints}
-                  fill={computeCellFill(cell, mapLens, maxResources)}
+                  fill={computeCellFill(cell, mapLens)}
                   fillOpacity={0.78 + cell.altitude * 0.22}
                   stroke={BIOME_STYLES[cell.biome].stroke}
                   strokeOpacity={mapLens === "biome" ? 0.7 : 0.25}
@@ -392,7 +393,7 @@ export function HexMapCanvas() {
 
         <g>{world.currentTurnFlows.map((flow, index) => renderFlowVector(flow, index))}</g>
 
-        <g>
+        <g className={isPainting ? "pointer-events-none" : undefined}>
           {cellList.map((cell) => {
             const geometry = computeHexPixelGeometry(cell.q, cell.r);
             return <g key={`demes-${cell.id}`}>{renderCellDemes(cell, geometry.centerX, geometry.centerY)}</g>;

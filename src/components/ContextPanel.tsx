@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ChevronRight,
@@ -66,6 +66,23 @@ export function ContextPanel() {
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [chosenTraitId, setChosenTraitId] = useState("");
+  const selectedDeme = selectedDemeId !== null ? world.demes[selectedDemeId] : undefined;
+
+  useEffect(() => {
+    setChosenTraitId("");
+  }, [selectedDemeId]);
+
+  useEffect(() => {
+    if (
+      chosenTraitId !== "" &&
+      (selectedDeme === undefined ||
+        world.traitsCatalog[chosenTraitId] === undefined ||
+        selectedDeme.biologicalTraitIds.includes(chosenTraitId) ||
+        selectedDeme.culturalTraitIds.includes(chosenTraitId))
+    ) {
+      setChosenTraitId("");
+    }
+  }, [chosenTraitId, selectedDeme, world.traitsCatalog]);
 
   if (isCollapsed) {
     return (
@@ -84,16 +101,25 @@ export function ContextPanel() {
 
   const demes = Object.values(world.demes);
   const cell = selectedHexId !== null ? world.cells[selectedHexId] : undefined;
-  const selectedDeme = selectedDemeId !== null ? world.demes[selectedDemeId] : undefined;
 
-  const traitName = (traitId: string) =>
-    t(`catalog.traits.${traitId}.name`, { defaultValue: world.traitsCatalog[traitId]!.name });
-  const traitDescription = (traitId: string) =>
-    t(`catalog.traits.${traitId}.semanticDescriptor`, {
-      defaultValue: world.traitsCatalog[traitId]!.semanticDescriptor
-    });
-  const decisionName = (decisionId: string) =>
-    t(`catalog.decisions.${decisionId}.name`, { defaultValue: world.decisionsCatalog[decisionId]!.name });
+  function traitName(traitId: string): string {
+    const trait = world.traitsCatalog[traitId]!;
+    return trait.origin === "base" ? t(`catalog.traits.${traitId}.name`, { defaultValue: trait.name }) : trait.name;
+  }
+
+  function traitDescription(traitId: string): string {
+    const trait = world.traitsCatalog[traitId]!;
+    return trait.origin === "base"
+      ? t(`catalog.traits.${traitId}.semanticDescriptor`, { defaultValue: trait.semanticDescriptor })
+      : trait.semanticDescriptor;
+  }
+
+  function decisionName(decisionId: string): string {
+    const decision = world.decisionsCatalog[decisionId]!;
+    return decision.origin === "base"
+      ? t(`catalog.decisions.${decisionId}.name`, { defaultValue: decision.name })
+      : decision.name;
+  }
 
   function renderPopulationList() {
     return (
@@ -153,16 +179,28 @@ export function ContextPanel() {
     const status = getDemeStatus(deme);
     const sortedBehaviors = Object.entries(deme.lastDecisionProbabilities).sort((a, b) => b[1] - a[1]);
     const [dominantId, dominantProbability] = sortedBehaviors[0]!;
+    const hasCulturalCapacity = demeHasCulturalCapacity(deme, world.traitsCatalog);
     const baldwinMax = Math.max(0, ...Object.values(deme.baldwinCounters));
+    const culturalPercent = hasCulturalCapacity ? Math.min(1, deme.innovationCounter) * 100 : 0;
     const milestoneProgress = [
-      { key: "geneticAdaptation", percent: (baldwinMax / 8) * 100, color: "bg-cyan-400", label: `${baldwinMax} / 8` },
+      {
+        key: "geneticAdaptation",
+        percent: (Math.min(8, baldwinMax) / 8) * 100,
+        color: "bg-cyan-400",
+        label: `${Math.min(8, baldwinMax)} / 8`
+      },
       {
         key: "culturalInnovation",
-        percent: deme.innovationCounter * 100,
+        percent: culturalPercent,
         color: "bg-purple-400",
-        label: `${Math.round(Math.min(1, deme.innovationCounter) * 100)}%`
+        label: `${Math.round(culturalPercent)}%`
       },
-      { key: "isolation", percent: (deme.isolationTurns / 10) * 100, color: "bg-amber-400", label: `${deme.isolationTurns} / 10` }
+      {
+        key: "isolation",
+        percent: (Math.min(10, deme.isolationTurns) / 10) * 100,
+        color: "bg-amber-400",
+        label: `${Math.min(10, deme.isolationTurns)} / 10`
+      }
     ];
     const closestMilestone = Math.round(Math.min(100, Math.max(...milestoneProgress.map((m) => m.percent))));
 
@@ -171,9 +209,7 @@ export function ContextPanel() {
     );
     const chosenTrait = chosenTraitId !== "" ? world.traitsCatalog[chosenTraitId] : undefined;
     const needsCulturalCapacity =
-      chosenTrait !== undefined &&
-      chosenTrait.category === "cultural" &&
-      !demeHasCulturalCapacity(deme, world.traitsCatalog);
+      chosenTrait !== undefined && chosenTrait.category === "cultural" && !hasCulturalCapacity;
     const isFamilyHighlighted = highlightedLineageId === deme.lineageId;
 
     return (
@@ -366,24 +402,28 @@ export function ContextPanel() {
             <dt className="text-slate-400">{t("panel.altitude")}</dt>
             <dd className="font-mono text-slate-200">{habitat.altitude.toFixed(2)}</dd>
           </div>
-          <div>
-            <dt className="flex items-center gap-1 text-slate-400">
-              {t("panel.food")}
-              <InfoHint text={t("panel.foodHint")} />
-            </dt>
-            <dd className="font-mono text-emerald-300">{Math.round(habitat.currentResources)}</dd>
-          </div>
+          {habitat.biome !== "ocean" && (
+            <div>
+              <dt className="flex items-center gap-1 text-slate-400">
+                {t("panel.food")}
+                <InfoHint text={t("panel.foodHint")} />
+              </dt>
+              <dd className="font-mono text-emerald-300">{Math.round(habitat.currentResources)}</dd>
+            </div>
+          )}
         </dl>
-        <div className="mt-3 space-y-1">
-          <div className="flex items-center justify-between text-xs">
-            <span className="flex items-center gap-1 text-slate-400">
-              {t("panel.health")}
-              <InfoHint text={t("panel.healthHint")} />
-            </span>
-            <span className="font-mono text-slate-200">{healthPercent}%</span>
+        {habitat.biome !== "ocean" && (
+          <div className="mt-3 space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1 text-slate-400">
+                {t("panel.health")}
+                <InfoHint text={t("panel.healthHint")} />
+              </span>
+              <span className="font-mono text-slate-200">{healthPercent}%</span>
+            </div>
+            <ProgressBar percent={healthPercent} colorClass={healthPercent >= 60 ? "bg-emerald-500" : "bg-amber-500"} />
           </div>
-          <ProgressBar percent={healthPercent} colorClass={healthPercent >= 60 ? "bg-emerald-500" : "bg-amber-500"} />
-        </div>
+        )}
       </details>
     );
   }

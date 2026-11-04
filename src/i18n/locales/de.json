@@ -212,7 +212,8 @@
       "cultural_schism": "Kulturelles Schisma",
       "baldwin_assimilation": "Genetische Baldwin-Assimilation"
     },
-    "populationsCount": "{{count}} Populationen"
+    "populationsCount": "{{count}} Populationen",
+    "populationsCount_one": "{{count}} Population"
   },
   "notebook": {
     "title": "Chronik",
@@ -325,7 +326,8 @@
     "food": "Nahrung",
     "health": "Lebensraumgesundheit",
     "uninhabited": "Unbewohnt",
-    "individuals": "{{count}} Individuen"
+    "individuals": "{{count}} Individuen",
+    "individuals_one": "{{count}} Individuum"
   },
   "panel": {
     "label": "Details",

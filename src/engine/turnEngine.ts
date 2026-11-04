@@ -73,6 +73,18 @@ export async function executeGenerationalTurn(
       }));
 
     const baselineVector = computeEffectiveBiophysicalVector(deme, afterEnv, {});
+    const migrateDecisionMobility = allDecisions
+      .filter(
+        (decision) =>
+          decision.archetype === "migrate" &&
+          (decision.requiredTraitIds.length === 0 ||
+            decision.requiredTraitIds.some((reqId) => demeTraitSet.has(reqId)))
+      )
+      .reduce((maxMob, decision) => Math.max(maxMob, decision.biophysicalVector.spatialMobility), 0);
+    const effectiveMigrationMobility = Math.min(
+      1.5,
+      baselineVector.spatialMobility + migrateDecisionMobility
+    );
     const neighborCells = getExistingNeighborCells(currentCell, afterEnv.cells).map(
       (neighbor) => ({
         id: neighbor.id,
@@ -83,7 +95,7 @@ export async function executeGenerationalTurn(
         currentResources: neighbor.currentResources,
         carryingCapacity: neighbor.carryingCapacity,
         demesCount: neighbor.demeIds.length,
-        isPassable: isHexPassableForDeme(neighbor, baselineVector.spatialMobility)
+        isPassable: isHexPassableForDeme(neighbor, effectiveMigrationMobility)
       })
     );
 
@@ -118,13 +130,30 @@ export async function executeGenerationalTurn(
     decisionsByDemeId[deme.id] = await provider.evaluateDemeDecisions(evaluationInput);
   }
 
-  let afterBio = resolveBiophysicalAndDemographicPhase(afterEnv, decisionsByDemeId);
+  let afterMilestones = resolveBiophysicalAndDemographicPhase(afterEnv, decisionsByDemeId);
 
-  const milestoneInputs = detectEvolutionaryMilestones(afterBio, activeLocale).slice(0, 3);
+  const milestoneInputs = detectEvolutionaryMilestones(afterMilestones, activeLocale).slice(0, 3);
   for (const milestoneInput of milestoneInputs) {
-    const proposal = await provider.synthesizeMilestone(milestoneInput);
-    afterBio = applySynthesizedMilestone(afterBio, milestoneInput, proposal);
+    const latestDeme = afterMilestones.demes[milestoneInput.deme.id];
+    const existingTraitNames =
+      latestDeme !== undefined
+        ? [...latestDeme.biologicalTraitIds, ...latestDeme.culturalTraitIds].map((id) => {
+            const trait = afterMilestones.traitsCatalog[id];
+            return trait !== undefined ? trait.name : id;
+          })
+        : milestoneInput.deme.existingTraitNames;
+
+    const updatedInput = {
+      ...milestoneInput,
+      deme: {
+        ...milestoneInput.deme,
+        existingTraitNames
+      }
+    };
+
+    const proposal = await provider.synthesizeMilestone(updatedInput);
+    afterMilestones = applySynthesizedMilestone(afterMilestones, updatedInput, proposal);
   }
 
-  return evaluateMacroEvolutionaryOutcome(state, afterBio, activeLocale);
+  return evaluateMacroEvolutionaryOutcome(state, afterMilestones, activeLocale);
 }

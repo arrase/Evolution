@@ -2,6 +2,8 @@ import { demeHasCulturalCapacity } from "../catalog/baseTraits";
 import type {
   BiophysicalVector,
   ChronicleEntry,
+  DecisionArchetype,
+  DecisionDefinition,
   Deme,
   DemeDecisionEvaluationOutput,
   HexCell,
@@ -11,13 +13,43 @@ import type {
 } from "../types/simulation";
 import { getExistingNeighborCells, isHexPassableForDeme } from "./hexGrid";
 
+const DEFAULT_DECISION_ARCHETYPE_BY_ID: Record<string, DecisionArchetype> = {
+  "dec-conservative-forage": "forage",
+  "dec-intensive-overexploit": "overexploit",
+  "dec-selective-migration": "migrate",
+  "dec-cooperate-store": "cooperate",
+  "dec-exchange-symbiosis": "exchange",
+  "dec-territorial-dispute": "dispute",
+  "dec-explore-innovate": "innovate"
+};
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function getDecisionProb(deme: Deme, decisionId: string): number {
-  const prob = deme.lastDecisionProbabilities[decisionId];
-  return prob !== undefined ? prob : 0;
+function resolveDecisionArchetype(
+  decisionId: string,
+  decisionsCatalog: Record<string, DecisionDefinition>
+): DecisionArchetype | undefined {
+  const decision = decisionsCatalog[decisionId];
+  if (decision !== undefined) {
+    return decision.archetype;
+  }
+  return DEFAULT_DECISION_ARCHETYPE_BY_ID[decisionId];
+}
+
+function getArchetypeProb(
+  deme: Deme,
+  decisionsCatalog: Record<string, DecisionDefinition>,
+  archetype: DecisionArchetype
+): number {
+  let total = 0;
+  for (const [decisionId, prob] of Object.entries(deme.lastDecisionProbabilities)) {
+    if (resolveDecisionArchetype(decisionId, decisionsCatalog) === archetype) {
+      total += prob;
+    }
+  }
+  return total;
 }
 
 function getNumericEntry(record: Record<string, number>, key: string): number {
@@ -131,6 +163,7 @@ export function resolveBiophysicalAndDemographicPhase(
   const extractedEnergyByDemeId: Record<string, number> = {};
   const symbiosisBonusAppliedDemeIds = new Set<string>();
   const hadLineageContactDemeIds = new Set<string>();
+  const newlyCreatedDemeIds = new Set<string>();
 
   const getEffectiveVector = (deme: Deme): BiophysicalVector => {
     const cached = effectiveVectorByDemeId[deme.id];
@@ -184,13 +217,13 @@ export function resolveBiophysicalAndDemographicPhase(
     }
 
     const hawks = residentDemes.filter(
-      (deme) => getDecisionProb(deme, "dec-territorial-dispute") >= 0.25
+      (deme) => getArchetypeProb(deme, state.decisionsCatalog, "dispute") >= 0.25
     );
     const doves = residentDemes.filter(
-      (deme) => getDecisionProb(deme, "dec-territorial-dispute") < 0.25
+      (deme) => getArchetypeProb(deme, state.decisionsCatalog, "dispute") < 0.25
     );
     const exchangers = residentDemes.filter(
-      (deme) => getDecisionProb(deme, "dec-exchange-symbiosis") >= 0.20
+      (deme) => getArchetypeProb(deme, state.decisionsCatalog, "exchange") >= 0.20
     );
 
     if (residentDemes.length >= 2) {
@@ -295,7 +328,6 @@ export function resolveBiophysicalAndDemographicPhase(
             continue;
           }
           const receiverSocial = getEffectiveVector(receiver).socialCohesion;
-          const receiverExchangeProb = getDecisionProb(receiver, "dec-exchange-symbiosis");
 
           for (const traitId of donor.culturalTraitIds) {
             if (receiver.culturalTraitIds.includes(traitId)) {
@@ -304,10 +336,14 @@ export function resolveBiophysicalAndDemographicPhase(
             const traitDef = state.traitsCatalog[traitId];
             if (
               traitDef !== undefined &&
-              (receiverSocial >= traitDef.biophysicalVector.transmissionThreshold ||
-                receiverExchangeProb >= 0.25)
+              receiverSocial >= traitDef.biophysicalVector.transmissionThreshold
             ) {
               receiver.culturalTraitIds.push(traitId);
+              effectiveVectorByDemeId[receiver.id] = computeEffectiveBiophysicalVector(
+                receiver,
+                { ...state, cells, demes },
+                receiver.lastDecisionProbabilities
+              );
               if (!loggedSymbiosisInCell) {
                 loggedSymbiosisInCell = true;
                 chronicle.push({
@@ -333,7 +369,7 @@ export function resolveBiophysicalAndDemographicPhase(
       0
     );
     const hasIntensiveOverexploit = residentDemes.some(
-      (deme) => getDecisionProb(deme, "dec-intensive-overexploit") >= 0.30
+      (deme) => getArchetypeProb(deme, state.decisionsCatalog, "overexploit") >= 0.30
     );
 
     if (
@@ -369,11 +405,23 @@ export function resolveBiophysicalAndDemographicPhase(
           hexId: cell.id
         });
       }
+    } else if (
+      sumEcoImpact > 0.10 &&
+      !hasIntensiveOverexploit &&
+      !chronicle.some((entry) => entry.type === "tragedy_of_commons" && entry.hexId === cell.id)
+    ) {
+      cell.carryingCapacity = Number(
+        clamp(
+          cell.carryingCapacity * (1 + 0.05 * sumEcoImpact),
+          10,
+          cell.carryingCapacityMax
+        ).toFixed(2)
+      );
     }
   }
 
   for (const donor of Object.values(demes)) {
-    if (getDecisionProb(donor, "dec-exchange-symbiosis") < 0.20) {
+    if (getArchetypeProb(donor, state.decisionsCatalog, "exchange") < 0.20) {
       continue;
     }
     const donorCell = cells[donor.hexId];
@@ -387,7 +435,7 @@ export function resolveBiophysicalAndDemographicPhase(
         const receiver = demes[neighborDemeId];
         if (
           receiver === undefined ||
-          getDecisionProb(receiver, "dec-exchange-symbiosis") < 0.20
+          getArchetypeProb(receiver, state.decisionsCatalog, "exchange") < 0.20
         ) {
           continue;
         }
@@ -409,7 +457,6 @@ export function resolveBiophysicalAndDemographicPhase(
 
         if (demeHasCulturalCapacity(receiver, state.traitsCatalog)) {
           const receiverSocial = getEffectiveVector(receiver).socialCohesion;
-          const receiverExchangeProb = getDecisionProb(receiver, "dec-exchange-symbiosis");
 
           for (const traitId of donor.culturalTraitIds) {
             if (receiver.culturalTraitIds.includes(traitId)) {
@@ -418,10 +465,24 @@ export function resolveBiophysicalAndDemographicPhase(
             const traitDef = state.traitsCatalog[traitId];
             if (
               traitDef !== undefined &&
-              (receiverSocial >= traitDef.biophysicalVector.transmissionThreshold ||
-                receiverExchangeProb >= 0.25)
+              receiverSocial >= traitDef.biophysicalVector.transmissionThreshold
             ) {
               receiver.culturalTraitIds.push(traitId);
+              effectiveVectorByDemeId[receiver.id] = computeEffectiveBiophysicalVector(
+                receiver,
+                { ...state, cells, demes },
+                receiver.lastDecisionProbabilities
+              );
+              chronicle.push({
+                id: `chronicle-symbiosis-${state.generation}-${neighborCell.id}-${receiver.id}-${traitId}`,
+                generation: state.generation,
+                type: "symbiosis",
+                title: `Cultural Symbiosis: ${traitDef.name}`,
+                body: `${receiver.name} acquired ${traitDef.name} through inter-deme exchange with ${donor.name} across hexes (${donorCell.id} -> ${neighborCell.id}).`,
+                demeId: receiver.id,
+                lineageId: receiver.lineageId,
+                hexId: neighborCell.id
+              });
             }
           }
         }
@@ -444,7 +505,7 @@ export function resolveBiophysicalAndDemographicPhase(
       0.42 *
       (1 +
         0.55 * vEff.metabolicCost +
-        0.20 * Math.abs(cell.temperature) * (1 - Math.max(0, vEff.spatialMobility))) *
+        0.20 * Math.abs(cell.temperature) * Math.max(0, 1 - Math.max(0, vEff.spatialMobility))) *
       hawkMultiplier;
 
     const deltaE = extracted - metabolicCost;
@@ -476,19 +537,21 @@ export function resolveBiophysicalAndDemographicPhase(
       effectiveDeltaE < 0 && nextPop >= deme.population ? deme.population - 1 : nextPop;
 
     for (const [decisionId, prob] of Object.entries(deme.lastDecisionProbabilities)) {
-      if (decisionId !== "dec-conservative-forage" && prob >= 0.35) {
+      if (resolveDecisionArchetype(decisionId, state.decisionsCatalog) !== "forage" && prob >= 0.35) {
         const currentCount = getNumericEntry(deme.baldwinCounters, decisionId);
         deme.baldwinCounters[decisionId] = currentCount + 1;
       }
     }
 
-    const pExplore = getDecisionProb(deme, "dec-explore-innovate");
-    const pCooperate = getDecisionProb(deme, "dec-cooperate-store");
-    const pInnovate = pExplore + 0.35 * pCooperate;
-    deme.innovationCounter = Math.min(
-      2.0,
-      Number((deme.innovationCounter + pInnovate * 0.45).toFixed(4))
-    );
+    if (demeHasCulturalCapacity(deme, state.traitsCatalog)) {
+      const pExplore = getArchetypeProb(deme, state.decisionsCatalog, "innovate");
+      const pCooperate = getArchetypeProb(deme, state.decisionsCatalog, "cooperate");
+      const pInnovate = pExplore + 0.35 * pCooperate;
+      deme.innovationCounter = Math.min(
+        2.0,
+        Number((deme.innovationCounter + pInnovate * 0.45).toFixed(4))
+      );
+    }
   }
 
   const preFissionDemes = Object.values(demes);
@@ -497,7 +560,7 @@ export function resolveBiophysicalAndDemographicPhase(
       continue;
     }
 
-    const pMigrate = getDecisionProb(deme, "dec-selective-migration");
+    const pMigrate = getArchetypeProb(deme, state.decisionsCatalog, "migrate");
     const migrants = Math.floor(deme.population * pMigrate * 0.45);
 
     if (migrants < 10 || deme.population - migrants < 10) {
@@ -550,6 +613,8 @@ export function resolveBiophysicalAndDemographicPhase(
     const transferredEnergy = Number((energyFraction * 0.85).toFixed(2));
 
     deme.population -= migrants;
+    initialPopulationByDemeId[deme.id] =
+      getNumericEntry(initialPopulationByDemeId, deme.id) - migrants;
     deme.energyReserves = Math.max(0, Number((deme.energyReserves - energyFraction).toFixed(2)));
 
     const daughterId = `${deme.id}-m${state.generation}-${targetCell.q}_${targetCell.r}`;
@@ -573,12 +638,10 @@ export function resolveBiophysicalAndDemographicPhase(
     };
 
     demes[daughterId] = daughterDeme;
+    newlyCreatedDemeIds.add(daughterId);
     targetCell.demeIds.push(daughterId);
     initialPopulationByDemeId[daughterId] = migrants;
     effectiveVectorByDemeId[daughterId] = getEffectiveVector(deme);
-
-    hadLineageContactDemeIds.add(deme.id);
-    hadLineageContactDemeIds.add(daughterId);
 
     currentTurnFlows.push({
       fromHexId: currentCell.id,
@@ -588,6 +651,75 @@ export function resolveBiophysicalAndDemographicPhase(
       type: "migration",
       intensity: Number(clamp(migrants / originalPop, 0.05, 1.0).toFixed(2))
     });
+  }
+
+  for (const deme of Object.values(demes)) {
+    if (deme.population < 10) {
+      const cell = cells[deme.hexId];
+      if (cell !== undefined) {
+        cell.demeIds = cell.demeIds.filter((id) => id !== deme.id);
+      }
+      delete demes[deme.id];
+
+      chronicle.push({
+        id: `chronicle-extinct-${state.generation}-${deme.id}`,
+        generation: state.generation,
+        type: "extinction",
+        title: `${deme.name} Extinct`,
+        body: `${deme.name} fell below minimum viable population (${deme.population}) in hex (${deme.hexId}).`,
+        demeId: deme.id,
+        lineageId: deme.lineageId,
+        hexId: deme.hexId
+      });
+
+      const hasLivingRelatives = Object.values(demes).some(
+        (remaining) => remaining.lineageId === deme.lineageId
+      );
+      const lineageNode = lineageTree[deme.lineageId];
+      if (!hasLivingRelatives && lineageNode !== undefined) {
+        lineageNode.extinctGeneration = state.generation;
+      }
+      continue;
+    }
+
+    const initialPop = getNumericEntry(initialPopulationByDemeId, deme.id);
+    const lostHalfOrMore = deme.population <= initialPop * 0.50;
+
+    if (
+      !newlyCreatedDemeIds.has(deme.id) &&
+      (lostHalfOrMore || deme.population < 50) &&
+      deme.culturalTraitIds.length > 0
+    ) {
+      let highestTraitId = "";
+      let highestThreshold = -1;
+
+      for (const traitId of deme.culturalTraitIds) {
+        const traitDef = state.traitsCatalog[traitId];
+        const threshold =
+          traitDef !== undefined ? traitDef.biophysicalVector.transmissionThreshold : 0;
+        if (threshold > highestThreshold) {
+          highestThreshold = threshold;
+          highestTraitId = traitId;
+        }
+      }
+
+      if (highestTraitId.length > 0) {
+        deme.culturalTraitIds = deme.culturalTraitIds.filter((id) => id !== highestTraitId);
+        const lostTraitDef = state.traitsCatalog[highestTraitId];
+        const lostTraitName = lostTraitDef !== undefined ? lostTraitDef.name : highestTraitId;
+
+        chronicle.push({
+          id: `chronicle-culloss-${state.generation}-${deme.id}-${highestTraitId}`,
+          generation: state.generation,
+          type: "cultural_loss",
+          title: `Cultural Loss: ${lostTraitName}`,
+          body: `${deme.name} experienced a demographic bottleneck (pop ${deme.population}) and lost ${lostTraitName}.`,
+          demeId: deme.id,
+          lineageId: deme.lineageId,
+          hexId: deme.hexId
+        });
+      }
+    }
   }
 
   for (const cell of Object.values(cells)) {
@@ -654,102 +786,37 @@ export function resolveBiophysicalAndDemographicPhase(
   }
 
   for (const deme of Object.values(demes)) {
-    if (deme.population < 10) {
-      const cell = cells[deme.hexId];
-      if (cell !== undefined) {
-        cell.demeIds = cell.demeIds.filter((id) => id !== deme.id);
-      }
-      delete demes[deme.id];
-
-      chronicle.push({
-        id: `chronicle-extinct-${state.generation}-${deme.id}`,
-        generation: state.generation,
-        type: "extinction",
-        title: `${deme.name} Extinct`,
-        body: `${deme.name} fell below minimum viable population (${deme.population}) in hex (${deme.hexId}).`,
-        demeId: deme.id,
-        lineageId: deme.lineageId,
-        hexId: deme.hexId
-      });
-
-      const hasLivingRelatives = Object.values(demes).some(
-        (remaining) => remaining.lineageId === deme.lineageId
-      );
-      const lineageNode = lineageTree[deme.lineageId];
-      if (!hasLivingRelatives && lineageNode !== undefined) {
-        lineageNode.extinctGeneration = state.generation;
-      }
-      continue;
-    }
-
-    const initialPop = getNumericEntry(initialPopulationByDemeId, deme.id);
-    const lostHalfOrMore = deme.population <= initialPop * 0.50;
-
-    if ((lostHalfOrMore || deme.population < 50) && deme.culturalTraitIds.length > 0) {
-      let highestTraitId = "";
-      let highestThreshold = -1;
-
-      for (const traitId of deme.culturalTraitIds) {
-        const traitDef = state.traitsCatalog[traitId];
-        const threshold =
-          traitDef !== undefined ? traitDef.biophysicalVector.transmissionThreshold : 0;
-        if (threshold > highestThreshold) {
-          highestThreshold = threshold;
-          highestTraitId = traitId;
-        }
-      }
-
-      if (highestTraitId.length > 0) {
-        deme.culturalTraitIds = deme.culturalTraitIds.filter((id) => id !== highestTraitId);
-        const lostTraitDef = state.traitsCatalog[highestTraitId];
-        const lostTraitName = lostTraitDef !== undefined ? lostTraitDef.name : highestTraitId;
-
-        chronicle.push({
-          id: `chronicle-culloss-${state.generation}-${deme.id}-${highestTraitId}`,
-          generation: state.generation,
-          type: "cultural_loss",
-          title: `Cultural Loss: ${lostTraitName}`,
-          body: `${deme.name} experienced a demographic bottleneck (pop ${deme.population}) and lost ${lostTraitName}.`,
-          demeId: deme.id,
-          lineageId: deme.lineageId,
-          hexId: deme.hexId
-        });
-      }
-    }
-  }
-
-  for (const deme of Object.values(demes)) {
     const cell = cells[deme.hexId];
     if (cell === undefined) {
       continue;
     }
-    const vEff = computeEffectiveBiophysicalVector(deme, state, deme.lastDecisionProbabilities);
+    const lineageNode = lineageTree[deme.lineageId];
+    const founderHexId = lineageNode !== undefined ? lineageNode.founderHexId : undefined;
 
-    const hasSameLineageCohabitant = cell.demeIds.some((otherId) => {
-      if (otherId === deme.id) {
-        return false;
-      }
-      const other = demes[otherId];
-      return other !== undefined && other.lineageId === deme.lineageId;
-    });
+    if (founderHexId !== undefined && deme.hexId === founderHexId) {
+      deme.isolationTurns = 0;
+      continue;
+    }
 
-    const hasSameLineageInPassableNeighbor = getExistingNeighborCells(cell, cells).some(
-      (neighbor) => {
-        if (!isHexPassableForDeme(neighbor, vEff.spatialMobility)) {
-          return false;
-        }
-        return neighbor.demeIds.some((otherId) => {
-          const other = demes[otherId];
-          return other !== undefined && other.lineageId === deme.lineageId;
-        });
-      }
+    const vEff = computeEffectiveBiophysicalVector(
+      deme,
+      { ...state, cells, demes },
+      deme.lastDecisionProbabilities
     );
 
-    if (
-      hadLineageContactDemeIds.has(deme.id) ||
-      hasSameLineageCohabitant ||
-      hasSameLineageInPassableNeighbor
-    ) {
+    const connectedToFounderHex =
+      founderHexId !== undefined &&
+      getExistingNeighborCells(cell, cells).some(
+        (neighbor) =>
+          neighbor.id === founderHexId &&
+          isHexPassableForDeme(neighbor, vEff.spatialMobility) &&
+          neighbor.demeIds.some((otherId) => {
+            const other = demes[otherId];
+            return other !== undefined && other.lineageId === deme.lineageId;
+          })
+      );
+
+    if (hadLineageContactDemeIds.has(deme.id) || connectedToFounderHex) {
       deme.isolationTurns = 0;
     } else {
       deme.isolationTurns += 1;

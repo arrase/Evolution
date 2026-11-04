@@ -112,35 +112,56 @@ export function normalizeDecisionProbabilities(
     sum = 1;
   }
 
-  let dominantDecisionId: string = eligibleDecisionIds[0]!;
+  let maxDecisionId: string = eligibleDecisionIds[0]!;
   let maxScore = -1;
 
   for (const id of eligibleDecisionIds) {
     const score = positiveScores[id]!;
     if (score > maxScore) {
       maxScore = score;
-      dominantDecisionId = id;
+      maxDecisionId = id;
     }
   }
 
-  const probabilities: Record<string, number> = {};
+  const tempProbabilities: Record<string, number> = {};
   let otherSum = 0;
+  let highestOtherId = "";
+  let highestOtherProb = -1;
 
   for (const id of eligibleDecisionIds) {
-    if (id === dominantDecisionId) {
+    if (id === maxDecisionId) {
       continue;
     }
     const score = positiveScores[id]!;
     const rounded = Number((score / sum).toFixed(4));
-    probabilities[id] = rounded;
+    tempProbabilities[id] = rounded;
     otherSum += rounded;
+    if (rounded > highestOtherProb) {
+      highestOtherProb = rounded;
+      highestOtherId = id;
+    }
   }
 
-  probabilities[dominantDecisionId] = Number(Math.max(0, 1 - otherSum).toFixed(4));
+  const complement = Number(Math.max(0, 1 - otherSum).toFixed(4));
+  if (highestOtherId && highestOtherProb > complement) {
+    tempProbabilities[maxDecisionId] = highestOtherProb;
+    tempProbabilities[highestOtherId] = complement;
+  } else {
+    tempProbabilities[maxDecisionId] = complement;
+  }
+
+  const probabilities: Record<string, number> = {
+    [maxDecisionId]: tempProbabilities[maxDecisionId]!
+  };
+  for (const id of eligibleDecisionIds) {
+    if (id !== maxDecisionId) {
+      probabilities[id] = tempProbabilities[id]!;
+    }
+  }
 
   return {
     probabilities,
-    dominantDecisionId
+    dominantDecisionId: maxDecisionId
   };
 }
 
@@ -222,8 +243,13 @@ export async function evaluateDemeWithOllamaSystemOne(
       timeoutPromise
     ]);
 
-    const answer = response.answers.decision as SystemOneChoiceAnswer | undefined;
-    if (!answer || answer.type !== "choice") {
+    const answer = response?.answers?.decision as SystemOneChoiceAnswer | undefined;
+    if (
+      !answer ||
+      answer.type !== "choice" ||
+      !answer.probabilities ||
+      typeof answer.probabilities !== "object"
+    ) {
       throw new Error("Ollama System 1 response did not contain a valid choice answer");
     }
 
@@ -231,7 +257,10 @@ export async function evaluateDemeWithOllamaSystemOne(
       answer.probabilities,
       eligibleIds
     );
-    const confidence = Number(Math.min(1, Math.max(0, answer.confidence)).toFixed(4));
+    const rawConfidence = answer.confidence;
+    const confidence = Number.isFinite(rawConfidence)
+      ? Number(Math.min(1, Math.max(0, rawConfidence)).toFixed(4))
+      : 0.75;
     const dominantProbability = probabilities[dominantDecisionId]!;
     const justification = buildContextualJustification(
       input,

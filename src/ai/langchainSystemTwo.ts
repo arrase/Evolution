@@ -7,7 +7,6 @@ import {
   SupportedLocale,
   SynthesizedTraitProposal,
   SynthesizedTraitProposalSchema,
-  TraitCategorySchema,
   UserCoDesignInput,
   UserCoDesignOutput,
   UserCoDesignOutputSchema
@@ -28,7 +27,7 @@ const RawBiophysicalVectorSchema = z.object({
 
 const RawSynthesizedTraitProposalSchema = z.object({
   name: z.string(),
-  category: TraitCategorySchema,
+  category: z.string().optional(),
   semanticDescriptor: z.string(),
   affinityCondition: z.string(),
   biophysicalVector: RawBiophysicalVectorSchema,
@@ -109,25 +108,27 @@ export async function synthesizeMilestoneWithGemma(
     ]);
 
     const { balancedVector } = validateAndBalanceThermodynamics(rawProposal.biophysicalVector, false);
+    const cleanName = clampTextLength(rawProposal.name, 1, 60, "Adaptation");
+    const cleanDesc = clampTextLength(
+      rawProposal.semanticDescriptor,
+      10,
+      300,
+      "Adaptive evolutionary response to environmental pressure."
+    );
 
     return SynthesizedTraitProposalSchema.parse({
-      name: clampTextLength(rawProposal.name, 1, 60, "Adaptation"),
+      name: cleanName,
       category: expectedCategory,
-      semanticDescriptor: clampTextLength(
-        rawProposal.semanticDescriptor,
-        10,
-        300,
-        "Adaptive modification shaped by sustained ecological selection."
-      ),
+      semanticDescriptor: cleanDesc,
       affinityCondition: clampTextLength(
         rawProposal.affinityCondition,
         5,
         200,
-        input.cell.biome
+        `High affinity in ${input.cell.biome}`
       ),
       biophysicalVector: balancedVector,
-      chronicleTitle: rawProposal.chronicleTitle.trim() || rawProposal.name,
-      chronicleBody: rawProposal.chronicleBody.trim() || rawProposal.semanticDescriptor
+      chronicleTitle: rawProposal.chronicleTitle.trim() || cleanName,
+      chronicleBody: rawProposal.chronicleBody.trim() || cleanDesc
     });
   } finally {
     if (timeoutHandle !== undefined) {
@@ -160,9 +161,10 @@ export async function coDesignCatalogItemWithGemma(
   const prompt = [
     `You are the Evolutionary & Socio-Cultural Catalog Co-Design Assistant (System 2).`,
     `Write ALL text fields (name, semanticDescriptor, affinityCondition) strictly in ${languageName} (locale: ${input.locale}).`,
+    `Field length constraints: name max 60 characters, semanticDescriptor 10-300 characters, affinityCondition 5-200 characters.`,
     `Target catalog item type: "${input.targetType}".`,
     `User concept: "${input.userConcept}".`,
-    `Generate a scientifically grounded catalog definition with a 6-axis biophysicalVector respecting thermodynamic trade-offs (high advantages in extractionEfficiency, spatialMobility, or socialCohesion require commensurate metabolicCost or negative ecologicalImpact).`
+    `Generate a scientifically grounded catalog definition with a 6-axis biophysicalVector (metabolicCost, extractionEfficiency, ecologicalImpact, spatialMobility, socialCohesion in [-1.0, 1.0], transmissionThreshold in [0.0, 1.0]) respecting thermodynamic trade-offs (high advantages in extractionEfficiency, spatialMobility, or socialCohesion require commensurate metabolicCost or negative ecologicalImpact).`
   ].join("\n");
 
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;

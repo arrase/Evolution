@@ -212,7 +212,8 @@
       "cultural_schism": "Культурный Раскол",
       "baldwin_assimilation": "Генетическая Ассимиляция Болдуина"
     },
-    "populationsCount": "Популяций: {{count}}"
+    "populationsCount": "Популяций: {{count}}",
+    "populationsCount_one": "Популяций: {{count}}"
   },
   "notebook": {
     "title": "Хроника",
@@ -325,7 +326,8 @@
     "food": "Пища",
     "health": "Здоровье среды",
     "uninhabited": "Необитаемо",
-    "individuals": "Особей: {{count}}"
+    "individuals": "Особей: {{count}}",
+    "individuals_one": "Особей: {{count}}"
   },
   "panel": {
     "label": "Подробности",

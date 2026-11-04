@@ -19,7 +19,9 @@ export const PhyloCulturalTreeModal: React.FC = () => {
   }
 
   const rawNodes = Object.values(world.lineageTree);
-  const rootNodes = rawNodes.filter((n) => n.parentId === null);
+  const isRootNode = (node: LineageNode): boolean =>
+    node.parentId === null || node.parentId === node.id || world.lineageTree[node.parentId] === undefined;
+  const rootNodes = rawNodes.filter(isRootNode);
 
   const virtualOrigin: LineageNode = {
     id: "__origin__",
@@ -35,27 +37,27 @@ export const PhyloCulturalTreeModal: React.FC = () => {
 
   const hierarchyInput: LineageNode[] =
     rootNodes.length === 1
-      ? rawNodes
+      ? rawNodes.map((node) => (isRootNode(node) ? { ...node, parentId: null } : node))
       : [
           virtualOrigin,
-          ...rawNodes.map((node) =>
-            node.parentId === null ? { ...node, parentId: "__origin__" } : node
-          )
+          ...rawNodes.map((node) => (isRootNode(node) ? { ...node, parentId: "__origin__" } : node))
         ];
 
-  const rootHierarchy = stratify<LineageNode>()
-    .id((d) => d.id)
-    .parentId((d) => d.parentId)(hierarchyInput);
+  const layoutRoot =
+    rawNodes.length > 0
+      ? tree<LineageNode>().nodeSize([180, 120])(
+          stratify<LineageNode>()
+            .id((d) => d.id)
+            .parentId((d) => d.parentId)(hierarchyInput)
+        )
+      : null;
 
-  const layoutRoot = tree<LineageNode>().nodeSize([180, 120])(rootHierarchy);
-  const allNodes = layoutRoot.descendants();
-  const visibleNodes = allNodes.filter((n) => n.data.id !== "__origin__");
-  const visibleLinks = layoutRoot
-    .links()
-    .filter((link) => link.source.data.id !== "__origin__");
+  const visibleNodes = layoutRoot !== null ? layoutRoot.descendants().filter((n) => n.data.id !== "__origin__") : [];
+  const visibleLinks =
+    layoutRoot !== null ? layoutRoot.links().filter((link) => link.source.data.id !== "__origin__") : [];
 
-  const xs = allNodes.map((n) => n.x);
-  const ys = allNodes.map((n) => n.y);
+  const xs = visibleNodes.length > 0 ? visibleNodes.map((n) => n.x) : [0];
+  const ys = visibleNodes.length > 0 ? visibleNodes.map((n) => n.y) : [0];
   const minX = Math.min(...xs) - 140;
   const maxX = Math.max(...xs) + 140;
   const minY = Math.min(...ys) - 80;

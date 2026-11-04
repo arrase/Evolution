@@ -311,6 +311,7 @@ export interface MilestoneSynthesisInput {
   locale: SupportedLocale;
   triggerType: "baldwin_assimilation" | "cultural_innovation" | "allopatric_speciation";
   generation: number;
+  triggeredByDecisionId?: string;
   deme: {
     id: string;
     name: string;

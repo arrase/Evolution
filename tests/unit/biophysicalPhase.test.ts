@@ -291,19 +291,72 @@ describe("Phase 3: Biophysical & Demographic Resolution", () => {
     state.cells["0,0"]!.demeIds.push("deme-2");
     state.cells["0,0"]!.currentResources = 400;
 
+    const exchangeProbs = {
+      "dec-exchange-symbiosis": 0.5,
+      "dec-conservative-forage": 0.5
+    };
+    const receiverEffective = computeEffectiveBiophysicalVector(demeB, state, exchangeProbs);
+    const fireThreshold =
+      state.traitsCatalog["cul-fire-processing"]!.biophysicalVector.transmissionThreshold;
+    expect(receiverEffective.socialCohesion).toBeGreaterThanOrEqual(fireThreshold);
+
+    const baselineState = createTestWorldState();
+    baselineState.demes["deme-1"] = { ...demeB, id: "deme-1", culturalTraitIds: [] };
+    baselineState.cells["0,0"]!.currentResources = 400;
+    const withoutSymbiosis = resolveBiophysicalAndDemographicPhase(baselineState, {
+      "deme-1": makeDecisionEval("dec-exchange-symbiosis", exchangeProbs)
+    });
+
+    const nextState = resolveBiophysicalAndDemographicPhase(state, {
+      "deme-1": makeDecisionEval("dec-exchange-symbiosis", exchangeProbs),
+      "deme-2": makeDecisionEval("dec-exchange-symbiosis", exchangeProbs)
+    });
+
+    expect(nextState.demes["deme-2"]!.culturalTraitIds).toContain("cul-fire-processing");
+    expect(nextState.demes["deme-2"]!.lastEnergyDelta).toBeGreaterThan(
+      withoutSymbiosis.demes["deme-1"]!.lastEnergyDelta
+    );
+    expect(nextState.chronicle.some((entry) => entry.type === "symbiosis")).toBe(true);
+    expect(nextState.currentTurnFlows.some((flow) => flow.type === "exchange")).toBe(true);
+  });
+
+  it("blocks horizontal cultural diffusion during Symbiosis when receiver socialCohesion is below transmissionThreshold", () => {
+    const state = createTestWorldState();
+    const demeA = state.demes["deme-1"]!;
+    demeA.biologicalTraitIds = ["bio-encephalization", "bio-social-instinct"];
+    demeA.culturalTraitIds = ["cul-fire-processing"];
+
+    const demeB: Deme = {
+      ...demeA,
+      id: "deme-2",
+      name: "Low Cohesion Receivers",
+      lineageId: "lineage-low-cohesion",
+      biologicalTraitIds: ["bio-encephalization", "bio-r-strategy"],
+      culturalTraitIds: []
+    };
+    state.demes["deme-2"] = demeB;
+    state.cells["0,0"]!.demeIds.push("deme-2");
+    state.cells["0,0"]!.currentResources = 400;
+
+    const receiverProbs = {
+      "dec-exchange-symbiosis": 0.25,
+      "dec-intensive-overexploit": 0.75
+    };
+    const receiverEffective = computeEffectiveBiophysicalVector(demeB, state, receiverProbs);
+    const fireThreshold =
+      state.traitsCatalog["cul-fire-processing"]!.biophysicalVector.transmissionThreshold;
+    expect(receiverEffective.socialCohesion).toBeLessThan(fireThreshold);
+
     const nextState = resolveBiophysicalAndDemographicPhase(state, {
       "deme-1": makeDecisionEval("dec-exchange-symbiosis", {
         "dec-exchange-symbiosis": 0.5,
         "dec-conservative-forage": 0.5
       }),
-      "deme-2": makeDecisionEval("dec-exchange-symbiosis", {
-        "dec-exchange-symbiosis": 0.5,
-        "dec-conservative-forage": 0.5
-      })
+      "deme-2": makeDecisionEval("dec-intensive-overexploit", receiverProbs)
     });
 
-    expect(nextState.demes["deme-2"]!.culturalTraitIds).toContain("cul-fire-processing");
-    expect(nextState.chronicle.some((entry) => entry.type === "symbiosis")).toBe(true);
+    expect(nextState.demes["deme-2"]!.culturalTraitIds).toEqual([]);
+    expect(nextState.chronicle.some((entry) => entry.type === "symbiosis")).toBe(false);
     expect(nextState.currentTurnFlows.some((flow) => flow.type === "exchange")).toBe(true);
   });
 
@@ -333,9 +386,31 @@ describe("Phase 3: Biophysical & Demographic Resolution", () => {
 
   it("triggers migrant fission (M >= 10), inherits traits, resets daughter counters, and fuses same-lineage demes with Jaccard < 0.10", () => {
     const state = createTestWorldState();
+    state.traitsCatalog["cul-lithic-knapping"] = {
+      id: "cul-lithic-knapping",
+      name: "Lithic Knapping Tradition",
+      category: "cultural",
+      semanticDescriptor: "Percussive stone flaking tradition transmitted across generations.",
+      affinityCondition: "Favors foraging and cooperative resource extraction.",
+      mutuallyExclusiveWith: [],
+      enablesCulturalTransmission: false,
+      biophysicalVector: {
+        metabolicCost: 0.10,
+        extractionEfficiency: 0.30,
+        ecologicalImpact: -0.05,
+        spatialMobility: 0.05,
+        socialCohesion: 0.15,
+        transmissionThreshold: 0.45
+      },
+      origin: "base",
+      freeSandboxMode: false
+    };
+
     const deme = state.demes["deme-1"]!;
     deme.population = 100;
     deme.energyReserves = 100;
+    deme.biologicalTraitIds = ["bio-k-strategy", "bio-social-instinct", "bio-encephalization"];
+    deme.culturalTraitIds = ["cul-lithic-knapping"];
     deme.baldwinCounters = { "dec-selective-migration": 4 };
     deme.innovationCounter = 0.5;
     state.cells["1,0"]!.currentResources = 500;
@@ -352,7 +427,10 @@ describe("Phase 3: Biophysical & Demographic Resolution", () => {
     const daughter = allDemes.find((d) => d.id !== "deme-1")!;
     expect(daughter.hexId).toBe("1,0");
     expect(daughter.population).toBeGreaterThanOrEqual(10);
+    expect(daughter.population).toBeLessThan(50);
     expect(daughter.biologicalTraitIds).toEqual(deme.biologicalTraitIds);
+    expect(daughter.culturalTraitIds).toEqual(["cul-lithic-knapping"]);
+    expect(afterFission.chronicle.some((e) => e.type === "cultural_loss")).toBe(false);
     expect(daughter.baldwinCounters).toEqual({});
     expect(daughter.innovationCounter).toBe(0);
     expect(afterFission.currentTurnFlows.some((f) => f.type === "migration")).toBe(true);
@@ -360,6 +438,7 @@ describe("Phase 3: Biophysical & Demographic Resolution", () => {
     afterFission.cells["1,0"]!.demeIds = [];
     afterFission.cells["0,0"]!.demeIds.push(daughter.id);
     daughter.hexId = "0,0";
+    daughter.population = 60;
 
     const afterFusion = resolveBiophysicalAndDemographicPhase(afterFission, {
       "deme-1": makeDecisionEval("dec-conservative-forage", {
@@ -372,6 +451,46 @@ describe("Phase 3: Biophysical & Demographic Resolution", () => {
 
     expect(Object.keys(afterFusion.demes)).toHaveLength(1);
     expect(afterFusion.cells["0,0"]!.demeIds).toHaveLength(1);
+  });
+
+  it("triggers migrant fission for a user-created custom decision with archetype 'migrate'", () => {
+    const state = createTestWorldState();
+    state.decisionsCatalog["user-dec-custom-migrate"] = {
+      id: "user-dec-custom-migrate",
+      name: "Seasonal Corridor Dispersal",
+      archetype: "migrate",
+      semanticDescriptor: "User-designed migratory strategy across adjacent savanna corridors.",
+      requiredTraitIds: [],
+      biophysicalVector: {
+        metabolicCost: 0.25,
+        extractionEfficiency: 0.15,
+        ecologicalImpact: 0.10,
+        spatialMobility: 0.70,
+        socialCohesion: 0.05,
+        transmissionThreshold: 0.10
+      },
+      origin: "user",
+      freeSandboxMode: false
+    };
+
+    const deme = state.demes["deme-1"]!;
+    deme.population = 100;
+    deme.energyReserves = 100;
+    state.cells["1,0"]!.currentResources = 500;
+
+    const afterFission = resolveBiophysicalAndDemographicPhase(state, {
+      "deme-1": makeDecisionEval("user-dec-custom-migrate", {
+        "user-dec-custom-migrate": 0.8,
+        "dec-conservative-forage": 0.2
+      })
+    });
+
+    const allDemes = Object.values(afterFission.demes);
+    expect(allDemes).toHaveLength(2);
+    const daughter = allDemes.find((d) => d.id !== "deme-1")!;
+    expect(daughter.hexId).toBe("1,0");
+    expect(daughter.population).toBeGreaterThanOrEqual(10);
+    expect(afterFission.currentTurnFlows.some((f) => f.type === "migration")).toBe(true);
   });
 
   it("removes the highest-transmissionThreshold cultural tradition on demographic bottleneck (< 50 pop) and extinguishes demes < 10 pop", () => {

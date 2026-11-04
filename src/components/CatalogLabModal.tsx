@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, CheckCircle2, ChevronRight, FlaskConical, Plus, Save, Sparkles, Syringe } from "lucide-react";
 import { demeHasCulturalCapacity } from "../catalog/baseTraits";
@@ -78,6 +78,10 @@ export function CatalogLabModal() {
   const [hasAiFailed, setHasAiFailed] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
+  useEffect(() => {
+    setIsSaved(false);
+  }, [activeModal]);
+
   if (activeModal !== "catalog_lab") {
     return null;
   }
@@ -150,6 +154,8 @@ export function CatalogLabModal() {
       setSemanticDescriptor(proposal.semanticDescriptor);
       setAffinityCondition(proposal.affinityCondition);
       setArchetype(proposal.archetype);
+      setEnablesCulturalTransmission(false);
+      setFreeSandboxMode(false);
       setVector(proposal.biophysicalVector);
       startEditing(newItemId(activeTab));
     } catch {
@@ -170,7 +176,7 @@ export function CatalogLabModal() {
       mutuallyExclusiveWith: existing !== undefined ? existing.mutuallyExclusiveWith : [],
       enablesCulturalTransmission: activeTab === "biological_trait" ? enablesCulturalTransmission : false,
       biophysicalVector: validation.balancedVector,
-      origin: existing !== undefined ? existing.origin : "user",
+      origin: "user",
       freeSandboxMode
     };
   }
@@ -190,7 +196,7 @@ export function CatalogLabModal() {
         ),
         requiredTraitIds: existing !== undefined ? existing.requiredTraitIds : [],
         biophysicalVector: validation.balancedVector,
-        origin: existing !== undefined ? existing.origin : "user",
+        origin: "user",
         freeSandboxMode
       });
     } else {
@@ -211,9 +217,10 @@ export function CatalogLabModal() {
         <li key={decision.id}>
           <button
             type="button"
+            disabled={isGenerating}
             aria-pressed={isEditing && itemId === decision.id}
             onClick={() => selectDecision(decision)}
-            className={`w-full rounded-lg border p-2.5 text-left cursor-pointer ${
+            className={`w-full rounded-lg border p-2.5 text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               isEditing && itemId === decision.id
                 ? "border-sky-500/60 bg-sky-950/40 text-white"
                 : "border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60"
@@ -233,9 +240,10 @@ export function CatalogLabModal() {
       <li key={trait.id}>
         <button
           type="button"
+          disabled={isGenerating}
           aria-pressed={isEditing && itemId === trait.id}
           onClick={() => selectTrait(trait)}
-          className={`w-full rounded-lg border p-2.5 text-left cursor-pointer ${
+          className={`w-full rounded-lg border p-2.5 text-left cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
             isEditing && itemId === trait.id
               ? "border-emerald-500/60 bg-emerald-950/40 text-white"
               : "border-slate-800 bg-slate-900/60 text-slate-300 hover:bg-slate-800/60"
@@ -426,9 +434,10 @@ export function CatalogLabModal() {
             key={tab.id}
             type="button"
             role="tab"
+            disabled={isGenerating}
             aria-selected={activeTab === tab.id}
             onClick={() => selectTab(tab.id)}
-            className={`border-b-2 px-4 py-2.5 text-sm font-medium cursor-pointer ${
+            className={`border-b-2 px-4 py-2.5 text-sm font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
               activeTab === tab.id ? tab.activeClass : "border-transparent text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -442,8 +451,9 @@ export function CatalogLabModal() {
           <div className="border-b border-slate-800 p-3">
             <button
               type="button"
+              disabled={isGenerating}
               onClick={createBlank}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 hover:bg-slate-700 cursor-pointer"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium text-slate-100 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               {t("catalogLab.createNew")}

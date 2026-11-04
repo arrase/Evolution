@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { BookOpen, MapPin } from "lucide-react";
 import { useSimulationStore } from "../store/useSimulationStore";
+import type { ChronicleEntry } from "../types/simulation";
 import { Modal } from "./Modal";
 import { CHRONICLE_BADGE_STYLES } from "./palette";
 
@@ -10,15 +11,19 @@ export function NaturalistNotebookModal() {
   const activeModal = useSimulationStore((s) => s.activeModal);
   const setActiveModal = useSimulationStore((s) => s.setActiveModal);
   const selectHex = useSimulationStore((s) => s.selectHex);
+  const selectDeme = useSimulationStore((s) => s.selectDeme);
 
   if (activeModal !== "naturalist_notebook") {
     return null;
   }
 
-  const chronicleNewestFirst = [...world.chronicle].sort((a, b) => b.generation - a.generation);
+  const chronicleNewestFirst = [...world.chronicle].reverse().sort((a, b) => b.generation - a.generation);
 
-  function focusHex(hexId: string) {
-    selectHex(hexId);
+  function focusHex(entry: ChronicleEntry) {
+    selectHex(entry.hexId);
+    if (world.demes[entry.demeId] !== undefined) {
+      selectDeme(entry.demeId);
+    }
     setActiveModal("none");
   }
 
@@ -49,7 +54,7 @@ export function NaturalistNotebookModal() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => focusHex(entry.hexId)}
+                  onClick={() => focusHex(entry)}
                   className="flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer"
                 >
                   <MapPin className="h-3.5 w-3.5 text-emerald-400" />

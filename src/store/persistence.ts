@@ -1,5 +1,5 @@
-import { detectBrowserLocale } from "../i18n";
 import {
+  DEFAULT_LOCALE,
   SupportedLocaleSchema,
   WorldStateSchema,
   type SupportedLocale,
@@ -40,7 +40,7 @@ export function saveLocaleToLocalStorage(locale: SupportedLocale): void {
 export function loadLocaleFromLocalStorage(): SupportedLocale {
   const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
   if (stored === null) {
-    return detectBrowserLocale();
+    return DEFAULT_LOCALE;
   }
   return SupportedLocaleSchema.parse(stored);
 }
@@ -56,4 +56,5 @@ export function loadFirstStepsDismissed(): boolean {
 export function clearPersistedSession(): void {
   localStorage.removeItem(WORLD_STORAGE_KEY);
   localStorage.removeItem(LOCALE_STORAGE_KEY);
+  localStorage.removeItem(FIRST_STEPS_STORAGE_KEY);
 }

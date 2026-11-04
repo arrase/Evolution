@@ -23,7 +23,12 @@ export function MilestoneBanner() {
           <div className="text-xs font-semibold uppercase tracking-wider text-amber-300">
             {t(`notebook.types.${latestMilestoneChronicle.type}`)} · {t("notebook.generationBadge")} {latestMilestoneChronicle.generation}
           </div>
-          <div className="truncate text-sm font-medium text-white">{latestMilestoneChronicle.title}</div>
+          <div className="truncate text-sm font-medium text-white">
+            <span className="text-xs font-semibold uppercase tracking-wide text-amber-300/90">
+              {t("notebook.milestoneBannerTitle")}:{" "}
+            </span>
+            {latestMilestoneChronicle.title}
+          </div>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">

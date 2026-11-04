@@ -15,8 +15,8 @@ export function runEnvironmentalPhase(state: WorldState): WorldState {
   const gammaSeason = nextSeason === "wet_warm" ? 1.20 : 0.75;
 
   const nextSeaLevel =
-    state.presetId === "preset-darwin-archipelago"
-      ? Math.floor(nextGeneration / 8) % 2 === 0
+    state.presetId === "preset-darwin-archipelago" && nextGeneration % 8 === 0
+      ? (nextGeneration / 8) % 2 === 0
         ? 0.12
         : 0.25
       : state.seaLevel;
@@ -54,11 +54,22 @@ export function runEnvironmentalPhase(state: WorldState): WorldState {
   for (const cell of Object.values(cells)) {
     if (cell.altitude < nextSeaLevel && cell.biome !== "ocean") {
       cell.biome = "ocean";
-    } else if (cell.altitude >= nextSeaLevel && cell.altitude < 0.25 && cell.biome === "ocean") {
-      cell.biome = "coastal_shallows";
+    } else if (cell.altitude >= nextSeaLevel && cell.biome === "ocean") {
+      if (cell.altitude < 0.25) {
+        cell.biome = "coastal_shallows";
+      } else if (cell.altitude < 0.55) {
+        cell.biome = "savanna";
+      } else if (cell.altitude < 0.78) {
+        cell.biome = "arid_steppe";
+      } else {
+        cell.biome = "high_mountain";
+      }
       cell.carryingCapacityMax = Math.max(160, cell.carryingCapacityMax);
       cell.carryingCapacity = Math.max(80, cell.carryingCapacity);
-      cell.currentResources = Math.max(60, cell.currentResources);
+      cell.currentResources = Math.max(
+        cell.currentResources,
+        Math.round(cell.carryingCapacity * 0.35)
+      );
     }
   }
 
@@ -74,7 +85,12 @@ export function runEnvironmentalPhase(state: WorldState): WorldState {
         }
 
         const candidates = getExistingNeighborCells(cell, cells)
-          .filter((neighbor) => neighbor.biome !== "ocean" && neighbor.demeIds.length < 3)
+          .filter(
+            (neighbor) =>
+              neighbor.biome !== "ocean" &&
+              neighbor.demeIds.length < 3 &&
+              neighbor.altitude <= 0.85
+          )
           .sort((a, b) => b.currentResources - a.currentResources);
 
         const targetCell = candidates[0];
@@ -115,14 +131,23 @@ export function runEnvironmentalPhase(state: WorldState): WorldState {
     }
   }
 
+  const deltaTemp = nextSeason === "wet_warm" ? 0.04 : -0.04;
+  const deltaHum = nextSeason === "wet_warm" ? 0.05 : -0.05;
+
   for (const cell of Object.values(cells)) {
     if (cell.biome === "ocean") {
       cell.currentResources = 0;
       continue;
     }
 
+    cell.temperature = Math.max(-1, Math.min(1, Number((cell.temperature + deltaTemp).toFixed(2))));
+    cell.humidity = Math.max(0, Math.min(1, Number((cell.humidity + deltaHum).toFixed(2))));
+
     const sufferedCollapse = state.chronicle.some(
-      (entry) => entry.type === "tragedy_of_commons" && entry.hexId === cell.id
+      (entry) =>
+        entry.type === "tragedy_of_commons" &&
+        entry.hexId === cell.id &&
+        entry.generation === state.generation
     );
     const recoveryRate = sufferedCollapse || cell.currentResources === 0 ? 0.005 : 0.05;
 

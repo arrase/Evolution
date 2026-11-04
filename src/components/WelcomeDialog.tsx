@@ -28,6 +28,7 @@ function PresetCard({ preset, isFirst, onStart }: { preset: PresetScenario; isFi
       <div className="flex flex-1 flex-col gap-2 p-4">
         <h3 className="text-base font-semibold text-white">{t(`presets.${preset.id}.name`)}</h3>
         <p className="text-sm leading-relaxed text-slate-300">{t(`presets.${preset.id}.description`)}</p>
+        <p className="text-xs italic leading-relaxed text-slate-400">{t(`presets.${preset.id}.scientificHypothesis`)}</p>
         <p className="flex gap-2 rounded-lg bg-emerald-950/40 p-2.5 text-xs leading-relaxed text-emerald-200">
           <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
