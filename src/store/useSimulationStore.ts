@@ -5,7 +5,7 @@ import { getPresetById } from "../catalog/presets";
 import { getExistingNeighborCells, getHexIdsInRadius } from "../engine/hexGrid";
 import { validateAndBalanceThermodynamics } from "../engine/thermodynamics";
 import { executeGenerationalTurn } from "../engine/turnEngine";
-import { changeAppLocale } from "../i18n";
+import { changeAppLocale, detectBrowserLocale } from "../i18n";
 import {
   DecisionDefinitionSchema,
   TraitDefinitionSchema,
@@ -272,7 +272,7 @@ function editWorldTerrain(
 
 function resolveInitialLocale(): SupportedLocale {
   if (typeof localStorage === "undefined") {
-    return "en";
+    return detectBrowserLocale();
   }
   return loadLocaleFromLocalStorage();
 }

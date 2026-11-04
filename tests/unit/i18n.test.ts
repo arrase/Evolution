@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { changeAppLocale, i18n, LANGUAGE_LABELS, LOCALE_RESOURCES } from "../../src/i18n";
+import { describe, expect, it, vi } from "vitest";
+import {
+  changeAppLocale,
+  detectBrowserLocale,
+  i18n,
+  LANGUAGE_LABELS,
+  LOCALE_RESOURCES,
+  matchSupportedLocale
+} from "../../src/i18n";
+import { loadLocaleFromLocalStorage, LOCALE_STORAGE_KEY } from "../../src/store/persistence";
 import { BiomeTypeSchema, DEFAULT_LOCALE, SUPPORTED_LOCALES } from "../../src/types/simulation";
 
 const EXPECTED_DECISION_IDS = [
@@ -135,5 +143,30 @@ describe("i18n configuration and 8-locale dictionary parity (FR-015, SC-006)", (
     await changeAppLocale("en");
     expect(i18n.language).toBe("en");
     expect(i18n.t("app.title")).toBe("Evolution Population Simulator");
+  });
+
+  it("normalizes BCP-47 browser language tags and matches the first supported locale", () => {
+    expect(matchSupportedLocale(["es-ES", "en-US"])).toBe("es");
+    expect(matchSupportedLocale(["pt-BR", "es"])).toBe("pt");
+    expect(matchSupportedLocale(["zh-CN", "ja-JP"])).toBe("zh");
+    expect(matchSupportedLocale(["it-IT", "fr-CA", "en"])).toBe("fr");
+    expect(matchSupportedLocale(["it-IT", "nl-NL"])).toBe("en");
+    expect(matchSupportedLocale([])).toBe("en");
+  });
+
+  it("detects browser locale from navigator and prioritizes stored localStorage locale when present", () => {
+    vi.stubGlobal("navigator", { languages: ["es-MX", "en-US"], language: "es-MX" });
+    let storedLocale: string | null = null;
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => (key === LOCALE_STORAGE_KEY ? storedLocale : null)
+    });
+
+    expect(detectBrowserLocale()).toBe("es");
+    expect(loadLocaleFromLocalStorage()).toBe("es");
+
+    storedLocale = "de";
+    expect(loadLocaleFromLocalStorage()).toBe("de");
+
+    vi.unstubAllGlobals();
   });
 });

@@ -1,5 +1,5 @@
+import { detectBrowserLocale } from "../i18n";
 import {
-  DEFAULT_LOCALE,
   SupportedLocaleSchema,
   WorldStateSchema,
   type SupportedLocale,
@@ -40,7 +40,7 @@ export function saveLocaleToLocalStorage(locale: SupportedLocale): void {
 export function loadLocaleFromLocalStorage(): SupportedLocale {
   const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
   if (stored === null) {
-    return DEFAULT_LOCALE;
+    return detectBrowserLocale();
   }
   return SupportedLocaleSchema.parse(stored);
 }

@@ -1,6 +1,6 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
-import { DEFAULT_LOCALE, type SupportedLocale } from "../types/simulation";
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type SupportedLocale } from "../types/simulation";
 import de from "./locales/de.json";
 import en from "./locales/en.json";
 import es from "./locales/es.json";
@@ -40,6 +40,25 @@ void i18n.use(initReactI18next).init({
     escapeValue: false
   }
 });
+
+export function matchSupportedLocale(languageTags: readonly string[]): SupportedLocale {
+  for (const tag of languageTags) {
+    const primarySubtag = tag.split("-")[0]!.toLowerCase();
+    const matched = SUPPORTED_LOCALES.find((locale) => locale === primarySubtag);
+    if (matched !== undefined) {
+      return matched;
+    }
+  }
+  return DEFAULT_LOCALE;
+}
+
+export function detectBrowserLocale(): SupportedLocale {
+  if (typeof navigator === "undefined") {
+    return DEFAULT_LOCALE;
+  }
+  const tags = navigator.languages.length > 0 ? navigator.languages : [navigator.language];
+  return matchSupportedLocale(tags);
+}
 
 export async function changeAppLocale(locale: SupportedLocale): Promise<void> {
   await i18n.changeLanguage(locale);
