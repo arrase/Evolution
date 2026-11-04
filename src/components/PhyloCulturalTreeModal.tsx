@@ -62,10 +62,17 @@ export const PhyloCulturalTreeModal: React.FC = () => {
   const maxX = Math.max(...xs) + 140;
   const minY = Math.min(...ys) - 80;
   const maxY = Math.max(...ys) + 120;
-  const viewBoxWidth = Math.max(800, maxX - minX);
-  const viewBoxHeight = Math.max(500, maxY - minY);
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+  const viewBoxWidth = Math.max(760, spanX);
+  const viewBoxHeight = Math.max(360, spanY);
+  const viewBoxMinX = minX - (viewBoxWidth - spanX) / 2;
+  const viewBoxMinY = minY - (viewBoxHeight - spanY) / 2;
 
   const demesList = Object.values(world.demes);
+
+  const truncateLabel = (text: string, maxLen: number): string =>
+    text.length > maxLen ? `${text.slice(0, maxLen - 1).trimEnd()}…` : text;
 
   const getTraitName = (traitId: string): string => {
     const trait = world.traitsCatalog[traitId];
@@ -99,8 +106,8 @@ export const PhyloCulturalTreeModal: React.FC = () => {
         {/* SVG Tree Viewport */}
         <div className="flex-1 overflow-auto bg-slate-950/50 p-4">
           <svg
-            viewBox={`${minX} ${minY} ${viewBoxWidth} ${viewBoxHeight}`}
-            className="w-full h-full min-w-[760px] min-h-[480px]"
+            viewBox={`${viewBoxMinX} ${viewBoxMinY} ${viewBoxWidth} ${viewBoxHeight}`}
+            className="w-full h-full min-w-[760px] min-h-[360px]"
           >
             {/* Cubic Bézier Links */}
             <g fill="none">
@@ -162,7 +169,7 @@ export const PhyloCulturalTreeModal: React.FC = () => {
                       fontSize={11}
                       fontWeight={600}
                     >
-                      {node.name.slice(0, 18)}
+                      {truncateLabel(node.name, 20)}
                     </text>
 
                     <text x={-72} y={-4} fill="#94a3b8" fontSize={9.5}>
@@ -186,11 +193,13 @@ export const PhyloCulturalTreeModal: React.FC = () => {
                     </text>
 
                     <text x={-72} y={39} fill="#a5b4fc" fontSize={8.5}>
-                      {node.acquiredTraitIds
-                        .slice(0, 2)
-                        .map(getTraitName)
-                        .join(", ")
-                        .slice(0, 26)}
+                      {truncateLabel(
+                        node.acquiredTraitIds
+                          .slice(0, 2)
+                          .map(getTraitName)
+                          .join(", "),
+                        27
+                      )}
                     </text>
                   </g>
                 );

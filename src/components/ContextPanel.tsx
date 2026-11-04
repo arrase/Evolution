@@ -243,7 +243,7 @@ export function ContextPanel() {
 
         {/* Behaviour */}
         <section className={SECTION_CLASS}>
-          <div className="flex items-center justify-between">
+          <div className="relative flex items-center justify-between">
             <h4 className="text-xs font-semibold text-slate-200">{t("panel.behaviorTitle")}</h4>
             <InfoHint text={t("panel.behaviorHint")} />
           </div>
@@ -352,7 +352,7 @@ export function ContextPanel() {
           <ul className="mt-3 space-y-2.5">
             {milestoneProgress.map((milestone) => (
               <li key={milestone.key} className="space-y-1">
-                <div className="flex items-center justify-between gap-2 text-xs">
+                <div className="relative flex items-center justify-between gap-2 text-xs">
                   <span className="flex items-center gap-1.5 text-slate-300">
                     {t(`panel.${milestone.key}`)}
                     <InfoHint text={t(`panel.${milestone.key}Hint`)} />
@@ -377,7 +377,7 @@ export function ContextPanel() {
           <span className="flex-1">{t("panel.habitatTitle")}</span>
           <span className="font-normal text-slate-400">{t(`biomes.${habitat.biome}`)}</span>
         </summary>
-        <dl className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <dl className="relative mt-3 grid grid-cols-2 gap-2 text-xs">
           <div>
             <dt className="text-slate-400">{t("panel.temperature")}</dt>
             <dd className="font-mono text-slate-200">{habitat.temperature.toFixed(2)}</dd>
@@ -402,7 +402,7 @@ export function ContextPanel() {
         </dl>
         {habitat.biome !== "ocean" && (
           <div className="mt-3 space-y-1">
-            <div className="flex items-center justify-between text-xs">
+            <div className="relative flex items-center justify-between text-xs">
               <span className="flex items-center gap-1 text-slate-400">
                 {t("panel.health")}
                 <InfoHint text={t("panel.healthHint")} />
@@ -433,7 +433,7 @@ export function ContextPanel() {
           <PanelRightClose className="w-4 h-4" />
         </button>
       </div>
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
+      <div className="flex-1 space-y-4 overflow-y-auto p-4 pb-20">
         {renderPopulationList()}
         {demeInSelectedHex && renderDeme(selectedDeme)}
         {cell !== undefined && !demeInSelectedHex && (

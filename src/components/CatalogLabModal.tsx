@@ -79,8 +79,10 @@ export function CatalogLabModal() {
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
+    setIsEditing(false);
+    setHasAiFailed(false);
     setIsSaved(false);
-  }, [activeModal]);
+  }, [activeModal, locale]);
 
   if (activeModal !== "catalog_lab") {
     return null;

@@ -92,6 +92,10 @@ export function ToolRail() {
   }
 
   useEffect(() => {
+    setIsSeaOpen(false);
+  }, [world.presetId, activeModal]);
+
+  useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape" && activeModal === "none") {
         setIsSeaOpen(false);

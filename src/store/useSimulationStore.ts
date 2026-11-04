@@ -382,7 +382,7 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
   mapLens: "biome",
   toasts: [],
   chronicleSeenCount: initialWorld.chronicle.length,
-  firstSteps: { play: false, select: false, tool: false },
+  firstSteps: { play: initialWorld.generation > 0, select: false, tool: false },
   firstStepsDismissed: resolveInitialFirstStepsDismissed(),
 
   setLocale: (locale: SupportedLocale) => {
@@ -402,6 +402,7 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
     set({
       world: freshWorld,
       playbackMode: "paused",
+      activeBrush: { kind: "inspect" },
       selectedHexId: selection.selectedHexId,
       selectedDemeId: selection.selectedDemeId,
       highlightedLineageId: null,
@@ -916,6 +917,7 @@ export const useSimulationStore = create<ExtendedSimulationStore>((set, get) => 
     set({
       world: importedWorld,
       playbackMode: "paused",
+      activeBrush: { kind: "inspect" },
       selectedHexId: selection.selectedHexId,
       selectedDemeId: selection.selectedDemeId,
       highlightedLineageId: null,
