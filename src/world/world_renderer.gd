@@ -471,6 +471,7 @@ func _draw_cliff_walls(
 	var strata_count: int = mini(tier + 1, 6)
 	var cliff_top_col: Color = pal["cliff_top"]
 	var cliff_bot_col: Color = pal["cliff_bot"]
+	var center_y: float = _hex_centers[cell.id].y
 	var strata := PackedVector2Array()
 	var cracks := PackedVector2Array()
 	var vines := PackedVector2Array()
@@ -480,10 +481,12 @@ func _draw_cliff_walls(
 		var next_i: int = (i + 1) % 6
 		var p0 := top_pts[i]
 		var p1 := top_pts[next_i]
+		# Back-face culling: only walls whose top edge lies in front of the hex center
+		# are visible. The margin also skips edge-on walls (degenerate zero-width quads).
+		if (p0.y + p1.y) * 0.5 - center_y <= 0.5:
+			continue
 		var b1 := bot_pts[next_i]
 		var b0 := bot_pts[i]
-		if (b0.y + b1.y) * 0.5 <= (p0.y + p1.y) * 0.5 - 1.0:
-			continue
 
 		var shade := 1.0 - float(i % 3) * 0.13
 		var wall_col := cliff_top_col.lerp(cliff_bot_col, 0.45) * Color(shade, shade, shade, 1.0)
