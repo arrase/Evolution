@@ -14,6 +14,8 @@ var lang: String = "es"
 var is_playing: bool = false
 var is_fast: bool = false
 var _play_timer: float = 0.0
+var _async_wait_elapsed: float = 0.0
+var _last_model_revision: int = 0
 
 
 func _ready() -> void:
@@ -42,13 +44,29 @@ func _ready() -> void:
 	set_process_unhandled_key_input(true)
 
 
+func _exit_tree() -> void:
+	EvoDecisionModel.wait_for_workers()
+
+
 func _process(delta: float) -> void:
-	if not is_playing or world_state == null:
+	if world_state == null:
+		return
+	var async_res := EvoDecisionModel.apply_completed_live_results(world_state, lang, _last_model_revision)
+	_last_model_revision = int(async_res["revision"])
+	if bool(async_res["updated"]):
+		hud.refresh(world_state)
+		world_renderer.refresh_village_decisions()
+
+	if not is_playing:
 		return
 	var interval: float = FAST_STEP_INTERVAL if is_fast else NORMAL_STEP_INTERVAL
 	_play_timer += delta
 	if _play_timer >= interval:
+		if world_state.use_live_decision_models and EvoDecisionModel.has_pending_jobs() and _async_wait_elapsed < 0.60:
+			_async_wait_elapsed += delta
+			return
 		_play_timer = 0.0
+		_async_wait_elapsed = 0.0
 		step_generation()
 
 
@@ -198,9 +216,6 @@ func _on_world_deme_clicked(deme_id: String, hex_id: String) -> void:
 	world_renderer.selected_deme_id = deme_id
 	world_renderer.selected_hex_id = hex_id
 	hud.select_deme(deme_id)
-	if camera.zoom_level > 1.0 and world_state != null and world_state.cells.has(hex_id):
-		var c: EvoTypes.HexCell = world_state.cells[hex_id]
-		camera.focus_on_hex(c.q, c.r, c.altitude)
 	world_renderer.refresh()
 
 

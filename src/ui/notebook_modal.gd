@@ -210,8 +210,9 @@ func _rebuild_entries() -> void:
 		_cards_vbox.add_child(empty_lbl)
 		return
 
-	for entry in filtered:
-		_cards_vbox.add_child(_create_entry_card(entry))
+	var max_displayed := mini(filtered.size(), 100)
+	for i in range(max_displayed):
+		_cards_vbox.add_child(_create_entry_card(filtered[i]))
 
 
 func _create_entry_card(entry: EvoTypes.ChronicleEntry) -> Control:

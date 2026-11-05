@@ -5,12 +5,12 @@ const MIN_PITCH_DEG: float = 28.0
 const MAX_PITCH_DEG: float = 75.0
 const DEFAULT_PITCH_DEG: float = 48.0
 const DEFAULT_YAW_DEG: float = 0.0
-const MIN_ZOOM: float = 0.35
+const MIN_ZOOM: float = 0.28
 const MAX_ZOOM: float = 3.00
-const DEFAULT_ZOOM: float = 1.00
-const DEFAULT_PAN: Vector2 = Vector2(-56.0, 14.0)
-const MAX_PAN_RADIUS: float = 2400.0
-const MAX_COLUMN_HEIGHT_PX: float = 72.0
+const DEFAULT_ZOOM: float = 0.82
+const DEFAULT_PAN: Vector2 = Vector2(-128.0, 26.0)
+const MAX_PAN_RADIUS: float = 3800.0
+const MAX_COLUMN_HEIGHT_PX: float = 96.0
 
 var yaw_deg: float = DEFAULT_YAW_DEG
 var pitch_deg: float = DEFAULT_PITCH_DEG
@@ -34,7 +34,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	var pan_speed: float = 620.0 * delta
+	var pan_speed: float = 820.0 * delta
 
 	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
 		_target_pan.y += pan_speed
@@ -49,7 +49,11 @@ func _process(delta: float) -> void:
 
 	var lerp_t: float = clampf(delta * 12.0, 0.0, 1.0)
 	pan_offset = pan_offset.lerp(_target_pan, lerp_t)
+	if _target_pan.distance_to(pan_offset) < 0.25:
+		pan_offset = _target_pan
 	zoom_level = lerpf(zoom_level, _target_zoom, lerp_t)
+	if absf(_target_zoom - zoom_level) < 0.001:
+		zoom_level = _target_zoom
 
 	# Yaw/pitch changes force a geometry rebuild, so snap once visually settled
 	# instead of easing asymptotically for dozens of frames.
@@ -63,11 +67,12 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
+		var vp_center := (get_viewport_rect().size if is_inside_tree() else Vector2(1600.0, 960.0)) * 0.5
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
-			zoom_by(0.14)
+			zoom_by(0.14, mb.position - vp_center)
 			get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
-			zoom_by(-0.14)
+			zoom_by(-0.14, mb.position - vp_center)
 			get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_RIGHT:
 			_is_orbiting = mb.pressed
@@ -155,8 +160,14 @@ func set_pitch_preset(target_deg: float) -> void:
 	_target_pitch_deg = clampf(target_deg, MIN_PITCH_DEG, MAX_PITCH_DEG)
 
 
-func zoom_by(delta_zoom: float) -> void:
-	_target_zoom = clampf(_target_zoom + delta_zoom, MIN_ZOOM, MAX_ZOOM)
+func zoom_by(delta_zoom: float, pivot_screen_offset: Vector2 = Vector2.ZERO) -> void:
+	var next_zoom := clampf(_target_zoom + delta_zoom, MIN_ZOOM, MAX_ZOOM)
+	if absf(next_zoom - _target_zoom) < 0.0001:
+		return
+	var ratio := next_zoom / _target_zoom
+	_target_pan = pivot_screen_offset + (_target_pan - pivot_screen_offset) * ratio
+	_target_zoom = next_zoom
+	_clamp_targets()
 
 
 func reset_camera() -> void:
@@ -186,5 +197,6 @@ func focus_on_hex(q: int, r: int, altitude: float) -> void:
 func _clamp_targets() -> void:
 	_target_pitch_deg = clampf(_target_pitch_deg, MIN_PITCH_DEG, MAX_PITCH_DEG)
 	_target_zoom = clampf(_target_zoom, MIN_ZOOM, MAX_ZOOM)
-	if _target_pan.length() > MAX_PAN_RADIUS:
-		_target_pan = _target_pan.normalized() * MAX_PAN_RADIUS
+	var max_pan := MAX_PAN_RADIUS * maxf(1.0, _target_zoom / DEFAULT_ZOOM)
+	if _target_pan.length() > max_pan:
+		_target_pan = _target_pan.normalized() * max_pan

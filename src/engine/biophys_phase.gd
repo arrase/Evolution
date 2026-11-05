@@ -109,6 +109,13 @@ static func _strip_coord_suffix(name_str: String) -> String:
 	return name_str
 
 
+static func _strip_migration_suffix(id_str: String) -> String:
+	var m_idx := id_str.find("-m")
+	if m_idx > 0:
+		return id_str.substr(0, m_idx)
+	return id_str
+
+
 static func _has_flow_between(
 	flows: Array[EvoTypes.HexEdgeFlow],
 	id_a: String,
@@ -138,6 +145,11 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 		hawk_penalty_by_deme[deme.id] = 1.0
 		extracted_energy_by_deme[deme.id] = 0.0
 		effective_vec_by_deme[deme.id] = compute_effective_vector(deme, state)
+
+	var tragedy_hexes: Dictionary = {}
+	for entry in state.chronicle:
+		if entry.event_type == "tragedy_of_commons":
+			tragedy_hexes[entry.hex_id] = true
 
 	for cid in state.cells.keys():
 		var cell: EvoTypes.HexCell = state.cells[cid]
@@ -293,11 +305,7 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 			if get_archetype_prob(deme, state.decisions_catalog, "overexploit") >= 0.30:
 				has_intensive_overexploit = true
 
-		var already_logged_tragedy := false
-		for entry in state.chronicle:
-			if entry.event_type == "tragedy_of_commons" and entry.hex_id == cell.id:
-				already_logged_tragedy = true
-				break
+		var already_logged_tragedy := tragedy_hexes.has(cell.id)
 
 		if (total_extracted > natural_regen or (cell.current_resources <= 0.0 and total_demand > natural_regen)) and (sum_eco_impact < -0.15 or (has_intensive_overexploit and sum_eco_impact < -0.10)):
 			var degraded_k := maxf(10.0, snappedf(cell.carrying_capacity * (1.0 + 0.18 * sum_eco_impact), 0.01))
@@ -307,6 +315,7 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 
 			var primary_deme := resident_demes[0]
 			if not already_logged_tragedy and degraded_k < 0.60 * cell.carrying_capacity_max:
+				tragedy_hexes[cell.id] = true
 				var entry := EvoTypes.ChronicleEntry.new()
 				entry.id = "chronicle-tragedy-%d-%s" % [state.generation, cell.id]
 				entry.generation = state.generation
@@ -500,7 +509,12 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 		initial_pop_by_deme[deme.id] = int(initial_pop_by_deme[deme.id]) - migrants
 		deme.energy_reserves = maxf(0.0, snappedf(deme.energy_reserves - energy_fraction, 0.01))
 
-		var daughter_id := "%s-m%d-%d_%d" % [deme.id, state.generation, target_cell.q, target_cell.r]
+		var root_id := _strip_migration_suffix(deme.id)
+		var daughter_id := "%s-m%d-%d_%d" % [root_id, state.generation, target_cell.q, target_cell.r]
+		var dup_idx := 2
+		while state.demes.has(daughter_id):
+			daughter_id = "%s-m%d-%d_%d-%d" % [root_id, state.generation, target_cell.q, target_cell.r, dup_idx]
+			dup_idx += 1
 		var base_name := _strip_coord_suffix(deme.name)
 		var daughter_name := ("%s (%s)" % [base_name, target_cell.id]).substr(0, 60)
 
@@ -701,6 +715,20 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 		else:
 			deme.isolation_turns += 1
 
+	var dispute_flow_pairs: Dictionary = {}
+	var social_flow_pairs: Dictionary = {}
+	for fl in state.active_flows:
+		var pair_ab := "%s|%s" % [fl.from_deme_id, fl.to_deme_id]
+		var pair_ba := "%s|%s" % [fl.to_deme_id, fl.from_deme_id]
+		if fl.flow_type == "dispute":
+			dispute_flow_pairs[pair_ab] = true
+			dispute_flow_pairs[pair_ba] = true
+			social_flow_pairs[pair_ab] = true
+			social_flow_pairs[pair_ba] = true
+		elif fl.flow_type in ["exchange", "cooperate"]:
+			social_flow_pairs[pair_ab] = true
+			social_flow_pairs[pair_ba] = true
+
 	var surviving_ids := state.demes.keys()
 	for idx_a in range(surviving_ids.size()):
 		var id_a := str(surviving_ids[idx_a])
@@ -727,6 +755,7 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 			var p_coop_b := get_archetype_prob(deme_b, state.decisions_catalog, "cooperate")
 			var coop_ok_b := p_coop_b >= 0.14 or deme_b.last_dominant_decision_id == "dec-cooperate-store"
 
+			var pair_key := "%s|%s" % [id_a, id_b]
 			var is_rival := deme_a.lineage_id != deme_b.lineage_id
 			var has_conflict_pressure := (
 				p_disp_a >= 0.12
@@ -735,7 +764,9 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 				or p_over_b >= 0.35
 			)
 			if is_rival and has_conflict_pressure:
-				if not _has_flow_between(state.active_flows, id_a, id_b, ["dispute"]):
+				if not dispute_flow_pairs.has(pair_key):
+					dispute_flow_pairs[pair_key] = true
+					social_flow_pairs[pair_key] = true
 					var disp_flow := EvoTypes.HexEdgeFlow.new()
 					disp_flow.from_hex_id = cell_a.id
 					disp_flow.to_hex_id = cell_b.id
@@ -748,7 +779,8 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 					disp_flow.to_deme_id = id_b
 					state.active_flows.append(disp_flow)
 			elif coop_ok_a and coop_ok_b:
-				if not _has_flow_between(state.active_flows, id_a, id_b, ["exchange", "cooperate", "dispute"]):
+				if not social_flow_pairs.has(pair_key):
+					social_flow_pairs[pair_key] = true
 					var coop_flow := EvoTypes.HexEdgeFlow.new()
 					coop_flow.from_hex_id = cell_a.id
 					coop_flow.to_hex_id = cell_b.id
@@ -771,8 +803,13 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 					still_active_friendly = true
 					break
 		if not still_active_friendly:
-			conn["from_hex_id"] = (state.demes[fa] as EvoTypes.Deme).hex_id
-			conn["to_hex_id"] = (state.demes[fb] as EvoTypes.Deme).hex_id
-			filtered_disused.append(conn)
+			var conn_age := int(conn.get("age", 0))
+			if conn_age <= 0:
+				conn_age = 1
+				conn["age"] = 1
+			if conn_age <= 8:
+				conn["from_hex_id"] = (state.demes[fa] as EvoTypes.Deme).hex_id
+				conn["to_hex_id"] = (state.demes[fb] as EvoTypes.Deme).hex_id
+				filtered_disused.append(conn)
 	state.disused_connections = filtered_disused
 

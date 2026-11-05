@@ -16,7 +16,9 @@ func _init() -> void:
 	_test_serialization_roundtrip()
 	_test_25_generations_all_presets()
 	_test_main_scene_and_ui_integration()
+	_test_nonblocking_async_decision_and_smooth_panning()
 
+	EvoDecisionModel.wait_for_workers()
 	print("====================================================")
 	print("PASSED: %d | FAILED: %d" % [_passed, _failed])
 	if _failed > 0:
@@ -137,6 +139,7 @@ func _test_hawk_dove_and_symbiosis() -> void:
 func _test_tragedy_of_the_commons() -> void:
 	print("-- Testing Tragedy of the Commons --")
 	var island := EvoCatalog.create_preset_world("preset-finite-island", "es")
+	island.use_live_decision_models = false
 	var tragedy_occurred := false
 	for _g in range(12):
 		EvoTurnEngine.advance_generation(island, "es")
@@ -226,6 +229,7 @@ func _test_25_generations_all_presets() -> void:
 	print("-- Testing 25 Generations Across All 3 Presets --")
 	for preset_id in EvoCatalog.PRESET_IDS:
 		var state := EvoCatalog.create_preset_world(preset_id, "es")
+		state.use_live_decision_models = false
 		for _g in range(25):
 			EvoTurnEngine.advance_generation(state, "es")
 		_assert(state.generation == 25, "%s reached generation 25 cleanly" % preset_id)
@@ -349,5 +353,128 @@ func _test_main_scene_and_ui_integration() -> void:
 	var sea_before := main.world_state.sea_level
 	main._on_sea_level_change_requested(0.05)
 	_assert(is_equal_approx(main.world_state.sea_level, sea_before + 0.05), "Sea level tool applied via main controller")
+
+	# Verify Expanded Hex Size (>= 220.0), >= 2x Village/Villager Scales & Lifecycle Anti-Overlap
+	_assert(HexMath.HEX_SIZE >= 220.0, "HexMath.HEX_SIZE expanded to >= 220.0 (is %.1f)" % HexMath.HEX_SIZE)
+	var b_layout := main.world_renderer._get_village_building_layout(2, 1.0, true, 2, "cooperate")
+	_assert(b_layout.size() >= 3 and float(b_layout[0]["scale"]) >= 2.0, "Village building scale is >= 2.0x baseline")
+	main.load_preset("preset-rift-savanna")
+	main.world_renderer._rebuild()
+	var moving_props := main.world_renderer._collect_moving_props()
+	_assert(not moving_props.is_empty() and moving_props[0].rect.size.y >= 28.0, "Inhabitant/campfire moving props are >= 2x baseline size")
+
+	# Verify disused_connections lifecycle aging and HUD inspector zero-information-loss
+	var life_state := EvoCatalog.create_preset_world("preset-finite-island", "es")
+	var coop_fl := EvoTypes.HexEdgeFlow.new()
+	coop_fl.from_hex_id = "0,0"
+	coop_fl.to_hex_id = "0,0"
+	coop_fl.flow_type = "cooperate"
+	coop_fl.from_deme_id = "deme-island-1"
+	coop_fl.to_deme_id = "deme-island-2"
+	life_state.active_flows.append(coop_fl)
+	EvoEnvPhase.run_environmental_phase(life_state, "es")
+	_assert(life_state.disused_connections.size() == 1 and int(life_state.disused_connections[0].get("age", -1)) == 0, "Active friendly flow recorded into disused_connections with age 0")
+	# Force dispute so the friendly flow is severed
+	(life_state.demes["deme-island-1"] as EvoTypes.Deme).last_decision_probabilities = {"dec-territorial-dispute": 0.90, "dec-conservative-forage": 0.10}
+	(life_state.demes["deme-island-2"] as EvoTypes.Deme).last_decision_probabilities = {"dec-territorial-dispute": 0.90, "dec-conservative-forage": 0.10}
+	EvoBiophysPhase.run_biophysical_phase(life_state, "es")
+	_assert(life_state.disused_connections.size() == 1 and int(life_state.disused_connections[0].get("age", 0)) == 1, "Severed friendly flow ages to 1 in biophys_phase")
+	main.hud.set_world_state(life_state)
+	var rel_lines := main.hud._build_deme_relations_lines(life_state.demes["deme-island-1"] as EvoTypes.Deme)
+	_assert(rel_lines.size() >= 2, "HUD inspector preserves both active/severed paths and cohabiting village relations without information loss")
+
+	main.free()
+
+
+func _test_nonblocking_async_decision_and_smooth_panning() -> void:
+	print("-- Testing Non-Blocking Async Decision Model & Smooth Late-Game Panning --")
+	var t0_usec := Time.get_ticks_usec()
+	var status := EvoDecisionModel.check_ollama_status(true)
+	var status_ms := float(Time.get_ticks_usec() - t0_usec) / 1000.0
+	_assert(status.has("primary_tag") and status.has("secondary_tag"), "check_ollama_status(true) returns valid status dictionary immediately")
+	_assert(status_ms < 15.0, "check_ollama_status(true) is non-blocking on main thread (took %.3f ms)" % status_ms)
+
+	# Build a late-game world with 16 diverse demes across different hexes and live models enabled
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var main: EvoMainController = packed.instantiate() as EvoMainController
+	root.add_child(main)
+	if main.camera == null:
+		main._ready()
+
+	main.load_preset("preset-rift-savanna")
+	var state := main.world_state
+	state.use_live_decision_models = true
+
+	var land_hexes: Array[String] = []
+	for hid in state.cells.keys():
+		var c: EvoTypes.HexCell = state.cells[hid]
+		if c.biome != "ocean" and c.deme_ids.is_empty():
+			land_hexes.append(hid)
+
+	for i in range(14):
+		var target_hid := land_hexes[i % land_hexes.size()]
+		var d := EvoTypes.Deme.new()
+		d.id = "deme-perf-test-%d" % i
+		d.name = "Clan Perf %d" % i
+		d.hex_id = target_hid
+		d.population = 80 + (i * 15)
+		d.energy_reserves = 60.0 + float(i * 2)
+		d.lineage_id = "lineage-west" if (i % 2 == 0) else "lineage-east"
+		d.color = "#f59e0b" if (i % 2 == 0) else "#10b981"
+		d.biological_trait_ids.assign(["bio-endurance-locomotion", "bio-social-instinct"])
+		if i % 3 == 0:
+			d.cultural_trait_ids.assign(["cul-cooperative-networks"])
+		d.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(d.id)
+		state.demes[d.id] = d
+		(state.cells[target_hid] as EvoTypes.HexCell).deme_ids.append(d.id)
+
+	_assert(state.demes.size() >= 16, "Late-game stress world populated with %d demes" % state.demes.size())
+
+	var eval_start_usec := Time.get_ticks_usec()
+	EvoDecisionModel.evaluate_all_demes(state, "es")
+	var eval_ms := float(Time.get_ticks_usec() - eval_start_usec) / 1000.0
+	_assert(eval_ms < 15.0, "evaluate_all_demes with 16 demes & live models enabled is non-blocking (took %.3f ms)" % eval_ms)
+
+	# Simulate 6 generations of continuous camera panning + turn progression + rendering rebuilds
+	main.world_renderer._process(0.016)
+	_assert(not main.world_renderer._column_state_cache.is_empty(), "WorldRenderer column visual state cache populated")
+	_assert(not main.world_renderer._cell_flora_cache.is_empty(), "WorldRenderer static flora prop cache populated")
+
+	var max_step_and_frame_ms: float = 0.0
+	for step_i in range(6):
+		main.camera.pan_offset += Vector2(28.0, -18.0)
+		main.camera._target_pan = main.camera.pan_offset
+		var frame_t0 := Time.get_ticks_usec()
+		main.step_generation()
+		main.camera._process(0.016)
+		main.world_renderer._process(0.016)
+		main._process(0.016)
+		var frame_ms := float(Time.get_ticks_usec() - frame_t0) / 1000.0
+		max_step_and_frame_ms = maxf(max_step_and_frame_ms, frame_ms)
+
+	print("[PERF] check_ollama_status=%.3f ms | evaluate_all_demes(16)=%.3f ms | max_turn_step_while_panning=%.3f ms" % [
+		status_ms, eval_ms, max_step_and_frame_ms
+	])
+	_assert(max_step_and_frame_ms < 25.0, "Turn step + renderer rebuild while panning with 16+ demes completes without stutter (max %.3f ms)" % max_step_and_frame_ms)
+
+	# Verify zoom pivot invariance around cursor offset and outer-ring pan reachability at MAX_ZOOM
+	main.camera.reset_camera()
+	main.camera.pan_offset = main.camera._target_pan
+	main.camera.zoom_level = main.camera._target_zoom
+	var cursor_offset := Vector2(320.0, -180.0)
+	var world_pt_before := (cursor_offset - main.camera._target_pan) / main.camera._target_zoom
+	main.camera.zoom_by(0.45, cursor_offset)
+	var world_pt_after := (cursor_offset - main.camera._target_pan) / main.camera._target_zoom
+	_assert(world_pt_before.distance_to(world_pt_after) < 0.01, "Zoom around cursor pivot preserves exact world point under cursor")
+
+	main.camera._target_zoom = EvoCameraController.MAX_ZOOM
+	main.camera.focus_on_hex(5, 0, 0.5)
+	_assert(main.camera._target_pan.length() > 5000.0, "Outer ring hexes are reachable at MAX_ZOOM without premature clamping")
+
+	# Verify bounded deme.id length across migrations
+	var max_id_len: int = 0
+	for did in state.demes.keys():
+		max_id_len = maxi(max_id_len, str(did).length())
+	_assert(max_id_len < 64, "Deme IDs remain compact and bounded across generations (max len %d)" % max_id_len)
 
 	main.free()

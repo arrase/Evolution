@@ -1,7 +1,7 @@
 class_name HexMath
 extends RefCounted
 
-const HEX_SIZE: float = 152.0
+const HEX_SIZE: float = 240.0
 const DIRECTIONS: Array[Vector2i] = [
 	Vector2i(1, 0),
 	Vector2i(1, -1),
@@ -63,10 +63,10 @@ static func compute_village_sector_offset(index: int, total_count: int, hex_size
 	if total_count <= 1:
 		return Vector2.ZERO
 	if total_count == 2:
-		var dx := hex_size * 0.44
-		var dy := hex_size * 0.12
+		var dx := hex_size * 0.45
+		var dy := hex_size * 0.14
 		return Vector2(-dx if index == 0 else dx, -dy if index == 0 else dy)
 	var angles := [-PI * 0.5, PI * 0.18, PI * 0.82]
 	var ang: float = angles[index % 3]
-	var rad := hex_size * (0.46 if index % 3 == 0 else 0.50)
+	var rad := hex_size * (0.48 if index % 3 == 0 else 0.52)
 	return Vector2(cos(ang) * rad, sin(ang) * rad)

@@ -11,7 +11,10 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 
 	var prev_exchange_conns: Array[Dictionary] = []
 	for existing_conn in state.disused_connections:
-		prev_exchange_conns.append(existing_conn.duplicate())
+		var c_copy := existing_conn.duplicate()
+		c_copy["age"] = int(existing_conn.get("age", 0)) + 1
+		c_copy["broken_gen"] = int(existing_conn.get("broken_gen", prev_generation))
+		prev_exchange_conns.append(c_copy)
 	for fl in state.active_flows:
 		if fl.flow_type in ["exchange", "cooperate"]:
 			var fa := fl.from_deme_id
@@ -23,6 +26,8 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 				if (ca == fa and cb == fb) or (ca == fb and cb == fa):
 					conn["from_hex_id"] = fl.from_hex_id
 					conn["to_hex_id"] = fl.to_hex_id
+					conn["age"] = 0
+					conn["broken_gen"] = next_generation
 					already_saved = true
 					break
 			if not already_saved:
@@ -30,7 +35,9 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 					"from_hex_id": fl.from_hex_id,
 					"to_hex_id": fl.to_hex_id,
 					"from_deme_id": fa,
-					"to_deme_id": fb
+					"to_deme_id": fb,
+					"age": 0,
+					"broken_gen": next_generation
 				})
 	state.disused_connections = prev_exchange_conns
 	state.active_flows.clear()
@@ -124,6 +131,11 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 	var delta_temp: float = 0.04 if state.season == "wet_warm" else -0.04
 	var delta_hum: float = 0.05 if state.season == "wet_warm" else -0.05
 
+	var collapsed_prev_gen_hexes: Dictionary = {}
+	for entry in state.chronicle:
+		if entry.event_type == "tragedy_of_commons" and entry.generation == prev_generation:
+			collapsed_prev_gen_hexes[entry.hex_id] = true
+
 	for cid in state.cells.keys():
 		var cell: EvoTypes.HexCell = state.cells[cid]
 		if cell.biome == "ocean":
@@ -133,11 +145,7 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 		cell.temperature = clampf(snappedf(cell.temperature + delta_temp, 0.01), -1.0, 1.0)
 		cell.humidity = clampf(snappedf(cell.humidity + delta_hum, 0.01), 0.0, 1.0)
 
-		var suffered_collapse := false
-		for entry in state.chronicle:
-			if entry.event_type == "tragedy_of_commons" and entry.hex_id == cell.id and entry.generation == prev_generation:
-				suffered_collapse = true
-				break
+		var suffered_collapse := collapsed_prev_gen_hexes.has(cell.id)
 
 		var recovery_rate: float = 0.005 if (suffered_collapse or cell.current_resources <= 0.0) else 0.05
 		var next_k := clampf(

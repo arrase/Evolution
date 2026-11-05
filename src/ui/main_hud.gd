@@ -75,6 +75,9 @@ var _legend_panel: PanelContainer
 var _legend_vbox: VBoxContainer
 var _villages_title_lbl: Label
 var _villages_list_vbox: VBoxContainer
+var _village_buttons_pool: Array[Button] = []
+var _empty_villages_lbl: Label
+var _last_hotbar_visual_key: String = ""
 
 # Top-Right Stardew Clock & Cognitive Engine Widget
 var _season_portrait: SeasonTidePortrait
@@ -1119,8 +1122,7 @@ func refresh(world_state: EvoTypes.WorldState = null) -> void:
 
 	_update_top_bar_state()
 	_rebuild_villages_list()
-	_rebuild_deme_sheet()
-	_rebuild_hex_sheet()
+	_rebuild_active_inspector_sheet()
 	_update_first_steps_labels()
 	_update_hotbar_visuals()
 
@@ -1130,6 +1132,15 @@ func refresh(world_state: EvoTypes.WorldState = null) -> void:
 		tree_modal.refresh(_world_state)
 	if lab_modal != null and lab_modal.visible:
 		lab_modal.refresh(_world_state, _selected_deme_id)
+
+
+func _rebuild_active_inspector_sheet() -> void:
+	if _inspector_minimized:
+		return
+	if _inspector_tab == "habitat":
+		_rebuild_hex_sheet()
+	else:
+		_rebuild_deme_sheet()
 
 
 func select_hex(hex_id: String) -> void:
@@ -1145,8 +1156,7 @@ func select_hex(hex_id: String) -> void:
 		else:
 			_set_inspector_tab("habitat")
 	_rebuild_villages_list()
-	_rebuild_deme_sheet()
-	_rebuild_hex_sheet()
+	_rebuild_active_inspector_sheet()
 	_update_first_steps_labels()
 
 
@@ -1162,8 +1172,7 @@ func select_deme(deme_id: String) -> void:
 	if _inspector_tab == "habitat":
 		_set_inspector_tab("deme")
 	_rebuild_villages_list()
-	_rebuild_deme_sheet()
-	_rebuild_hex_sheet()
+	_rebuild_active_inspector_sheet()
 	_update_first_steps_labels()
 
 
@@ -1246,6 +1255,7 @@ func push_chronicle_toast(entry: EvoTypes.ChronicleEntry) -> void:
 
 	var ev_color := EvoStardewStyle.get_event_type_color(entry.event_type)
 	var toast := PanelContainer.new()
+	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast.set_meta("ttl", 5.5)
 	var style := EvoStardewStyle.make_parchment_card(Color("#fbf2de"), ev_color, 6)
 	style.border_width_left = 5
@@ -1472,6 +1482,10 @@ func _get_active_hotbar_slot_index() -> int:
 func _update_hotbar_visuals() -> void:
 	if _hotbar_slot_buttons.is_empty():
 		return
+	var visual_key := "%s|%s|%s" % [_active_tool, _active_sub_mode, _lang]
+	if visual_key == _last_hotbar_visual_key:
+		return
+	_last_hotbar_visual_key = visual_key
 	var active_idx := _get_active_hotbar_slot_index()
 	for i in range(_hotbar_slot_buttons.size()):
 		var btn := _hotbar_slot_buttons[i]
@@ -1565,16 +1579,21 @@ func _rebuild_legend_content() -> void:
 func _rebuild_villages_list() -> void:
 	if _villages_list_vbox == null:
 		return
-	for child in _villages_list_vbox.get_children():
-		child.queue_free()
 
 	if _world_state == null or _world_state.demes.is_empty():
-		var empty_lbl := Label.new()
-		empty_lbl.text = EvoStardewStyle.tr_text(_lang, "Sin aldeas vivas.", "No living villages.")
-		empty_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_RED_DANGER)
-		empty_lbl.add_theme_font_size_override("font_size", 11)
-		_villages_list_vbox.add_child(empty_lbl)
+		for btn in _village_buttons_pool:
+			btn.visible = false
+		if _empty_villages_lbl == null:
+			_empty_villages_lbl = Label.new()
+			_empty_villages_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_RED_DANGER)
+			_empty_villages_lbl.add_theme_font_size_override("font_size", 11)
+			_villages_list_vbox.add_child(_empty_villages_lbl)
+		_empty_villages_lbl.text = EvoStardewStyle.tr_text(_lang, "Sin aldeas vivas.", "No living villages.")
+		_empty_villages_lbl.visible = true
 		return
+
+	if _empty_villages_lbl != null:
+		_empty_villages_lbl.visible = false
 
 	var deme_list: Array[EvoTypes.Deme] = []
 	for d_id in _world_state.demes.keys():
@@ -1587,7 +1606,22 @@ func _rebuild_villages_list() -> void:
 		"🏘️ Living Villages (%d)" % deme_list.size()
 	)
 
-	for d in deme_list:
+	while _village_buttons_pool.size() < deme_list.size():
+		var btn := Button.new()
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn.clip_text = true
+		btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		btn.add_theme_font_size_override("font_size", 11)
+		btn.pressed.connect(_on_pooled_village_btn_pressed.bind(btn))
+		_villages_list_vbox.add_child(btn)
+		_village_buttons_pool.append(btn)
+
+	for i in range(_village_buttons_pool.size()):
+		var btn := _village_buttons_pool[i]
+		if i >= deme_list.size():
+			btn.visible = false
+			continue
+		var d := deme_list[i]
 		var status_key := d.get_vital_status()
 		var heart := EvoStardewStyle.get_vital_status_heart(status_key)
 		var short_model := "tev1" if "tev1" in d.decision_model_tag else "d3"
@@ -1595,12 +1629,8 @@ func _rebuild_villages_list() -> void:
 		if short_name.length() > 14:
 			short_name = short_name.substr(0, 13) + "…"
 
-		var btn := Button.new()
+		btn.visible = true
 		btn.text = "%s %s · %s·%d [🧠%s]" % [heart, short_name, d.get_village_roman(), d.population, short_model]
-		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn.clip_text = true
-		btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		btn.add_theme_font_size_override("font_size", 11)
 		btn.tooltip_text = "%s (%s)\n%s · %d hab · 🧠 %s" % [
 			d.name,
 			d.hex_id,
@@ -1608,9 +1638,19 @@ func _rebuild_villages_list() -> void:
 			d.population,
 			d.decision_model_tag
 		]
-		EvoStardewStyle.apply_button_active(btn, d.id == _selected_deme_id)
-		btn.pressed.connect(_on_village_list_item_pressed.bind(d.id, d.hex_id))
-		_villages_list_vbox.add_child(btn)
+		btn.set_meta("deme_id", d.id)
+		btn.set_meta("hex_id", d.hex_id)
+		var is_active := d.id == _selected_deme_id
+		if not btn.has_meta("is_active") or bool(btn.get_meta("is_active")) != is_active:
+			btn.set_meta("is_active", is_active)
+			EvoStardewStyle.apply_button_active(btn, is_active)
+
+
+func _on_pooled_village_btn_pressed(btn: Button) -> void:
+	var deme_id := str(btn.get_meta("deme_id", ""))
+	var hex_id := str(btn.get_meta("hex_id", ""))
+	if deme_id != "":
+		_on_village_list_item_pressed(deme_id, hex_id)
 
 
 func _rebuild_deme_sheet() -> void:
@@ -1864,48 +1904,86 @@ func _rebuild_deme_sheet() -> void:
 	inject_row.add_child(trait_opt)
 
 
+func _format_deme_with_hex(od: EvoTypes.Deme) -> String:
+	var suffix := "(%s)" % od.hex_id
+	if od.name.ends_with(suffix):
+		return od.name
+	return "%s %s" % [od.name, suffix]
+
+
 func _build_deme_relations_lines(d: EvoTypes.Deme) -> Array[String]:
 	var lines: Array[String] = []
 	if _world_state == null:
 		return lines
 
+	var mentioned_deme_ids: Dictionary = {}
 	for fl in _world_state.active_flows:
-		var touches := (fl.from_deme_id == d.id or fl.to_deme_id == d.id or fl.from_hex_id == d.hex_id or fl.to_hex_id == d.hex_id)
+		var has_deme_endpoints := (fl.from_deme_id != "" or fl.to_deme_id != "")
+		var touches := (fl.from_deme_id == d.id or fl.to_deme_id == d.id) if has_deme_endpoints else (fl.from_hex_id == d.hex_id or fl.to_hex_id == d.hex_id)
 		if not touches:
 			continue
 		var other_hex := fl.to_hex_id if fl.from_hex_id == d.hex_id else fl.from_hex_id
 		var other_name := ("Hex (%s)" % other_hex)
 		var other_deme_id := fl.to_deme_id if fl.from_deme_id == d.id else fl.from_deme_id
 		if other_deme_id != "" and _world_state.demes.has(other_deme_id):
-			other_name = (_world_state.demes[other_deme_id] as EvoTypes.Deme).name
+			var od_flow: EvoTypes.Deme = _world_state.demes[other_deme_id]
+			other_name = _format_deme_with_hex(od_flow)
+			mentioned_deme_ids[other_deme_id] = true
+		var line_str := ""
 		match fl.flow_type:
 			"exchange", "cooperate", "merge":
-				lines.append(EvoStardewStyle.tr_text(_lang, "🛣️ Vía de cooperación activa con %s" % other_name, "🛣️ Active cooperation road with %s" % other_name))
+				line_str = EvoStardewStyle.tr_text(_lang, "🛣️ Vía de cooperación activa con %s" % other_name, "🛣️ Active cooperation road with %s" % other_name)
 			"dispute":
-				lines.append(EvoStardewStyle.tr_text(_lang, "⚔️ En conflicto / barricadas con %s" % other_name, "⚔️ In conflict / barricades with %s" % other_name))
+				line_str = EvoStardewStyle.tr_text(_lang, "⚔️ En conflicto / barricadas con %s" % other_name, "⚔️ In conflict / barricades with %s" % other_name)
 			"migration":
-				lines.append(EvoStardewStyle.tr_text(_lang, "🧭 Expedición migratoria hacia (%s)" % other_hex, "🧭 Migratory expedition toward (%s)" % other_hex))
+				line_str = EvoStardewStyle.tr_text(_lang, "🧭 Expedición migratoria hacia (%s)" % other_hex, "🧭 Migratory expedition toward (%s)" % other_hex)
+		if line_str != "" and not lines.has(line_str):
+			lines.append(line_str)
 
 	for dis in _world_state.disused_connections:
+		var f_deme := str(dis.get("from_deme_id", ""))
+		var t_deme := str(dis.get("to_deme_id", ""))
 		var f_hex := str(dis.get("from_hex_id", ""))
 		var t_hex := str(dis.get("to_hex_id", ""))
-		if f_hex == d.hex_id or t_hex == d.hex_id:
+		var has_d := (f_deme != "" or t_deme != "")
+		var touches_dis := (f_deme == d.id or t_deme == d.id) if has_d else (f_hex == d.hex_id or t_hex == d.hex_id)
+		if touches_dis:
+			var other_d_id := t_deme if f_deme == d.id else f_deme
 			var target_h := t_hex if f_hex == d.hex_id else f_hex
-			lines.append(EvoStardewStyle.tr_text(_lang, "🚧 Camino cortado con (%s)" % target_h, "🚧 Severed path with (%s)" % target_h))
+			var target_label := "(%s)" % target_h
+			if other_d_id != "" and other_d_id != d.id and _world_state.demes.has(other_d_id):
+				var od_dis: EvoTypes.Deme = _world_state.demes[other_d_id]
+				target_label = _format_deme_with_hex(od_dis)
+			var age_val := int(dis.get("age", 0))
+			var dis_str := ""
+			if age_val > 0:
+				dis_str = EvoStardewStyle.tr_text(
+					_lang,
+					"🚧 Camino cortado con %s (hace %d gen.)" % [target_label, age_val],
+					"🚧 Severed path with %s (%d gen. ago)" % [target_label, age_val]
+				)
+			else:
+				dis_str = EvoStardewStyle.tr_text(
+					_lang,
+					"🚧 Camino cortado con %s" % target_label,
+					"🚧 Severed path with %s" % target_label
+				)
+			if not lines.has(dis_str):
+				lines.append(dis_str)
 
-	if lines.is_empty() and _world_state.cells.has(d.hex_id):
+	if _world_state.cells.has(d.hex_id):
 		var c: EvoTypes.HexCell = _world_state.cells[d.hex_id]
 		for other_id in c.deme_ids:
-			if other_id != d.id and _world_state.demes.has(other_id):
+			if other_id != d.id and not mentioned_deme_ids.has(other_id) and _world_state.demes.has(other_id):
 				var od: EvoTypes.Deme = _world_state.demes[other_id]
 				lines.append(EvoStardewStyle.tr_text(_lang, "🤝 Coexistiendo en (%s) con %s" % [d.hex_id, od.name], "🤝 Coexisting at (%s) with %s" % [d.hex_id, od.name]))
 		var n_ids := HexMath.get_neighbor_ids(c.q, c.r, _world_state.cells)
 		for nid in n_ids:
 			var nc: EvoTypes.HexCell = _world_state.cells[nid]
 			for nd_id in nc.deme_ids:
-				if _world_state.demes.has(nd_id):
+				if not mentioned_deme_ids.has(nd_id) and _world_state.demes.has(nd_id):
 					var nd: EvoTypes.Deme = _world_state.demes[nd_id]
-					lines.append(EvoStardewStyle.tr_text(_lang, "🏘️ Aldea vecina: %s en (%s)" % [nd.name, nid], "🏘️ Neighbor village: %s at (%s)" % [nd.name, nid]))
+					lines.append(EvoStardewStyle.tr_text(_lang, "🏘️ Aldea vecina: %s" % _format_deme_with_hex(nd), "🏘️ Neighbor village: %s" % _format_deme_with_hex(nd)))
 
 	if lines.is_empty():
 		lines.append(EvoStardewStyle.tr_text(_lang, "🏞️ Sin caminos exteriores activos (aldea aislada)", "🏞️ No active outer roads (isolated village)"))
@@ -2086,6 +2164,7 @@ func _set_inspector_tab(tab_id: String) -> void:
 
 func _on_inspector_tab_pressed(tab_id: String) -> void:
 	_set_inspector_tab(tab_id)
+	_rebuild_active_inspector_sheet()
 
 
 func _on_toggle_inspector_minimize() -> void:
@@ -2093,6 +2172,8 @@ func _on_toggle_inspector_minimize() -> void:
 	_inspector_body_vbox.visible = not _inspector_minimized
 	_inspector_minimize_btn.text = "▸" if _inspector_minimized else "▾"
 	_inspector_frame.offset_bottom = 232 if _inspector_minimized else 626
+	if not _inspector_minimized:
+		_rebuild_active_inspector_sheet()
 
 
 func _on_header_highlight_pressed() -> void:

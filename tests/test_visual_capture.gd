@@ -1,6 +1,6 @@
 extends SceneTree
 
-const OUTPUT_DIR: String = "/home/arrase/.gemini/antigravity/brain/09a46228-9bce-44f9-a2a3-4bbf3993ce6a"
+const OUTPUT_DIR: String = "/home/arrase/.gemini/antigravity/brain/b10bf90b-f7e5-40b8-b0a0-80c0877c867d"
 
 
 func _init() -> void:
@@ -33,8 +33,11 @@ func _run_captures() -> void:
 
 	# 1. screenshot_rift_savanna.png (6 generations, village selected)
 	main.load_preset("preset-rift-savanna")
+	main.world_state.use_live_decision_models = false
 	for _g in range(6):
 		main.step_generation()
+	main.world_state.use_live_decision_models = true
+	main.hud.refresh(main.world_state)
 	if main.world_state.demes.has("deme-rift-east"):
 		main.hud.select_deme("deme-rift-east")
 		main.world_renderer.selected_deme_id = "deme-rift-east"
@@ -46,14 +49,20 @@ func _run_captures() -> void:
 
 	# 2. screenshot_darwin_archipelago.png (5 generations)
 	main.load_preset("preset-darwin-archipelago")
+	main.world_state.use_live_decision_models = false
 	for _g in range(5):
 		main.step_generation()
+	main.world_state.use_live_decision_models = true
+	main.hud.refresh(main.world_state)
 	await _wait_and_save(main, "screenshot_darwin_archipelago.png")
 
 	# 3. screenshot_finite_island.png (4 generations, map legend open + ecological lens)
 	main.load_preset("preset-finite-island")
+	main.world_state.use_live_decision_models = false
 	for _g in range(4):
 		main.step_generation()
+	main.world_state.use_live_decision_models = true
+	main.hud.refresh(main.world_state)
 	main.hud._on_lens_pressed("health")
 	if not main.hud._legend_panel.visible:
 		main.hud._on_legend_toggle_pressed()
@@ -65,8 +74,10 @@ func _run_captures() -> void:
 		main.hud._on_legend_toggle_pressed()
 
 	# Advance Finite Island a few more turns and trigger a Baldwin & Speciation event so Chronicle and Lineage Tree are rich
+	main.world_state.use_live_decision_models = false
 	for _g in range(4):
 		main.step_generation()
+	main.world_state.use_live_decision_models = true
 	if not main.world_state.demes.is_empty():
 		var first_d: EvoTypes.Deme = main.world_state.demes.values()[0]
 		first_d.baldwin_counters[first_d.last_dominant_decision_id] = 8
@@ -81,8 +92,10 @@ func _run_captures() -> void:
 
 	# 5. screenshot_tree_modal.png (ensure hierarchical child lineage node exists for visual clarity)
 	main.load_preset("preset-darwin-archipelago")
+	main.world_state.use_live_decision_models = false
 	for _g in range(4):
 		main.step_generation()
+	main.world_state.use_live_decision_models = true
 	if main.world_state.demes.has("deme-darwin-founder"):
 		var f_deme: EvoTypes.Deme = main.world_state.demes["deme-darwin-founder"]
 		f_deme.hex_id = "0,-2"
@@ -97,5 +110,24 @@ func _run_captures() -> void:
 	await _wait_and_save(main, "screenshot_lab_modal.png")
 	main.hud.lab_modal.close_modal()
 
+	# 7. screenshot_late_simulation.png (18 generations in Rift Savanna to verify clean road lifecycle and 2x villages/inhabitants)
+	main.load_preset("preset-rift-savanna")
+	main.world_state.use_live_decision_models = false
+	for _g in range(18):
+		main.step_generation()
+	main.world_state.use_live_decision_models = true
+	main.hud._milestone_banner.visible = false
+	main.hud.refresh(main.world_state)
+	if main.world_state.demes.has("deme-rift-east"):
+		main.hud.select_deme("deme-rift-east")
+		main.world_renderer.selected_deme_id = "deme-rift-east"
+		main.world_renderer.selected_hex_id = (main.world_state.demes["deme-rift-east"] as EvoTypes.Deme).hex_id
+	elif not main.world_state.demes.is_empty():
+		var did := str(main.world_state.demes.keys()[0])
+		main.hud.select_deme(did)
+		main.world_renderer.selected_deme_id = did
+	await _wait_and_save(main, "screenshot_late_simulation.png")
+
 	main.free()
+	EvoDecisionModel.wait_for_workers()
 	quit(0)
