@@ -1,12 +1,6 @@
-node_modules/
-dist/
-build/
-coverage/
-*.log
-.env*
+.godot/
+*.import
+export_presets.cfg
 .DS_Store
-Thumbs.db
 *.tmp
-*.swp
-.vscode/
-.idea/
+screenshots/

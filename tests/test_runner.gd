@@ -1,0 +1,353 @@
+extends SceneTree
+
+var _passed: int = 0
+var _failed: int = 0
+
+
+func _init() -> void:
+	print("=== EVOLUTION GODOT 4 CORE SIMULATION TEST SUITE ===")
+	_test_thermodynamics()
+	_test_catalog_and_presets()
+	_test_decision_model_and_normalization()
+	_test_hawk_dove_and_symbiosis()
+	_test_tragedy_of_the_commons()
+	_test_baldwin_innovation_and_speciation()
+	_test_interventions()
+	_test_serialization_roundtrip()
+	_test_25_generations_all_presets()
+	_test_main_scene_and_ui_integration()
+
+	print("====================================================")
+	print("PASSED: %d | FAILED: %d" % [_passed, _failed])
+	if _failed > 0:
+		quit(1)
+	else:
+		quit(0)
+
+
+func _assert(cond: bool, msg: String) -> void:
+	if cond:
+		_passed += 1
+	else:
+		_failed += 1
+		printerr("[FAIL] " + msg)
+
+
+func _test_thermodynamics() -> void:
+	print("-- Testing Thermodynamics --")
+	var balanced_vec := EvoTypes.BiophysicalVector.new(0.10, 0.25, 0.05, 0.20, 0.10, 0.15)
+	var m1 := EvoThermodynamics.evaluate_thermodynamics(balanced_vec)
+	_assert(is_equal_approx(float(m1["positive_advantages"]), 0.55), "Balanced positive advantages == 0.55")
+	_assert(is_equal_approx(float(m1["required_cost"]), 0.0), "No required cost below 0.60 budget")
+	_assert(bool(m1["is_balanced"]), "Vector within 0.60 budget is balanced")
+
+	var unbalanced_vec := EvoTypes.BiophysicalVector.new(0.0, 0.80, 0.10, 0.50, 0.50, 0.20)
+	var m2 := EvoThermodynamics.evaluate_thermodynamics(unbalanced_vec)
+	# A+ = 1.80 -> C_req = 0.5 * (1.80 - 0.60) = 0.60
+	_assert(is_equal_approx(float(m2["positive_advantages"]), 1.80), "Positive advantages == 1.80")
+	_assert(is_equal_approx(float(m2["required_cost"]), 0.60), "Required cost == 0.60")
+	_assert(not bool(m2["is_balanced"]), "Uncompensated vector is not balanced")
+
+	var fixed_vec := EvoThermodynamics.validate_and_balance_thermodynamics(unbalanced_vec, false)
+	var m2_after := EvoThermodynamics.evaluate_thermodynamics(fixed_vec)
+	_assert(bool(m2_after["is_balanced"]), "Validated vector is balanced")
+	_assert(is_equal_approx(fixed_vec.metabolic_cost, 0.60), "Adjusted metabolic cost == 0.60")
+
+	var sandbox_vec := EvoThermodynamics.validate_and_balance_thermodynamics(unbalanced_vec, true)
+	_assert(is_equal_approx(sandbox_vec.metabolic_cost, 0.0), "Free sandbox preserves uncompensated cost")
+
+
+func _test_catalog_and_presets() -> void:
+	print("-- Testing Catalog & Scientific Presets --")
+	var rift := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
+	_assert(rift.cells.size() == 91, "Rift Savanna radius 5 has 91 cells")
+	_assert(rift.demes.size() == 2, "Rift Savanna starts with 2 demes")
+	_assert(rift.traits_catalog.size() == 11, "Base catalog has 11 traits (6 bio + 5 cul)")
+	_assert(rift.decisions_catalog.size() == 7, "Base catalog has 7 decisions")
+
+	var darwin := EvoCatalog.create_preset_world("preset-darwin-archipelago", "en")
+	_assert(darwin.cells.size() == 91, "Darwin Archipelago radius 5 has 91 cells")
+	_assert(darwin.demes.size() == 1, "Darwin Archipelago starts with 1 founder deme")
+	_assert(darwin.glacial_sea_level_cycle, "Darwin Archipelago has glacial sea level cycle enabled")
+
+	var island := EvoCatalog.create_preset_world("preset-finite-island", "es")
+	_assert(island.cells.size() == 61, "Finite Island radius 4 has 61 cells")
+	_assert(island.demes.size() == 3, "Finite Island starts with 3 rival clans in 0,0")
+
+	var west: EvoTypes.Deme = rift.demes["deme-rift-west"]
+	_assert(EvoCatalog.deme_has_cultural_capacity(west, rift.traits_catalog), "West deme has cultural capacity via bio-social-instinct")
+	var injected := EvoCatalog.inject_trait_into_deme(rift, "deme-rift-west", "bio-r-strategy", "es")
+	_assert(injected, "Injecting bio-r-strategy succeeds")
+	_assert(west.biological_trait_ids.has("bio-r-strategy"), "West deme now has bio-r-strategy")
+	_assert(not west.biological_trait_ids.has("bio-k-strategy"), "Mutually exclusive bio-k-strategy was removed")
+
+
+func _test_decision_model_and_normalization() -> void:
+	print("-- Testing Decision Model & Normalization --")
+	var ids: Array[String] = ["d1", "d2", "d3"]
+	var raw := {"d1": 0.52, "d2": 0.31, "d3": 0.17}
+	var norm := EvoDecisionModel.normalize_decision_probabilities(raw, ids)
+	var probs: Dictionary = norm["probabilities"]
+	var sum_p: float = 0.0
+	for k in probs.keys():
+		sum_p += float(probs[k])
+	_assert(is_equal_approx(sum_p, 1.0), "Normalized probabilities sum to 1.0000")
+	_assert(str(norm["dominant_decision_id"]) == "d1", "Dominant decision is d1")
+
+	var rift := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
+	var west: EvoTypes.Deme = rift.demes["deme-rift-west"]
+	var east: EvoTypes.Deme = rift.demes["deme-rift-east"]
+	_assert(west.last_dominant_decision_id == "dec-conservative-forage", "West forest deme favors conservative foraging")
+	_assert(east.last_dominant_decision_id == "dec-cooperate-store", "East savanna deme favors cooperation & storage")
+	_assert(west.last_justification.length() > 20, "Justification string is populated")
+
+
+func _test_hawk_dove_and_symbiosis() -> void:
+	print("-- Testing Hawk-Dove Dispute & Symbiosis --")
+	var state := EvoCatalog.create_preset_world("preset-finite-island", "es")
+	var d1: EvoTypes.Deme = state.demes["deme-island-1"]
+	var d2: EvoTypes.Deme = state.demes["deme-island-2"]
+	var d3: EvoTypes.Deme = state.demes["deme-island-3"]
+
+	# Force Hawk vs Hawk between d1 and d2
+	d1.last_decision_probabilities = {"dec-territorial-dispute": 0.60, "dec-conservative-forage": 0.40}
+	d2.last_decision_probabilities = {"dec-territorial-dispute": 0.60, "dec-conservative-forage": 0.40}
+	d3.last_decision_probabilities = {"dec-conservative-forage": 1.0}
+	EvoBiophysPhase.run_biophysical_phase(state, "es")
+
+	var has_dispute_flow := false
+	for fl in state.active_flows:
+		if fl.flow_type == "dispute":
+			has_dispute_flow = true
+			break
+	_assert(has_dispute_flow, "Hawk vs Hawk generates dispute flow")
+	_assert(d1.population < 320 and d2.population < 320, "Hawks suffer casualties and metabolic penalty")
+
+	# Force Symbiosis and Horizontal Cultural Diffusion between d1 and d3
+	state.active_flows.clear()
+	d1.cultural_trait_ids = ["cul-fire-processing"]
+	d3.cultural_trait_ids = []
+	d1.last_decision_probabilities = {"dec-exchange-symbiosis": 0.80, "dec-cooperate-store": 0.20}
+	d3.last_decision_probabilities = {"dec-exchange-symbiosis": 0.80, "dec-cooperate-store": 0.20}
+	d2.last_decision_probabilities = {"dec-conservative-forage": 1.0}
+	EvoBiophysPhase.run_biophysical_phase(state, "es")
+	_assert(d3.cultural_trait_ids.has("cul-fire-processing"), "Horizontal cultural diffusion transmitted cul-fire-processing to d3")
+
+
+func _test_tragedy_of_the_commons() -> void:
+	print("-- Testing Tragedy of the Commons --")
+	var island := EvoCatalog.create_preset_world("preset-finite-island", "es")
+	var tragedy_occurred := false
+	for _g in range(12):
+		EvoTurnEngine.advance_generation(island, "es")
+		for entry in island.chronicle:
+			if entry.event_type == "tragedy_of_commons":
+				tragedy_occurred = true
+				break
+		if tragedy_occurred:
+			break
+	_assert(tragedy_occurred, "Finite Island without conservation triggers Tragedy of the Commons")
+	var center_cell: EvoTypes.HexCell = island.cells["0,0"]
+	_assert(center_cell.carrying_capacity < 0.60 * center_cell.carrying_capacity_max, "Center cell K degraded below 60% of Kmax")
+
+
+func _test_baldwin_innovation_and_speciation() -> void:
+	print("-- Testing Baldwin Effect, Cultural Innovation & Allopatric Speciation --")
+	# 1. Baldwin assimilation
+	var state_b := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
+	var east_b: EvoTypes.Deme = state_b.demes["deme-rift-east"]
+	east_b.baldwin_counters["dec-cooperate-store"] = 8
+	east_b.last_dominant_decision_id = "dec-cooperate-store"
+	var entries_b := EvoMilestonePhase.run_milestone_phase(state_b, "es")
+	_assert(entries_b.size() == 1 and entries_b[0].event_type == "baldwin_trait", "Baldwin assimilation triggers at counter >= 8")
+	_assert(int(east_b.baldwin_counters["dec-cooperate-store"]) == 0, "Baldwin counter resets to 0 after assimilation")
+
+	# 2. Cultural innovation
+	var state_c := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
+	var east_c: EvoTypes.Deme = state_c.demes["deme-rift-east"]
+	east_c.innovation_counter = 1.15
+	var entries_c := EvoMilestonePhase.run_milestone_phase(state_c, "es")
+	_assert(entries_c.size() == 1 and entries_c[0].event_type == "cultural_innovation", "Cultural innovation triggers at counter >= 1.0")
+	_assert(east_c.cultural_trait_ids.size() == 1, "Deme acquires newly synthesized cultural tradition")
+
+	# 3. Allopatric speciation
+	var state_s := EvoCatalog.create_preset_world("preset-darwin-archipelago", "es")
+	state_s.generation = 12
+	var founder: EvoTypes.Deme = state_s.demes["deme-darwin-founder"]
+	(state_s.cells["0,0"] as EvoTypes.HexCell).deme_ids.clear()
+	founder.hex_id = "0,-2" # North tundra island
+	(state_s.cells["0,-2"] as EvoTypes.HexCell).deme_ids.append(founder.id)
+	founder.isolation_turns = 10
+	var old_lineage := founder.lineage_id
+	var old_color := founder.color
+	var entries_s := EvoMilestonePhase.run_milestone_phase(state_s, "es")
+	_assert(entries_s.size() == 1 and entries_s[0].event_type == "allopatric_speciation", "Allopatric speciation triggers at isolation >= 10 in distinct biome")
+	_assert(founder.lineage_id != old_lineage, "Speciated deme receives new lineage ID")
+	_assert(founder.color != old_color, "Speciated deme receives new distinct color")
+	_assert(state_s.lineage_tree.size() == 2, "Lineage tree now has 2 nodes")
+
+
+func _test_interventions() -> void:
+	print("-- Testing Player Interventions (Brushes) --")
+	var state := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
+	state.selective_pressure_points = 100
+	var targets: Array[String] = ["0,0"]
+
+	var ok_biome := EvoTurnEngine.apply_set_biome(state, targets, "tundra", "es")
+	_assert(ok_biome and (state.cells["0,0"] as EvoTypes.HexCell).biome == "tundra", "set_biome changes cell biome to tundra")
+	_assert(state.selective_pressure_points == 90, "set_biome costs 10 points")
+
+	var ok_alt := EvoTurnEngine.apply_adjust_altitude(state, targets, 0.18, "es")
+	_assert(ok_alt and state.selective_pressure_points == 75, "adjust_altitude costs 15 points")
+
+	var ok_cap := EvoTurnEngine.apply_adjust_carrying_capacity(state, targets, 0.25)
+	_assert(ok_cap and state.selective_pressure_points == 65, "adjust_carrying_capacity costs 10 points")
+
+	var prev_sea := state.sea_level
+	var ok_sea := EvoTurnEngine.apply_adjust_sea_level(state, 0.05, "es")
+	_assert(ok_sea and is_equal_approx(state.sea_level, prev_sea + 0.05), "adjust_sea_level raises sea level by 0.05")
+	_assert(state.selective_pressure_points == 40, "adjust_sea_level costs 25 points")
+
+
+func _test_serialization_roundtrip() -> void:
+	print("-- Testing JSON Serialization Round-Trip --")
+	var state := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
+	EvoTurnEngine.advance_generation(state, "es")
+	var json_str := JSON.stringify(state.to_dict())
+	var parsed: Variant = JSON.parse_string(json_str)
+	_assert(typeof(parsed) == TYPE_DICTIONARY, "Serialized state parses back as Dictionary")
+	var restored := EvoTypes.WorldState.from_dict(parsed as Dictionary)
+	_assert(restored.generation == state.generation, "Restored generation matches")
+	_assert(restored.cells.size() == state.cells.size(), "Restored cells count matches")
+	_assert(restored.demes.size() == state.demes.size(), "Restored demes count matches")
+
+
+func _test_25_generations_all_presets() -> void:
+	print("-- Testing 25 Generations Across All 3 Presets --")
+	for preset_id in EvoCatalog.PRESET_IDS:
+		var state := EvoCatalog.create_preset_world(preset_id, "es")
+		for _g in range(25):
+			EvoTurnEngine.advance_generation(state, "es")
+		_assert(state.generation == 25, "%s reached generation 25 cleanly" % preset_id)
+		for did in state.demes.keys():
+			var deme: EvoTypes.Deme = state.demes[did]
+			var sum_p: float = 0.0
+			for p in deme.last_decision_probabilities.values():
+				sum_p += float(p)
+			_assert(is_equal_approx(sum_p, 1.0), "%s deme %s probabilities sum to 1.0 at G25" % [preset_id, did])
+
+
+func _test_main_scene_and_ui_integration() -> void:
+	print("-- Testing Main Scene, WorldRenderer & Stardew UI Integration --")
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	_assert(packed != null, "res://scenes/main.tscn loads as PackedScene")
+	var main: EvoMainController = packed.instantiate() as EvoMainController
+	root.add_child(main)
+	if main.camera == null:
+		main._ready()
+
+	_assert(main.camera != null, "main.camera exists and is configured")
+	_assert(main.world_renderer != null, "main.world_renderer exists and is configured")
+	_assert(main.hud != null, "main.hud exists and is configured")
+	_assert(main.world_state != null, "main.world_state initialized on startup")
+
+	# Verify all 52 PNG files in res://assets/sprites/ and ImageTexture generation
+	EvoPixelArtGen.ensure_all_assets()
+	var total_sprites: int = 0
+	for s_name in EvoPixelArtGen.TERRAIN_SPRITES:
+		var path := "res://assets/sprites/terrain/%s.png" % s_name
+		_assert(FileAccess.file_exists(ProjectSettings.globalize_path(path)), "Terrain PNG exists: %s" % path)
+		var tex := EvoPixelArtGen.get_texture(s_name)
+		_assert(tex != null and tex.get_width() > 0, "Valid ImageTexture for %s" % s_name)
+		total_sprites += 1
+	for s_name in EvoPixelArtGen.VILLAGE_SPRITES:
+		var path := "res://assets/sprites/villages/%s.png" % s_name
+		_assert(FileAccess.file_exists(ProjectSettings.globalize_path(path)), "Village PNG exists: %s" % path)
+		var tex := EvoPixelArtGen.get_texture(s_name)
+		_assert(tex != null and tex.get_width() > 0, "Valid ImageTexture for %s" % s_name)
+		total_sprites += 1
+	for s_name in EvoPixelArtGen.UI_SPRITES:
+		var path := "res://assets/sprites/ui/%s.png" % s_name
+		_assert(FileAccess.file_exists(ProjectSettings.globalize_path(path)), "UI PNG exists: %s" % path)
+		var tex := EvoPixelArtGen.get_texture(s_name)
+		_assert(tex != null and tex.get_width() > 0, "Valid ImageTexture for %s" % s_name)
+		total_sprites += 1
+	var expected_sprites := EvoPixelArtGen.TERRAIN_SPRITES.size() + EvoPixelArtGen.VILLAGE_SPRITES.size() + EvoPixelArtGen.UI_SPRITES.size()
+	_assert(total_sprites == expected_sprites and total_sprites >= 60, "All %d pixel-art sprites verified" % total_sprites)
+
+	# Verify Dual System 1 Decision Models (d3:4b + tev1:4b)
+	_assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-rift-west") == "d3:4b", "deme-rift-west assigned to d3:4b")
+	_assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-rift-east") == "tev1:4b", "deme-rift-east assigned to tev1:4b")
+	_assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-island-1") == "d3:4b", "deme-island-1 assigned to d3:4b")
+	_assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-island-2") == "tev1:4b", "deme-island-2 assigned to tev1:4b")
+	var ollama_status := EvoDecisionModel.check_ollama_status()
+	_assert(ollama_status.has("primary_tag") and ollama_status["primary_tag"] == "d3:4b", "Ollama status reports primary System 1 model d3:4b")
+	_assert(ollama_status.has("secondary_tag") and ollama_status["secondary_tag"] == "tev1:4b", "Ollama status reports secondary System 1 model tev1:4b")
+
+	# Advance generations via main.step_generation()
+	var gen_before := main.world_state.generation
+	main.step_generation()
+	main.step_generation()
+	_assert(main.world_state.generation == gen_before + 2, "main.step_generation() advances world_state generation")
+	_assert(main.world_renderer.world_state == main.world_state, "world_renderer tracks updated world_state")
+
+	# Preset switching
+	main.load_preset("preset-darwin-archipelago")
+	_assert(main.world_state.preset_id == "preset-darwin-archipelago", "Switched to preset-darwin-archipelago")
+	_assert(main.world_state.cells.size() == 91, "Darwin preset has 91 cells in main")
+	main.step_generation()
+
+	main.load_preset("preset-finite-island")
+	_assert(main.world_state.preset_id == "preset-finite-island", "Switched to preset-finite-island")
+	_assert(main.world_state.cells.size() == 61, "Finite Island preset has 61 cells in main")
+	main.step_generation()
+
+	# Language switching
+	main._on_language_changed("en")
+	_assert(main.lang == "en", "Language switched to en")
+	main._on_language_changed("es")
+	_assert(main.lang == "es", "Language switched back to es")
+
+	# Map lenses switching
+	for lens_id in ["food", "health", "biome"]:
+		main.hud._on_lens_pressed(lens_id)
+		_assert(main.world_renderer.active_lens == lens_id, "Lens switched to %s" % lens_id)
+
+	# Modals opening and closing
+	main.hud.open_notebook_modal()
+	_assert(main.hud.notebook_modal.visible, "Notebook modal opens cleanly")
+	main.hud.notebook_modal.close_modal()
+	_assert(not main.hud.notebook_modal.visible, "Notebook modal closes cleanly")
+
+	main.hud.open_tree_modal()
+	_assert(main.hud.tree_modal.visible, "Tree modal opens cleanly")
+	main.hud.tree_modal.close_modal()
+	_assert(not main.hud.tree_modal.visible, "Tree modal closes cleanly")
+
+	main.hud.open_lab_modal()
+	_assert(main.hud.lab_modal.visible, "Lab modal opens cleanly")
+	main.hud.lab_modal.close_modal()
+	_assert(not main.hud.lab_modal.visible, "Lab modal closes cleanly")
+
+	# Environmental tools via HUD and MainController
+	main.world_state.selective_pressure_points = 100
+	main.hud._on_tool_button_pressed("set_biome")
+	main.hud._on_sub_mode_selected("tundra")
+	main._on_world_hex_clicked("0,0", MOUSE_BUTTON_LEFT)
+	_assert((main.world_state.cells["0,0"] as EvoTypes.HexCell).biome == "tundra", "Environmental tool set_biome applied via main controller")
+
+	main.hud._on_tool_button_pressed("adjust_altitude")
+	main.hud._on_sub_mode_selected("raise")
+	var alt_before := (main.world_state.cells["0,0"] as EvoTypes.HexCell).altitude
+	main._on_world_hex_clicked("0,0", MOUSE_BUTTON_LEFT)
+	_assert((main.world_state.cells["0,0"] as EvoTypes.HexCell).altitude > alt_before, "Environmental tool adjust_altitude applied via main controller")
+
+	main.hud._on_tool_button_pressed("adjust_carrying_capacity")
+	main.hud._on_sub_mode_selected("enrich")
+	main._on_world_hex_clicked("0,0", MOUSE_BUTTON_LEFT)
+
+	var sea_before := main.world_state.sea_level
+	main._on_sea_level_change_requested(0.05)
+	_assert(is_equal_approx(main.world_state.sea_level, sea_before + 0.05), "Sea level tool applied via main controller")
+
+	main.free()
