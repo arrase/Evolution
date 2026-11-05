@@ -5,21 +5,22 @@ const MIN_PITCH_DEG: float = 28.0
 const MAX_PITCH_DEG: float = 75.0
 const DEFAULT_PITCH_DEG: float = 48.0
 const DEFAULT_YAW_DEG: float = 0.0
-const MIN_ZOOM: float = 0.55
-const MAX_ZOOM: float = 3.20
-const DEFAULT_ZOOM: float = 1.28
-const MAX_PAN_RADIUS: float = 860.0
-const MAX_COLUMN_HEIGHT_PX: float = 44.0
+const MIN_ZOOM: float = 0.35
+const MAX_ZOOM: float = 3.00
+const DEFAULT_ZOOM: float = 1.00
+const DEFAULT_PAN: Vector2 = Vector2(-56.0, 14.0)
+const MAX_PAN_RADIUS: float = 2400.0
+const MAX_COLUMN_HEIGHT_PX: float = 72.0
 
 var yaw_deg: float = DEFAULT_YAW_DEG
 var pitch_deg: float = DEFAULT_PITCH_DEG
 var zoom_level: float = DEFAULT_ZOOM
-var pan_offset: Vector2 = Vector2.ZERO
+var pan_offset: Vector2 = DEFAULT_PAN
 
 var _target_yaw_deg: float = DEFAULT_YAW_DEG
 var _target_pitch_deg: float = DEFAULT_PITCH_DEG
 var _target_zoom: float = DEFAULT_ZOOM
-var _target_pan: Vector2 = Vector2.ZERO
+var _target_pan: Vector2 = DEFAULT_PAN
 
 var active_tool: String = "inspect"
 var _is_panning: bool = false
@@ -33,7 +34,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	var pan_speed: float = 360.0 * delta
+	var pan_speed: float = 620.0 * delta
 
 	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
 		_target_pan.y += pan_speed
@@ -162,7 +163,7 @@ func reset_camera() -> void:
 	_target_yaw_deg = DEFAULT_YAW_DEG
 	_target_pitch_deg = DEFAULT_PITCH_DEG
 	_target_zoom = DEFAULT_ZOOM
-	_target_pan = Vector2.ZERO
+	_target_pan = DEFAULT_PAN
 
 
 func focus_on_hex(q: int, r: int, altitude: float) -> void:

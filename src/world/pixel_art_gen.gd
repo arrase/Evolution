@@ -158,6 +158,9 @@ static func _generate_and_register(sprite_name: String, file_path: String) -> vo
 	var img: Image
 	if FileAccess.file_exists(abs_path):
 		img = Image.load_from_file(abs_path)
+		if sprite_name.begins_with("hex_tile_") and img.get_width() < 224:
+			img = _build_sprite_image(sprite_name)
+			img.save_png(abs_path)
 	else:
 		img = _build_sprite_image(sprite_name)
 		img.save_png(abs_path)
@@ -365,15 +368,15 @@ static func _apply_soft_outline(img: Image, outline_col: Color = C_OUTLINE) -> v
 
 
 # ============================================================================
-# DETAILED 16-BIT HEX PARCEL TEXTURES (112x96 px)
+# DETAILED 16-BIT HEX PARCEL TEXTURES (224x192 px)
 # ============================================================================
 
 static func _draw_hex_tile(biome: String) -> Image:
-	var w := 112
-	var h := 96
+	var w := 224
+	var h := 192
 	var img := _new_canvas(w, h)
-	var cx := 56.0
-	var cy := 48.0
+	var cx := 112.0
+	var cy := 96.0
 
 	match biome:
 		"tropical_forest":
@@ -385,7 +388,7 @@ static func _draw_hex_tile(biome: String) -> Image:
 			]
 			for y in range(h):
 				for x in range(w):
-					var dist := Vector2((float(x) - cx) / 52.0, (float(y) - cy) / 44.0).length()
+					var dist := Vector2((float(x) - cx) / 104.0, (float(y) - cy) / 88.0).length()
 					var n := _hash2d(x / 2, y / 2, 11) % 4
 					var fine := _hash2d(x, y, 17) % 5
 					var idx := clampi(n + (1 if dist < 0.62 else 0) - (1 if dist > 0.86 else 0), 0, 3)
@@ -396,20 +399,18 @@ static func _draw_hex_tile(biome: String) -> Image:
 						col = col.darkened(0.06)
 					_px(img, x, y, col)
 
-			# Rich moss patches & humus clearings
-			var moss_spots := [
-				Vector2i(34, 30), Vector2i(74, 28), Vector2i(28, 60),
-				Vector2i(78, 62), Vector2i(55, 48), Vector2i(46, 70), Vector2i(62, 24)
-			]
-			for ms in moss_spots:
-				_ellipse(img, ms.x, ms.y, 11, 7, Color("#175c2e"))
-				_ellipse(img, ms.x - 1, ms.y - 1, 8, 5, Color("#2d9447"))
-				_ellipse(img, ms.x + 2, ms.y + 1, 5, 3, Color("#49c468"))
+			# Soft organic moss dither & tiny forest floor details (no large bullseye ovals)
+			for ms in [
+				Vector2i(68, 60), Vector2i(148, 56), Vector2i(56, 120),
+				Vector2i(156, 124), Vector2i(110, 96), Vector2i(92, 140)
+			]:
+				_ellipse(img, ms.x, ms.y, 8, 4, Color("#21783d"))
+				_ellipse(img, ms.x + 1, ms.y, 5, 2, Color("#34a856"))
 
 			# Pixel ferns, tiny flowers & mossy stones across the parcel
-			for i in range(28):
-				var fx := 14 + (_hash2d(i, 1, 31) % 84)
-				var fy := 12 + (_hash2d(i, 2, 31) % 72)
+			for i in range(48):
+				var fx := 24 + (_hash2d(i, 1, 31) % 176)
+				var fy := 20 + (_hash2d(i, 2, 31) % 152)
 				if i % 3 == 0:
 					# Mini pixel fern frond cluster
 					_line(img, fx, fy, fx - 3, fy - 2, Color("#124d26"))
@@ -439,8 +440,8 @@ static func _draw_hex_tile(biome: String) -> Image:
 			]
 			for y in range(h):
 				for x in range(w):
-					var dist := Vector2((float(x) - cx) / 52.0, (float(y) - cy) / 44.0).length()
-					var wave := int(sin(float(x) * 0.14 + float(y) * 0.08) * 1.5)
+					var dist := Vector2((float(x) - cx) / 104.0, (float(y) - cy) / 88.0).length()
+					var wave := int(sin(float(x) * 0.10 + float(y) * 0.06) * 1.5)
 					var n := (_hash2d(x / 2, y / 2, 23) + wave) % 4
 					var idx := clampi(abs(n) + (1 if dist < 0.58 else 0), 0, 3)
 					var col: Color = tones[idx]
@@ -448,19 +449,16 @@ static func _draw_hex_tile(biome: String) -> Image:
 						col = col.lightened(0.07)
 					_px(img, x, y, col)
 
-			# Warm red-earth natural animal trails / dry soil patches
-			var dirt_patches := [
-				Vector2i(36, 36), Vector2i(56, 48), Vector2i(74, 56),
-				Vector2i(44, 64), Vector2i(68, 32)
-			]
-			for dp in dirt_patches:
-				_ellipse(img, dp.x, dp.y, 12, 6, Color("#9c622b"))
-				_ellipse(img, dp.x, dp.y, 8, 4, Color("#b57638"))
+			# Subtle warm golden soil accents (blended naturally into savanna grass)
+			for dp in [
+				Vector2i(72, 72), Vector2i(148, 112), Vector2i(88, 128), Vector2i(136, 64)
+			]:
+				_ellipse(img, dp.x, dp.y, 7, 3, Color("#bd8b28"))
 
 			# Tall golden grass tufts & reddish pebbles
-			for i in range(32):
-				var gx := 12 + (_hash2d(i, 3, 41) % 88)
-				var gy := 10 + (_hash2d(i, 4, 41) % 76)
+			for i in range(54):
+				var gx := 20 + (_hash2d(i, 3, 41) % 184)
+				var gy := 18 + (_hash2d(i, 4, 41) % 156)
 				if i % 3 != 0:
 					_line(img, gx, gy, gx - 1, gy - 3, Color("#8c6518"))
 					_line(img, gx + 1, gy, gx + 2, gy - 4, Color("#f2d06b"))
@@ -479,7 +477,7 @@ static func _draw_hex_tile(biome: String) -> Image:
 			for y in range(h):
 				for x in range(w):
 					# Wind-carved sand dune ripples
-					var ripple := sin(float(y) * 0.38 + sin(float(x) * 0.09) * 2.2)
+					var ripple := sin(float(y) * 0.28 + sin(float(x) * 0.06) * 2.2)
 					var idx := 1
 					if ripple > 0.55:
 						idx = 3
@@ -492,9 +490,9 @@ static func _draw_hex_tile(biome: String) -> Image:
 					_px(img, x, y, tones[idx])
 
 			# Terracotta pebbles, dry cracks & desert scrub spots
-			for i in range(26):
-				var sx := 14 + (_hash2d(i, 5, 61) % 84)
-				var sy := 12 + (_hash2d(i, 6, 61) % 72)
+			for i in range(56):
+				var sx := 24 + (_hash2d(i, 5, 61) % 176)
+				var sy := 20 + (_hash2d(i, 6, 61) % 152)
 				if i % 4 == 0:
 					_line(img, sx - 4, sy, sx + 3, sy + 2, Color("#6e3819"))
 					_line(img, sx, sy + 1, sx + 2, sy + 4, Color("#6e3819"))
@@ -515,24 +513,21 @@ static func _draw_hex_tile(biome: String) -> Image:
 			]
 			for y in range(h):
 				for x in range(w):
-					var dist := Vector2((float(x) - cx) / 52.0, (float(y) - cy) / 44.0).length()
+					var dist := Vector2((float(x) - cx) / 104.0, (float(y) - cy) / 88.0).length()
 					var n := _hash2d(x / 2, y / 2, 71) % 4
 					var idx := clampi(n + (1 if dist < 0.65 else 0), 0, 3)
 					_px(img, x, y, tones[idx])
 
-			# Boreal blue-grey moss & permafrost patches
-			var moss_patches := [
-				Vector2i(34, 34), Vector2i(72, 36), Vector2i(48, 62),
-				Vector2i(64, 26), Vector2i(30, 56)
-			]
-			for mp in moss_patches:
-				_ellipse(img, mp.x, mp.y, 10, 6, Color("#5e7887"))
-				_ellipse(img, mp.x, mp.y, 7, 4, Color("#6e8c76"))
+			# Subtle boreal frost patches
+			for mp in [
+				Vector2i(68, 68), Vector2i(144, 72), Vector2i(96, 124), Vector2i(128, 52)
+			]:
+				_ellipse(img, mp.x, mp.y, 8, 4, Color("#a5bfd0"))
 
 			# Ice crystals & frozen stones
-			for i in range(24):
-				var ix := 14 + (_hash2d(i, 7, 79) % 84)
-				var iy := 12 + (_hash2d(i, 8, 79) % 72)
+			for i in range(40):
+				var ix := 24 + (_hash2d(i, 7, 79) % 176)
+				var iy := 20 + (_hash2d(i, 8, 79) % 152)
 				if i % 2 == 0:
 					_px(img, ix, iy, Color("#ffffff"))
 					_px(img, ix - 1, iy, Color("#7dd3fc"))
@@ -553,22 +548,23 @@ static func _draw_hex_tile(biome: String) -> Image:
 			for y in range(h):
 				for x in range(w):
 					# Stratified granite terraces
-					var band := ((y + int(sin(float(x) * 0.12) * 4.0)) / 7) % 4
+					var band := ((y + int(sin(float(x) * 0.08) * 5.0)) / 9) % 4
 					var n := _hash2d(x, y, 89) % 4
 					var idx := clampi((band + (1 if n > 2 else 0)) % 4, 0, 3)
 					_px(img, x, y, tones[idx])
 
 			# Alpine snow ridges & dark rock crevices
 			var snow_caps := [
-				Vector2i(46, 28), Vector2i(66, 34), Vector2i(54, 52), Vector2i(36, 48)
+				Vector2i(92, 56), Vector2i(132, 68), Vector2i(108, 104),
+				Vector2i(72, 96), Vector2i(148, 116), Vector2i(68, 132)
 			]
 			for sc in snow_caps:
-				_ellipse(img, sc.x, sc.y, 11, 5, Color("#cbd5e1"))
-				_ellipse(img, sc.x, sc.y - 1, 8, 3, Color("#f1f5f9"))
+				_ellipse(img, sc.x, sc.y, 15, 7, Color("#cbd5e1"))
+				_ellipse(img, sc.x, sc.y - 1, 11, 4, Color("#f1f5f9"))
 
-			for i in range(18):
-				var rx := 16 + (_hash2d(i, 9, 97) % 80)
-				var ry := 14 + (_hash2d(i, 10, 97) % 68)
+			for i in range(38):
+				var rx := 26 + (_hash2d(i, 9, 97) % 172)
+				var ry := 24 + (_hash2d(i, 10, 97) % 144)
 				_line(img, rx - 4, ry, rx + 4, ry + 1, Color("#2e2b29"))
 				_line(img, rx - 3, ry - 1, rx + 3, ry, Color("#b5afa8"))
 
@@ -576,22 +572,25 @@ static func _draw_hex_tile(biome: String) -> Image:
 			# Outer turquoise shallow water, white foam ring, and inner golden sandbar
 			for y in range(h):
 				for x in range(w):
-					var d := Vector2((float(x) - cx) / 48.0, (float(y) - cy) / 40.0).length()
+					var d := Vector2((float(x) - cx) / 96.0, (float(y) - cy) / 80.0).length()
 					var jitter := float(_hash2d(x / 2, y / 2, 103) % 10) * 0.018
 					var dj := d + jitter
 					var col := Color("#258f86")
-					if dj < 0.48:
+					if dj < 0.50:
 						col = Color("#ebd294") if _hash2d(x, y, 107) % 3 == 0 else Color("#d9be7e")
-					elif dj < 0.58:
+					elif dj < 0.60:
 						col = Color("#c2a361")
-					elif dj < 0.66:
+					elif dj < 0.68:
 						col = Color("#e0f7fa")
-					elif dj < 0.82:
+					elif dj < 0.84:
 						col = Color("#45c4b8") if _hash2d(x, y, 109) % 2 == 0 else Color("#32a89d")
 					_px(img, x, y, col)
 
 			# Starfish, seashells & water sparkles
-			var shells := [Vector2i(48, 42), Vector2i(64, 50), Vector2i(42, 54), Vector2i(58, 36)]
+			var shells := [
+				Vector2i(96, 84), Vector2i(128, 100), Vector2i(84, 108),
+				Vector2i(116, 72), Vector2i(74, 86), Vector2i(138, 82)
+			]
 			for idx in range(shells.size()):
 				var sp: Vector2i = shells[idx]
 				if idx % 2 == 0:
@@ -616,7 +615,7 @@ static func _draw_hex_tile(biome: String) -> Image:
 			]
 			for y in range(h):
 				for x in range(w):
-					var wave := sin(float(x) * 0.16 + float(y) * 0.22)
+					var wave := sin(float(x) * 0.11 + float(y) * 0.15)
 					var idx := 1
 					if wave > 0.55:
 						idx = 3
@@ -625,11 +624,11 @@ static func _draw_hex_tile(biome: String) -> Image:
 					elif wave < -0.55:
 						idx = 0
 					_px(img, x, y, tones[idx])
-			for i in range(16):
-				var wx := 14 + (_hash2d(i, 11, 131) % 84)
-				var wy := 12 + (_hash2d(i, 12, 131) % 72)
-				_line(img, wx - 4, wy, wx + 4, wy, Color("#7dd3fc"))
-				_line(img, wx - 2, wy - 1, wx + 2, wy - 1, Color("#e0f2fe"))
+			for i in range(36):
+				var wx := 24 + (_hash2d(i, 11, 131) % 176)
+				var wy := 20 + (_hash2d(i, 12, 131) % 152)
+				_line(img, wx - 5, wy, wx + 5, wy, Color("#7dd3fc"))
+				_line(img, wx - 3, wy - 1, wx + 3, wy - 1, Color("#e0f2fe"))
 
 	return img
 

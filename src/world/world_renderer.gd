@@ -8,7 +8,7 @@ signal hex_clicked(hex_id: String, button_index: int)
 signal hex_dragged(hex_id: String)
 signal deme_clicked(deme_id: String, hex_id: String)
 
-const MAX_COLUMN_HEIGHT_PX: float = 44.0
+const MAX_COLUMN_HEIGHT_PX: float = 72.0
 
 const BIOME_PALETTE: Dictionary = {
 	"tropical_forest": {
@@ -336,7 +336,7 @@ func _reproject() -> void:
 		var v_pos := _project(village["world_xy"], village["top_z"])
 		var sf: float = village["sf"]
 		village["pos"] = v_pos
-		village["hit_rect"] = Rect2(v_pos - Vector2(22, 26) * sf, Vector2(44, 40) * sf)
+		village["hit_rect"] = Rect2(v_pos - Vector2(36, 36) * sf, Vector2(72, 56) * sf)
 	for prop in _static_props:
 		prop.project(_ground, _lift)
 	_static_props.sort_custom(func(a: Prop, b: Prop) -> bool: return a.y < b.y)
@@ -668,9 +668,9 @@ func _draw_water_fx(fx: Node2D, hex_id: String) -> void:
 	var center: Vector2 = _hex_centers[hex_id]
 	if _is_water(cell) or cell.biome == "coastal_shallows":
 		var phase := _anim_time * 2.4 + float(cell.q) * 1.1 + float(cell.r) * 0.8
-		var wave_offset := Vector2(sin(phase) * 4.5, cos(phase) * 2.2)
-		fx.draw_line(center + wave_offset + Vector2(-11, -4), center + wave_offset + Vector2(11, -4), C_RIPPLE, 2.0)
-		fx.draw_line(center - wave_offset + Vector2(-7, 6), center - wave_offset + Vector2(9, 6), C_RIPPLE, 1.6)
+		var wave_offset := Vector2(sin(phase) * 7.5, cos(phase) * 3.8)
+		fx.draw_line(center + wave_offset + Vector2(-24, -10), center + wave_offset + Vector2(24, -10), C_RIPPLE, 2.0)
+		fx.draw_line(center - wave_offset + Vector2(-18, 12), center - wave_offset + Vector2(20, 12), C_RIPPLE, 1.6)
 
 	var top_pts: PackedVector2Array = _hex_polys[hex_id]
 	for dir_idx in _coast_dirs[hex_id]:
@@ -692,6 +692,7 @@ func _collect_roads() -> Array[Dictionary]:
 	var roads: Array[Dictionary] = []
 	var handled_deme_pairs: Dictionary = {}
 	var handled_hex_pairs: Dictionary = {}
+	var intra_hex_badge_drawn: Dictionary = {}
 
 	# 1. Explicit active flows from simulation engine
 	for flow in world_state.active_flows:
@@ -699,18 +700,29 @@ func _collect_roads() -> Array[Dictionary]:
 			continue
 		var cell_a: EvoTypes.HexCell = world_state.cells[flow.from_hex_id]
 		var cell_b: EvoTypes.HexCell = world_state.cells[flow.to_hex_id]
-		var p_a := _get_flow_endpoint(cell_a, flow.from_deme_id, 0)
-		var p_b := _get_flow_endpoint(cell_b, flow.to_deme_id, 1)
+		var is_same_hex := cell_a.id == cell_b.id
+		var h_key := _make_pair_key(flow.from_hex_id, flow.to_hex_id)
+		if not is_same_hex and handled_hex_pairs.has(h_key):
+			continue
 
-		handled_hex_pairs[_make_pair_key(flow.from_hex_id, flow.to_hex_id)] = true
+		var endpoints := _resolve_road_endpoints(cell_a, cell_b, flow.from_deme_id, flow.to_deme_id)
+		var p_a: Vector2 = endpoints["p_a"]
+		var p_b: Vector2 = endpoints["p_b"]
+
+		if not is_same_hex:
+			handled_hex_pairs[h_key] = true
 		if flow.from_deme_id != "" and flow.to_deme_id != "":
 			handled_deme_pairs[_make_pair_key(flow.from_deme_id, flow.to_deme_id)] = true
 
 		match flow.flow_type:
 			"dispute":
-				roads.append({"kind": "dispute", "p_a": p_a, "p_b": p_b})
+				var show_badge := true
+				if is_same_hex:
+					show_badge = not intra_hex_badge_drawn.has(cell_a.id)
+					intra_hex_badge_drawn[cell_a.id] = true
+				roads.append({"kind": "dispute", "p_a": p_a, "p_b": p_b, "show_badge": show_badge, "badge_pos": _cell_top_center(cell_a) if is_same_hex else (p_a + p_b) * 0.5})
 			"exchange", "cooperate", "merge":
-				var kind := "bridge" if _should_use_bridge(cell_a, cell_b) else "collab"
+				var kind := "bridge" if (not is_same_hex and _should_use_bridge(cell_a, cell_b)) else "collab"
 				roads.append({"kind": kind, "p_a": p_a, "p_b": p_b, "color": Color("#eab308")})
 			"migration":
 				roads.append({"kind": "expedition", "p_a": p_a, "p_b": p_b})
@@ -723,33 +735,68 @@ func _collect_roads() -> Array[Dictionary]:
 			all_demes.append(d)
 
 	var connected_deme_ids: Dictionary = {}
-
 	for i in range(all_demes.size()):
 		var da: EvoTypes.Deme = all_demes[i]
 		var ca: EvoTypes.HexCell = world_state.cells[da.hex_id]
 		for j in range(i + 1, all_demes.size()):
 			var db: EvoTypes.Deme = all_demes[j]
 			var cb: EvoTypes.HexCell = world_state.cells[db.hex_id]
-			var dist := HexMath.hex_distance(ca.q, ca.r, cb.q, cb.r)
-			if dist > 1:
+			if HexMath.hex_distance(ca.q, ca.r, cb.q, cb.r) <= 1:
+				connected_deme_ids[da.id] = true
+				connected_deme_ids[db.id] = true
+
+	# 2a. Intra-hex cohabiting pairs (dist == 0)
+	for i in range(all_demes.size()):
+		var da: EvoTypes.Deme = all_demes[i]
+		var ca: EvoTypes.HexCell = world_state.cells[da.hex_id]
+		for j in range(i + 1, all_demes.size()):
+			var db: EvoTypes.Deme = all_demes[j]
+			if da.hex_id != db.hex_id:
 				continue
-
-			connected_deme_ids[da.id] = true
-			connected_deme_ids[db.id] = true
-
 			var d_key := _make_pair_key(da.id, db.id)
 			if handled_deme_pairs.has(d_key):
 				continue
 			handled_deme_pairs[d_key] = true
-			handled_hex_pairs[_make_pair_key(ca.id, cb.id)] = true
 
+			var p_a := _get_deme_local_pos(ca, da.id)
+			var p_b := _get_deme_local_pos(ca, db.id)
+			match _classify_village_pair_relation(da, db):
+				"dispute_front":
+					var show_badge := not intra_hex_badge_drawn.has(ca.id)
+					intra_hex_badge_drawn[ca.id] = true
+					roads.append({"kind": "dispute", "p_a": p_a, "p_b": p_b, "show_badge": show_badge, "badge_pos": _cell_top_center(ca)})
+				"active_road":
+					roads.append({"kind": "collab", "p_a": p_a, "p_b": p_b, "color": Color(da.color)})
+				_:
+					roads.append({"kind": "broken", "p_a": p_a, "p_b": p_b})
+
+	# 2b. Inter-hex neighboring pairs (dist == 1): at most 1 road per hex border, connecting the closest facing sectors
+	for hex_id in world_state.cells:
+		var ca: EvoTypes.HexCell = world_state.cells[hex_id]
+		if ca.deme_ids.is_empty():
+			continue
+		for n_id in HexMath.get_neighbor_ids(ca.q, ca.r, world_state.cells):
+			var cb: EvoTypes.HexCell = world_state.cells[n_id]
+			if cb.deme_ids.is_empty():
+				continue
+			var h_key := _make_pair_key(ca.id, cb.id)
+			if handled_hex_pairs.has(h_key):
+				continue
+			handled_hex_pairs[h_key] = true
+
+			var pair := _find_closest_deme_pair(ca, cb)
+			if pair.is_empty():
+				continue
+			var da: EvoTypes.Deme = pair["da"]
+			var db: EvoTypes.Deme = pair["db"]
+			handled_deme_pairs[_make_pair_key(da.id, db.id)] = true
 			var p_a := _get_deme_local_pos(ca, da.id)
 			var p_b := _get_deme_local_pos(cb, db.id)
 			match _classify_village_pair_relation(da, db):
 				"dispute_front":
-					roads.append({"kind": "dispute", "p_a": p_a, "p_b": p_b})
+					roads.append({"kind": "dispute", "p_a": p_a, "p_b": p_b, "show_badge": true, "badge_pos": (p_a + p_b) * 0.5})
 				"active_road":
-					var kind := "bridge" if dist == 1 and _should_use_bridge(ca, cb) else "collab"
+					var kind := "bridge" if _should_use_bridge(ca, cb) else "collab"
 					roads.append({"kind": kind, "p_a": p_a, "p_b": p_b, "color": Color(da.color)})
 				_:
 					roads.append({"kind": "broken", "p_a": p_a, "p_b": p_b})
@@ -898,12 +945,54 @@ func _classify_village_pair_relation(da: EvoTypes.Deme, db: EvoTypes.Deme) -> St
 	return "broken_road"
 
 
-func _get_deme_local_pos(cell: EvoTypes.HexCell, deme_id: String) -> Vector2:
+func _get_deme_world_pos(cell: EvoTypes.HexCell, deme_id: String) -> Vector2:
 	var w_xy := HexMath.axial_to_world(cell.q, cell.r)
 	var idx := cell.deme_ids.find(deme_id)
 	if idx >= 0:
 		w_xy += HexMath.compute_village_sector_offset(idx, cell.deme_ids.size(), HexMath.HEX_SIZE)
-	return _project(w_xy, _get_cell_top_z(cell))
+	return w_xy
+
+
+func _get_deme_local_pos(cell: EvoTypes.HexCell, deme_id: String) -> Vector2:
+	return _project(_get_deme_world_pos(cell, deme_id), _get_cell_top_z(cell))
+
+
+func _find_closest_deme_pair(cell_a: EvoTypes.HexCell, cell_b: EvoTypes.HexCell) -> Dictionary:
+	var best_da: EvoTypes.Deme = null
+	var best_db: EvoTypes.Deme = null
+	var best_dist_sq := INF
+	for id_a in cell_a.deme_ids:
+		if not world_state.demes.has(id_a):
+			continue
+		var da: EvoTypes.Deme = world_state.demes[id_a]
+		var wa := _get_deme_world_pos(cell_a, id_a)
+		for id_b in cell_b.deme_ids:
+			if not world_state.demes.has(id_b):
+				continue
+			var db: EvoTypes.Deme = world_state.demes[id_b]
+			var wb := _get_deme_world_pos(cell_b, id_b)
+			var d2 := wa.distance_squared_to(wb)
+			if d2 < best_dist_sq:
+				best_dist_sq = d2
+				best_da = da
+				best_db = db
+	if best_da == null or best_db == null:
+		return {}
+	return {"da": best_da, "db": best_db}
+
+
+func _resolve_road_endpoints(cell_a: EvoTypes.HexCell, cell_b: EvoTypes.HexCell, from_deme_id: String, to_deme_id: String) -> Dictionary:
+	if cell_a.id != cell_b.id and not cell_a.deme_ids.is_empty() and not cell_b.deme_ids.is_empty():
+		var closest := _find_closest_deme_pair(cell_a, cell_b)
+		if not closest.is_empty():
+			return {
+				"p_a": _get_deme_local_pos(cell_a, (closest["da"] as EvoTypes.Deme).id),
+				"p_b": _get_deme_local_pos(cell_b, (closest["db"] as EvoTypes.Deme).id)
+			}
+	return {
+		"p_a": _get_flow_endpoint(cell_a, from_deme_id, 0),
+		"p_b": _get_flow_endpoint(cell_b, to_deme_id, 1)
+	}
 
 
 func _get_flow_endpoint(cell: EvoTypes.HexCell, deme_id: String, fallback_idx: int) -> Vector2:
@@ -920,46 +1009,50 @@ func _sample_road_curve(p_a: Vector2, p_b: Vector2, t: float, curve_sign: float)
 	var diff := p_b - p_a
 	var dist := diff.length()
 	var perp := Vector2(-diff.y, diff.x).normalized() if dist > 0.01 else Vector2.UP
-	var ctrl := (p_a + p_b) * 0.5 + perp * (minf(dist * 0.14, 14.0) * curve_sign)
+	var ctrl := (p_a + p_b) * 0.5 + perp * (minf(dist * 0.14, 24.0) * curve_sign)
 	var u := 1.0 - t
 	return (u * u) * p_a + (2.0 * u * t) * ctrl + (t * t) * p_b
 
 
 func _bridge_arch_point(p_a: Vector2, p_b: Vector2, t: float) -> Vector2:
-	return p_a.lerp(p_b, t) + Vector2(0, sin(t * PI) * -5.5)
+	return p_a.lerp(p_b, t) + Vector2(0, sin(t * PI) * -8.0)
 
 
 func _draw_collaboration_route(p_a: Vector2, p_b: Vector2) -> void:
 	var ci := _network_layer
 	# 1. Sinuous Stardew Valley cobblestone road with stone curbs
-	var segments := 18
+	var segments := 26
 	var pts := PackedVector2Array()
 	for i in range(segments + 1):
 		pts.append(_sample_road_curve(p_a, p_b, float(i) / float(segments), 1.0))
 
 	# Dark earth foundation & stone curb border
-	ci.draw_polyline(pts, Color("#4a3219"), 10.5)
-	ci.draw_polyline(pts, Color("#8c6d46"), 8.4)
-	ci.draw_polyline(pts, Color("#d6b88a"), 5.8)
+	ci.draw_polyline(pts, Color("#4a3219"), 11.5)
+	ci.draw_polyline(pts, Color("#8c6d46"), 9.2)
+	ci.draw_polyline(pts, Color("#d6b88a"), 6.4)
 
 	# Individual pixel-art cobblestones along the winding road
 	for i in range(1, segments):
 		var pt := pts[i]
 		var dir := (pts[i + 1] - pts[i - 1]).normalized()
 		var perp := Vector2(-dir.y, dir.x)
-		ci.draw_circle(pt + perp * 1.6, 2.1, Color("#e6ccb2") if i % 2 == 0 else Color("#c4a474"))
-		ci.draw_circle(pt - perp * 1.6, 1.9, Color("#b89566"))
+		ci.draw_circle(pt + perp * 1.9, 2.2, Color("#e6ccb2") if i % 2 == 0 else Color("#c4a474"))
+		ci.draw_circle(pt - perp * 1.9, 2.0, Color("#b89566"))
 
-	# Roadside wooden lantern post with warm golden glow
-	var lantern_pt := _sample_road_curve(p_a, p_b, 0.32, 1.0) + Vector2(0, -4.0)
-	ci.draw_circle(lantern_pt + Vector2(2.0, -5.0), 8.0, Color(1.0, 0.88, 0.38, 0.25))
-	_draw_centered_sprite(ci, "road_lantern", lantern_pt, 0.72)
+	# Roadside wooden lantern post on the road shoulder when route is long enough
+	var road_len := p_a.distance_to(p_b)
+	if road_len > 170.0:
+		var road_dir := (p_b - p_a) / road_len
+		var road_perp := Vector2(-road_dir.y, road_dir.x)
+		var lantern_pt := _sample_road_curve(p_a, p_b, 0.30, 1.0) + road_perp * 11.0 + Vector2(0, -4.0)
+		ci.draw_circle(lantern_pt + Vector2(2.0, -5.0), 9.0, Color(1.0, 0.88, 0.38, 0.25))
+		_draw_centered_sprite(ci, "road_lantern", lantern_pt, 0.80)
 
 	# Midpoint Alliance / Trade Emblem Badge
-	var mid := _sample_road_curve(p_a, p_b, 0.5, 1.0) + Vector2(0, -10.0)
-	ci.draw_circle(mid, 8.5, Color("#064e3b"))
-	ci.draw_circle(mid, 7.2, Color("#10b981"))
-	_draw_centered_sprite(ci, "icon_coop_link", mid + Vector2(0, 5.0), 0.72)
+	var mid := _sample_road_curve(p_a, p_b, 0.5, 1.0) + Vector2(0, -11.0)
+	ci.draw_circle(mid, 8.2, Color("#064e3b"))
+	ci.draw_circle(mid, 6.8, Color("#10b981"))
+	_draw_centered_sprite(ci, "icon_coop_link", mid + Vector2(0, 4.8), 0.72)
 
 
 func _draw_wooden_bridge(p_a: Vector2, p_b: Vector2) -> void:
@@ -972,63 +1065,69 @@ func _draw_wooden_bridge(p_a: Vector2, p_b: Vector2) -> void:
 	for t_pile in [0.22, 0.50, 0.78]:
 		var base_pt := p_a.lerp(p_b, t_pile)
 		var pile_top := base_pt + Vector2(0, -3.0)
-		var pile_bot := base_pt + Vector2(0, 11.0)
-		ci.draw_line(pile_top - perp * 3.5, pile_bot - perp * 3.5, Color("#3d2314"), 2.8)
-		ci.draw_line(pile_top + perp * 3.5, pile_bot + perp * 3.5, Color("#4a2c18"), 2.8)
+		var pile_bot := base_pt + Vector2(0, 14.0)
+		ci.draw_line(pile_top - perp * 4.0, pile_bot - perp * 4.0, Color("#3d2314"), 3.0)
+		ci.draw_line(pile_top + perp * 4.0, pile_bot + perp * 4.0, Color("#4a2c18"), 3.0)
 		# Water ripple around piling base
-		ci.draw_line(pile_bot - Vector2(5.0, 0), pile_bot + Vector2(5.0, 0), Color(0.88, 0.97, 1.0, 0.65), 1.5)
+		ci.draw_line(pile_bot - Vector2(6.0, 0), pile_bot + Vector2(6.0, 0), Color(0.88, 0.97, 1.0, 0.65), 1.6)
 
 	# Bridge deck & side beams
-	var steps := 14
+	var steps := 20
 	var curve_pts := PackedVector2Array()
 	var rail_left := PackedVector2Array()
 	var rail_right := PackedVector2Array()
 	for i in range(steps + 1):
 		var pt := _bridge_arch_point(p_a, p_b, float(i) / float(steps))
 		curve_pts.append(pt)
-		rail_left.append(pt - perp * 4.8 + Vector2(0, -3.5))
-		rail_right.append(pt + perp * 4.8 + Vector2(0, -3.5))
+		rail_left.append(pt - perp * 5.2 + Vector2(0, -3.8))
+		rail_right.append(pt + perp * 5.2 + Vector2(0, -3.8))
 
-	ci.draw_polyline(curve_pts, Color("#3d2314"), 10.2)
-	ci.draw_polyline(curve_pts, Color("#b07d4f"), 7.4)
+	ci.draw_polyline(curve_pts, Color("#3d2314"), 11.2)
+	ci.draw_polyline(curve_pts, Color("#b07d4f"), 8.2)
 
 	# Individual wooden planks perpendicular to bridge
 	for i in range(1, steps):
 		var c := curve_pts[i]
-		ci.draw_line(c - perp * 4.4, c + perp * 4.4, Color("#d4a373") if i % 2 == 0 else Color("#8c5830"), 2.2)
+		ci.draw_line(c - perp * 4.8, c + perp * 4.8, Color("#d4a373") if i % 2 == 0 else Color("#8c5830"), 2.4)
 
 	# Handrails
-	ci.draw_polyline(rail_left, Color("#6b3e26"), 1.8)
-	ci.draw_polyline(rail_right, Color("#6b3e26"), 1.8)
+	ci.draw_polyline(rail_left, Color("#6b3e26"), 2.0)
+	ci.draw_polyline(rail_right, Color("#6b3e26"), 2.0)
 
-	var mid := curve_pts[steps / 2] + Vector2(0, -11.0)
-	ci.draw_circle(mid, 8.0, Color("#064e3b"))
-	ci.draw_circle(mid, 6.8, Color("#10b981"))
-	_draw_centered_sprite(ci, "icon_coop_link", mid + Vector2(0, 4.8), 0.70)
+	var mid := curve_pts[steps / 2] + Vector2(0, -12.0)
+	ci.draw_circle(mid, 8.5, Color("#064e3b"))
+	ci.draw_circle(mid, 7.2, Color("#10b981"))
+	_draw_centered_sprite(ci, "icon_coop_link", mid + Vector2(0, 5.0), 0.74)
 
 
 func _draw_dispute_barricade_front(p_a: Vector2, p_b: Vector2) -> void:
 	var ci := _network_layer
 	var diff := p_b - p_a
-	var dir := diff.normalized() if diff.length() > 0.01 else Vector2.RIGHT
+	var dist := diff.length()
+	var dir := diff / dist if dist > 0.01 else Vector2.RIGHT
 	var perp := Vector2(-dir.y, dir.x)
 	var mid := (p_a + p_b) * 0.5
+	var is_intra_hex := dist < 165.0
 
 	# 1. Split trampled war-paths stopping at the frontier barricades
-	var stop_a := p_a.lerp(p_b, 0.36)
-	var stop_b := p_b.lerp(p_a, 0.36)
-	ci.draw_line(p_a, stop_a, Color("#3b2313"), 7.5)
-	ci.draw_line(p_a, stop_a, Color("#785233"), 5.0)
-	ci.draw_line(p_b, stop_b, Color("#3b2313"), 7.5)
-	ci.draw_line(p_b, stop_b, Color("#785233"), 5.0)
+	var stop_a := p_a.lerp(p_b, 0.34 if is_intra_hex else 0.38)
+	var stop_b := p_b.lerp(p_a, 0.34 if is_intra_hex else 0.38)
+	ci.draw_line(p_a, stop_a, Color("#3b2313"), 6.5 if is_intra_hex else 7.5)
+	ci.draw_line(p_a, stop_a, Color("#785233"), 4.2 if is_intra_hex else 5.0)
+	ci.draw_line(p_b, stop_b, Color("#3b2313"), 6.5 if is_intra_hex else 7.5)
+	ci.draw_line(p_b, stop_b, Color("#785233"), 4.2 if is_intra_hex else 5.0)
 
 	# Scorched earth & battle debris in the no-man's-land center
-	_draw_ellipse_filled(ci, mid, 13.0, 7.5, Color(0.16, 0.08, 0.05, 0.78))
-	ci.draw_line(mid - perp * 11.0, mid + perp * 11.0, Color("#dc2626"), 2.2)
+	var scorch_rx := 10.0 if is_intra_hex else 16.0
+	_draw_ellipse_filled(ci, mid, scorch_rx, scorch_rx * 0.58, Color(0.16, 0.08, 0.05, 0.72))
+	ci.draw_line(mid - perp * scorch_rx, mid + perp * scorch_rx, Color("#dc2626"), 2.0)
 
-	# 2. Two opposing sharpened log barricades (`barricade_spikes`) blocking the road
-	_draw_centered_sprite(ci, "barricade_spikes", p_a.lerp(p_b, 0.40) + Vector2(0, 2.0), 0.86)
-	_draw_centered_sprite(ci, "barricade_spikes", p_a.lerp(p_b, 0.60) + Vector2(0, 2.0), 0.86)
+	# 2. Sharpened log barricades (`barricade_spikes`) blocking the road
+	if is_intra_hex:
+		_draw_centered_sprite(ci, "barricade_spikes", mid + Vector2(0, 2.0), 0.76)
+	else:
+		_draw_centered_sprite(ci, "barricade_spikes", p_a.lerp(p_b, 0.42) + Vector2(0, 2.0), 0.90)
+		_draw_centered_sprite(ci, "barricade_spikes", p_a.lerp(p_b, 0.58) + Vector2(0, 2.0), 0.90)
 
 
 func _draw_broken_cut_road(p_a: Vector2, p_b: Vector2) -> void:
@@ -1036,30 +1135,30 @@ func _draw_broken_cut_road(p_a: Vector2, p_b: Vector2) -> void:
 	var mid := (p_a + p_b) * 0.5
 
 	# 1. Weathered cobblestone remnants on both ends that break off before the middle
-	for rng in [Vector2(0.08, 0.34), Vector2(0.66, 0.92)]:
-		var steps := 5
+	for rng in [Vector2(0.10, 0.38), Vector2(0.62, 0.90)]:
+		var steps := 7
 		for i in range(steps + 1):
 			var pt := p_a.lerp(p_b, lerpf(rng.x, rng.y, float(i) / float(steps)))
-			ci.draw_circle(pt, 3.6, Color("#47423c"))
-			ci.draw_circle(pt, 2.4, Color("#8c8479") if i % 2 == 0 else Color("#6e675f"))
+			ci.draw_circle(pt, 3.8, Color("#47423c"))
+			ci.draw_circle(pt, 2.6, Color("#8c8479") if i % 2 == 0 else Color("#6e675f"))
 
 	# 2. Cracked ground & encroaching wild weeds in the severed gap
-	_draw_centered_sprite(ci, "soil_crack", mid + Vector2(0, 4.0), 0.85)
-	ci.draw_circle(mid + Vector2(-5.0, 2.0), 3.2, Color("#4d7c0f"))
-	ci.draw_circle(mid + Vector2(5.0, 1.0), 2.8, Color("#65a30d"))
+	_draw_centered_sprite(ci, "soil_crack", mid + Vector2(0, 4.0), 0.92)
+	ci.draw_circle(mid + Vector2(-6.0, 2.0), 3.4, Color("#4d7c0f"))
+	ci.draw_circle(mid + Vector2(6.0, 1.0), 3.0, Color("#65a30d"))
 
 	# 3. Wooden 'X' Road-Closed Barrier (`road_block_sign`) & Broken Link Icon
-	_draw_centered_sprite(ci, "road_block_sign", mid + Vector2(0, 3.0), 0.86)
-	_draw_centered_sprite(ci, "icon_broken_link", mid + Vector2(0, -7.0), 0.72)
+	_draw_centered_sprite(ci, "road_block_sign", mid + Vector2(0, 3.0), 0.92)
+	_draw_centered_sprite(ci, "icon_broken_link", mid + Vector2(0, -8.0), 0.76)
 
 
 func _draw_migration_expedition(p_a: Vector2, p_b: Vector2) -> void:
 	var ci := _network_layer
-	var steps := 12
+	var steps := 18
 	for i in range(1, steps):
 		var pt := _sample_road_curve(p_a, p_b, float(i) / float(steps), -1.0)
-		ci.draw_circle(pt, 3.2, Color("#0369a1"))
-		ci.draw_circle(pt, 2.1, Color("#bae6fd") if i % 2 == 0 else Color("#e0f2fe"))
+		ci.draw_circle(pt, 3.4, Color("#0369a1"))
+		ci.draw_circle(pt, 2.2, Color("#bae6fd") if i % 2 == 0 else Color("#e0f2fe"))
 
 
 # ============================================================================
@@ -1075,9 +1174,9 @@ func _collect_villages() -> Array[Dictionary]:
 		var count := cell.deme_ids.size()
 		var scale_factor := 1.0
 		if count == 2:
-			scale_factor = 0.86
+			scale_factor = 0.88
 		elif count >= 3:
-			scale_factor = 0.76
+			scale_factor = 0.80
 		var world_xy := HexMath.axial_to_world(cell.q, cell.r)
 		var top_z := _get_cell_top_z(cell)
 
@@ -1090,16 +1189,16 @@ func _collect_villages() -> Array[Dictionary]:
 			var is_dimmed: bool = highlighted_lineage_id != "" and deme.lineage_id != highlighted_lineage_id
 			var tier := deme.get_village_tier()
 
-			var bb_offset := Vector2(0, -31.0)
+			var bb_offset := Vector2(0.0, -64.0 if tier >= 3 else -54.0)
 			if count == 2:
-				bb_offset = Vector2(-42.0 if idx == 0 else 42.0, -32.0)
+				bb_offset = Vector2(-22.0 if idx == 0 else 22.0, -58.0)
 			elif count >= 3:
 				if idx == 0:
-					bb_offset = Vector2(0.0, -40.0)
+					bb_offset = Vector2(0.0, -64.0)
 				elif idx == 1:
-					bb_offset = Vector2(56.0, -22.0)
+					bb_offset = Vector2(46.0, -56.0)
 				else:
-					bb_offset = Vector2(-56.0, -22.0)
+					bb_offset = Vector2(-46.0, -56.0)
 
 			villages.append({
 				"deme": deme,
@@ -1120,33 +1219,73 @@ func _collect_villages() -> Array[Dictionary]:
 	return villages
 
 
+func _get_village_building_layout(tier: int, sf: float, has_culture: bool, cultural_count: int, archetype: String) -> Array[Dictionary]:
+	var items: Array[Dictionary] = []
+	match tier:
+		1:
+			items.append({"sprite": "tier1_tent", "offset": Vector2(-24, -10) * sf, "scale": 1.0 * sf})
+		2:
+			items.append({"sprite": "tier2_cottage", "offset": Vector2(-26, -13) * sf, "scale": 1.02 * sf})
+			items.append({"sprite": "tier2_barn", "offset": Vector2(26, -13) * sf, "scale": 0.94 * sf})
+		3:
+			items.append({"sprite": "tier3_townhall", "offset": Vector2(0, -22) * sf, "scale": 1.04 * sf})
+			items.append({"sprite": "tier3_house", "offset": Vector2(-32, -5) * sf, "scale": 0.94 * sf})
+		_:
+			items.append({"sprite": "tier4_citadel", "offset": Vector2(0, -24) * sf, "scale": 1.05 * sf})
+			items.append({"sprite": "tier4_tower", "offset": Vector2(-34, -7) * sf, "scale": 0.94 * sf})
+			items.append({"sprite": "tier4_windmill", "offset": Vector2(34, -7) * sf, "scale": 0.94 * sf})
+
+	if has_culture:
+		var totem_scale := (0.84 + mini(3, cultural_count) * 0.08) * sf
+		items.append({"sprite": "cultural_totem", "offset": Vector2(-26, 15) * sf, "scale": totem_scale})
+
+	var act_offset := Vector2(24, -6) * sf if tier == 1 else (Vector2(32, -5) * sf if tier == 3 else Vector2(26, 15) * sf)
+	items.append({"sprite": "act_" + archetype, "offset": act_offset, "scale": 0.92 * sf})
+	return items
+
+
 func _draw_village_plaza(village: Dictionary) -> void:
 	var ci := _network_layer
 	var deme: EvoTypes.Deme = village["deme"]
 	var sf: float = village["sf"]
 	var modulate_col: Color = village["modulate"]
 	var status_col: Color = village["status_col"]
+	var v_pos: Vector2 = village["pos"]
+	var plaza_center: Vector2 = v_pos + Vector2(0, 4.0 * sf)
 
-	# Town Square Cobblestone Plaza & Vital Status Ring (drawn on ground)
-	var plinth_r := 21.0 * sf
-	var plaza_center: Vector2 = village["pos"] + Vector2(0, 3.0 * sf)
-	var rim_r := plinth_r + 2.5 * sf
+	# 1. Soft village compound earth clearing & individual stone pads under each building
+	_draw_ellipse_filled(ci, v_pos + Vector2(0, -2.0 * sf), 44.0 * sf, 26.0 * sf, Color(0.36, 0.25, 0.16, 0.34) * modulate_col)
+	var layout := _get_village_building_layout(
+		int(village["tier"]),
+		sf,
+		not deme.cultural_trait_ids.is_empty(),
+		deme.cultural_trait_ids.size(),
+		str(village["archetype"])
+	)
+	for b_item in layout:
+		var b_foot: Vector2 = v_pos + (b_item["offset"] as Vector2)
+		_draw_ellipse_filled(ci, b_foot + Vector2(0, -1.5 * sf), 13.5 * sf, 7.5 * sf, Color("#7c5c3b") * modulate_col)
+		_draw_ellipse_filled(ci, b_foot + Vector2(0, -1.5 * sf), 11.0 * sf, 6.0 * sf, Color("#cbb082") * modulate_col)
+
+	# 2. Town Square Cobblestone Plaza & Vital Status Ring (drawn on ground)
+	var plinth_r := 26.0 * sf
+	var rim_r := plinth_r + 3.0 * sf
 	_draw_ellipse_filled(ci, plaza_center, rim_r, rim_r * 0.58, Color("#5c4028") * modulate_col)
 	_draw_ellipse_filled(ci, plaza_center, plinth_r, plinth_r * 0.58, Color("#c2a378") * modulate_col)
 	_draw_ellipse_filled(ci, plaza_center, plinth_r * 0.74, plinth_r * 0.74 * 0.58, Color("#d9be96") * modulate_col)
 
 	# Individual cobblestone tiles around the village courtyard
-	for c_i in range(8):
-		var c_ang := TAU * float(c_i) / 8.0
-		var c_pt := plaza_center + Vector2(cos(c_ang) * plinth_r * 0.82, sin(c_ang) * plinth_r * 0.46)
-		ci.draw_circle(c_pt, 2.2 * sf, Color("#a38358") * modulate_col)
+	for c_i in range(12):
+		var c_ang := TAU * float(c_i) / 12.0
+		var c_pt := plaza_center + Vector2(cos(c_ang) * plinth_r * 0.84, sin(c_ang) * plinth_r * 0.48)
+		ci.draw_circle(c_pt, 2.4 * sf, Color("#a38358") * modulate_col)
 
-	var ring_r := plinth_r + 2.2 * sf
-	_draw_ellipse_outline(ci, plaza_center, ring_r, ring_r * 0.58, status_col * modulate_col, 2.4)
+	var ring_r := plinth_r + 2.5 * sf
+	_draw_ellipse_outline(ci, plaza_center, ring_r, ring_r * 0.58, status_col * modulate_col, 2.5)
 
 	if deme.id == selected_deme_id:
-		var sel_r := plinth_r + 5.5 * sf
-		_draw_ellipse_outline(ci, plaza_center, sel_r, sel_r * 0.58, C_SELECTION, 2.8)
+		var sel_r := plinth_r + 6.5 * sf
+		_draw_ellipse_outline(ci, plaza_center, sel_r, sel_r * 0.58, C_SELECTION, 3.0)
 
 
 func _collect_static_props() -> Array[Prop]:
@@ -1160,7 +1299,7 @@ func _collect_static_props() -> Array[Prop]:
 		_collect_cell_flora_props(cell, world_xy, top_z, props)
 		# Ruins if recent extinction occurred here
 		if world_state.recent_extinction_hexes.has(hex_id):
-			props.append(_world_prop("ruins", world_xy + Vector2(0, 6), top_z, Vector2.ZERO, 1.0, Color.WHITE))
+			props.append(_world_prop("ruins", world_xy + Vector2(0, 8), top_z, Vector2.ZERO, 1.0, Color.WHITE))
 
 	for village in _villages:
 		_collect_village_building_props(village, props)
@@ -1175,28 +1314,41 @@ func _collect_village_building_props(village: Dictionary, props: Array[Prop]) ->
 	var sf: float = village["sf"]
 	var m: Color = village["modulate"]
 
-	# Tiered Village Buildings (Tier 1..4); the tier 1 campfire is animated per frame
-	match int(village["tier"]):
-		1:
-			props.append(_world_prop("tier1_tent", v_world, top_z, Vector2(-8, -4) * sf, 0.94 * sf, m))
-		2:
-			props.append(_world_prop("tier2_cottage", v_world, top_z, Vector2(-8, -5) * sf, 0.96 * sf, m))
-			props.append(_world_prop("tier2_barn", v_world, top_z, Vector2(9, -2) * sf, 0.86 * sf, m))
-		3:
-			props.append(_world_prop("tier3_townhall", v_world, top_z, Vector2(2, -7) * sf, 0.98 * sf, m))
-			props.append(_world_prop("tier3_house", v_world, top_z, Vector2(-11, -2) * sf, 0.86 * sf, m))
-		_:
-			props.append(_world_prop("tier4_citadel", v_world, top_z, Vector2(0, -9) * sf, 1.0 * sf, m))
-			props.append(_world_prop("tier4_tower", v_world, top_z, Vector2(-13, -4) * sf, 0.86 * sf, m))
-			props.append(_world_prop("tier4_windmill", v_world, top_z, Vector2(13, -4) * sf, 0.88 * sf, m))
+	var layout := _get_village_building_layout(
+		int(village["tier"]),
+		sf,
+		not deme.cultural_trait_ids.is_empty(),
+		deme.cultural_trait_ids.size(),
+		str(village["archetype"])
+	)
+	for b_item in layout:
+		props.append(_world_prop(str(b_item["sprite"]), v_world, top_z, b_item["offset"], float(b_item["scale"]), m))
 
-	# Cultural Sanctuary / Totem
-	if not deme.cultural_trait_ids.is_empty():
-		var totem_scale := (0.78 + mini(3, deme.cultural_trait_ids.size()) * 0.08) * sf
-		props.append(_world_prop("cultural_totem", v_world, top_z, Vector2(-14, 5) * sf, totem_scale, m))
 
-	# Dominant Decision Archetype Activity Structure
-	props.append(_world_prop("act_" + str(village["archetype"]), v_world, top_z, Vector2(13, 6) * sf, 0.84 * sf, m))
+func _get_cell_road_corridors_local(cell: EvoTypes.HexCell, village_local_centers: Array[Vector2]) -> Array[Dictionary]:
+	var segments: Array[Dictionary] = []
+	var v_count := village_local_centers.size()
+	if v_count == 0:
+		return segments
+
+	for i in range(v_count):
+		for j in range(i + 1, v_count):
+			segments.append({"a": village_local_centers[i], "b": village_local_centers[j]})
+
+	var cell_world := HexMath.axial_to_world(cell.q, cell.r)
+	for n_id in HexMath.get_neighbor_ids(cell.q, cell.r, world_state.cells):
+		var ncell: EvoTypes.HexCell = world_state.cells[n_id]
+		var has_link := not ncell.deme_ids.is_empty() or (ncell.biome == "coastal_shallows" and ncell.altitude >= world_state.sea_level)
+		if not has_link:
+			for flow in world_state.active_flows:
+				if (flow.from_hex_id == cell.id and flow.to_hex_id == n_id) or (flow.from_hex_id == n_id and flow.to_hex_id == cell.id):
+					has_link = true
+					break
+		if has_link:
+			var n_local := HexMath.axial_to_world(ncell.q, ncell.r) - cell_world
+			for vc in village_local_centers:
+				segments.append({"a": vc, "b": n_local})
+	return segments
 
 
 func _collect_cell_flora_props(cell: EvoTypes.HexCell, world_xy: Vector2, top_z: float, props: Array[Prop]) -> void:
@@ -1206,44 +1358,88 @@ func _collect_cell_flora_props(cell: EvoTypes.HexCell, world_xy: Vector2, top_z:
 	# Determine target count: between 6 and 14 pixel-art landscape elements per parcel
 	var base_count := 8
 	if cell.biome == "tropical_forest":
-		base_count = 14
+		base_count = 13
 	elif cell.biome == "savanna":
-		base_count = 11
-	elif cell.biome == "tundra":
 		base_count = 10
+	elif cell.biome == "tundra":
+		base_count = 9
 	elif cell.biome == "coastal_shallows":
 		base_count = 7
 
-	var prop_count: int = clampi(int(round(float(base_count) * (0.55 + 0.45 * r_ratio))), 6, 14)
+	var prop_count: int = clampi(int(round(float(base_count) * (0.55 + 0.45 * r_ratio))), 6, 13)
 
-	# Compute village centers in local hex coordinates to keep a cozy clearing around buildings
+	# Compute village centers in local hex coordinates to keep a generous clearing around buildings
 	var village_local_centers: Array[Vector2] = []
 	var v_count := cell.deme_ids.size()
 	for v_idx in range(v_count):
 		village_local_centers.append(HexMath.compute_village_sector_offset(v_idx, v_count, HexMath.HEX_SIZE))
 
+	if v_count > 0:
+		prop_count = clampi(prop_count - v_count, 5, 10)
+
+	var road_corridors := _get_cell_road_corridors_local(cell, village_local_centers)
 	var palette_sprites: Array = BIOME_FLORA_PALETTES.get(cell.biome, DEFAULT_FLORA_PALETTE)
+	var placed_offsets: Array[Vector2] = []
+	var village_clear_r := 76.0 if v_count == 1 else 54.0
+	var inner_count: int = 0 if v_count > 0 else maxi(2, prop_count / 3)
+	var outer_count: int = prop_count - inner_count
 
 	for idx in range(prop_count):
 		var s1 := _cell_seed(cell.q, cell.r, idx * 13 + 1)
 		var s2 := _cell_seed(cell.q, cell.r, idx * 29 + 7)
-		var angle := (TAU * float(idx) / float(prop_count)) + float(s1 % 31 - 15) * 0.035
-		var rad_norm := 0.34 + float(s2 % 56) * 0.01
-		if v_count > 0:
-			rad_norm = clampf(rad_norm + 0.16, 0.48, 0.84)
+		var angle := 0.0
+		var rad_norm := 0.0
+		if idx < inner_count:
+			angle = (TAU * float(idx) / float(inner_count)) + float(s1 % 31 - 15) * 0.045
+			rad_norm = 0.22 + float(s2 % 22) * 0.01
+		else:
+			var o_idx := idx - inner_count
+			angle = (TAU * float(o_idx) / float(maxi(1, outer_count))) + 0.32 + float(s1 % 31 - 15) * 0.032
+			if v_count > 0:
+				rad_norm = 0.58 + float(s2 % 22) * 0.01
+			else:
+				rad_norm = 0.50 + float(s2 % 28) * 0.01
+
 		var local_off := Vector2(cos(angle), sin(angle)) * (HexMath.HEX_SIZE * rad_norm)
 
-		# Ensure clearing around villages
-		var too_close := false
+		# Ensure generous clearing around villages & intra-hex center
+		var valid_spot := true
 		for vc in village_local_centers:
-			if local_off.distance_to(vc) < 17.0:
-				local_off = vc + (local_off - vc).normalized() * 19.0
-				if local_off.length() > HexMath.HEX_SIZE * 0.86:
-					too_close = true
+			if local_off.distance_to(vc) < village_clear_r:
+				var push_dir := (local_off - vc).normalized() if local_off.distance_to(vc) > 0.01 else Vector2(cos(angle), sin(angle))
+				local_off = vc + push_dir * (village_clear_r + 6.0)
+				if local_off.length() > HexMath.HEX_SIZE * 0.80:
+					valid_spot = false
 				break
-		if too_close:
+		if not valid_spot:
+			continue
+		if v_count >= 2 and local_off.length() < 42.0:
+			continue
+		for vc in village_local_centers:
+			if local_off.distance_to(vc) < village_clear_r - 2.0:
+				valid_spot = false
+				break
+		if not valid_spot:
 			continue
 
+		# Keep road corridors clear of trees/rocks
+		for seg in road_corridors:
+			var closest := Geometry2D.get_closest_point_to_segment(local_off, seg["a"], seg["b"])
+			if local_off.distance_to(closest) < 28.0:
+				valid_spot = false
+				break
+		if not valid_spot:
+			continue
+
+		# Enforce minimum separation between flora props so trees and rocks never pile up
+		for prev in placed_offsets:
+			if local_off.distance_to(prev) < 38.0:
+				valid_spot = false
+				break
+		if not valid_spot:
+			continue
+
+		placed_offsets.append(local_off)
 		var sprite_key: String = palette_sprites[idx % palette_sprites.size()]
 		var can_sway := true
 
@@ -1260,7 +1456,7 @@ func _collect_cell_flora_props(cell: EvoTypes.HexCell, world_xy: Vector2, top_z:
 			can_sway = false
 			sprite_key = "tree_stump" if idx % 4 == 1 else ("soil_crack" if idx % 4 == 3 else "dry_scrub")
 
-		var prop := _world_prop(sprite_key, world_xy + local_off, top_z, Vector2.ZERO, 0.78 + float(s1 % 22) * 0.012, Color.WHITE)
+		var prop := _world_prop(sprite_key, world_xy + local_off, top_z, Vector2.ZERO, 0.84 + float(s1 % 20) * 0.012, Color.WHITE)
 		prop.sways = can_sway and not NON_SWAYING_SPRITES.has(sprite_key)
 		prop.sway_phase = float(idx) * 0.9 + float(cell.q)
 		props.append(prop)
@@ -1295,18 +1491,22 @@ func _draw_animated() -> void:
 		var p_b: Vector2 = road["p_b"]
 		match road["kind"]:
 			"collab":
-				# Merchant caravan cart traveling between the villages
-				var t_cart := fposmod(_anim_time * 0.36 + float(int(p_a.x + p_b.y) % 7) * 0.13, 1.0)
-				_draw_centered_sprite(_anim_layer, "caravan_cart", _sample_road_curve(p_a, p_b, t_cart, 1.0) + Vector2(0, -4.0), 0.84)
+				# Merchant caravan cart traveling between the village plazas (clamped to [0.22, 0.78])
+				var raw_t := fposmod(_anim_time * 0.32 + float(int(p_a.x + p_b.y) % 7) * 0.13, 1.0)
+				var t_cart := lerpf(0.22, 0.78, raw_t)
+				_draw_centered_sprite(_anim_layer, "caravan_cart", _sample_road_curve(p_a, p_b, t_cart, 1.0) + Vector2(0, -4.0), 0.86)
 			"bridge":
-				var cart_pos := _bridge_arch_point(p_a, p_b, fposmod(_anim_time * 0.36, 1.0)) + Vector2(0, -4.0)
-				_draw_centered_sprite(_anim_layer, "caravan_cart", cart_pos, 0.82)
+				var raw_b := fposmod(_anim_time * 0.32, 1.0)
+				var cart_pos := _bridge_arch_point(p_a, p_b, lerpf(0.20, 0.80, raw_b)) + Vector2(0, -4.0)
+				_draw_centered_sprite(_anim_layer, "caravan_cart", cart_pos, 0.84)
 			"dispute":
-				_draw_battle_sparks((p_a + p_b) * 0.5)
+				if bool(road.get("show_badge", true)):
+					_draw_battle_sparks(road.get("badge_pos", (p_a + p_b) * 0.5))
 			"expedition":
 				# Settler covered wagon moving toward destination
-				var wagon_pos := _sample_road_curve(p_a, p_b, fposmod(_anim_time * 0.42, 1.0), -1.0) + Vector2(0, -4.0)
-				_draw_centered_sprite(_anim_layer, "settler_wagon", wagon_pos, 0.85)
+				var raw_w := fposmod(_anim_time * 0.38, 1.0)
+				var wagon_pos := _sample_road_curve(p_a, p_b, lerpf(0.20, 0.82, raw_w), -1.0) + Vector2(0, -4.0)
+				_draw_centered_sprite(_anim_layer, "settler_wagon", wagon_pos, 0.86)
 
 	# Highlighted lineage vertical light beam
 	for village in _villages:
@@ -1364,30 +1564,31 @@ func _collect_moving_props() -> Array[Prop]:
 		var m: Color = village["modulate"]
 		if int(village["tier"]) == 1:
 			var fire_sprite := "tier1_campfire" if int(_anim_time * 5.0) % 2 == 0 else "tier1_campfire_2"
-			props.append(_sprite_prop(fire_sprite, v_pos + Vector2(6, 3) * sf, 0.92 * sf, m))
+			props.append(_sprite_prop(fire_sprite, v_pos + Vector2(2, 4) * sf, 0.96 * sf, m))
 
 		# Animated Pixel-Art Villagers walking around the village courtyard
 		var villager_count: int = village["villager_count"]
 		var tunic_col := Color(deme.color)
 		for v_idx in range(villager_count):
-			var orbit_angle := _anim_time * (1.05 + float(v_idx % 3) * 0.24) + float(v_idx) * (TAU / float(villager_count))
-			var orbit_r := (12.0 + float(v_idx % 2) * 5.0) * sf
+			var orbit_angle := _anim_time * (0.95 + float(v_idx % 3) * 0.22) + float(v_idx) * (TAU / float(villager_count))
+			var orbit_r := (14.0 + float(v_idx % 3) * 4.5) * sf
 			var foot := v_pos + Vector2(cos(orbit_angle) * orbit_r, sin(orbit_angle) * (orbit_r * 0.56) + 5.0 * sf)
 			var frame := int((_anim_time * 6.0) + float(v_idx)) % 3
-			props.append(_villager_prop(frame, tunic_col, foot, 0.92 * sf, m))
+			props.append(_villager_prop(frame, tunic_col, foot, 0.96 * sf, m))
 
-	# Road travelers walking along active collaboration roads
+	# Road travelers walking along active collaboration roads (clamped outside village plazas)
 	for r_idx in range(_roads.size()):
 		var road: Dictionary = _roads[r_idx]
 		if not TRAVELER_ROAD_KINDS.has(road["kind"]):
 			continue
 		for traveler_i in range(2):
-			var t_walk := fposmod(_anim_time * 0.28 + float(r_idx) * 0.31 + float(traveler_i) * 0.48, 1.0)
+			var raw_walk := fposmod(_anim_time * 0.24 + float(r_idx) * 0.31 + float(traveler_i) * 0.48, 1.0)
 			if traveler_i == 1:
-				t_walk = 1.0 - t_walk
+				raw_walk = 1.0 - raw_walk
+			var t_walk := lerpf(0.24, 0.76, raw_walk)
 			var foot := _sample_road_curve(road["p_a"], road["p_b"], t_walk, 1.0)
 			var frame := int((_anim_time * 6.5) + float(traveler_i + r_idx)) % 3
-			props.append(_villager_prop(frame, road["color"], foot, 0.90, Color.WHITE))
+			props.append(_villager_prop(frame, road["color"], foot, 0.94, Color.WHITE))
 	return props
 
 
@@ -1420,8 +1621,24 @@ func _draw_overlay() -> void:
 	_deme_hit_rects.clear()
 	for village in _villages:
 		_deme_hit_rects.append({"rect": to_screen * (village["hit_rect"] as Rect2), "deme_id": (village["deme"] as EvoTypes.Deme).id, "hex_id": village["hex_id"]})
+
+	var bb_positions: Array[Vector2] = []
 	for village in _villages:
-		_draw_village_billboard(village, to_screen * (village["pos"] + village["bb_offset"]))
+		bb_positions.append(to_screen * (village["pos"] + village["bb_offset"]))
+
+	# Gentle screen-space separation pass so two village signboards never overlap
+	for _pass in range(3):
+		for i in range(bb_positions.size()):
+			for j in range(i + 1, bb_positions.size()):
+				var diff := bb_positions[j] - bb_positions[i]
+				if absf(diff.x) < 152.0 and absf(diff.y) < 32.0:
+					var push_x := (152.0 - absf(diff.x)) * 0.5
+					var sign_x := 1.0 if diff.x >= 0.0 else -1.0
+					bb_positions[i].x -= sign_x * push_x
+					bb_positions[j].x += sign_x * push_x
+
+	for i in range(_villages.size()):
+		_draw_village_billboard(_villages[i], bb_positions[i])
 	_draw_seasonal_particles()
 
 

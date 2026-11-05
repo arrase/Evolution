@@ -1,6 +1,6 @@
 extends SceneTree
 
-const OUTPUT_DIR: String = "/home/arrase/.gemini/antigravity/brain/fe73c63e-d5b4-4444-a874-9a7476f154e5"
+const OUTPUT_DIR: String = "/home/arrase/.gemini/antigravity/brain/09a46228-9bce-44f9-a2a3-4bbf3993ce6a"
 
 
 func _init() -> void:
