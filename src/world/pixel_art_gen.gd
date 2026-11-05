@@ -154,11 +154,15 @@ static func get_villager_texture(pose: String, tunic_color: Color) -> ImageTextu
 
 
 static func _generate_and_register(sprite_name: String, file_path: String) -> void:
-	var img := _build_sprite_image(sprite_name)
+	var abs_path := ProjectSettings.globalize_path(file_path)
+	var img: Image
+	if FileAccess.file_exists(abs_path):
+		img = Image.load_from_file(abs_path)
+	else:
+		img = _build_sprite_image(sprite_name)
+		img.save_png(abs_path)
 	_image_cache[sprite_name] = img
 	_texture_cache[sprite_name] = ImageTexture.create_from_image(img)
-	var abs_path := ProjectSettings.globalize_path(file_path)
-	img.save_png(abs_path)
 
 
 static func _build_sprite_image(sprite_name: String) -> Image:

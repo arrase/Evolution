@@ -8,7 +8,7 @@ func _init() -> void:
 
 
 func _wait_and_save(main: EvoMainController, filename: String) -> void:
-	main.world_renderer.queue_redraw()
+	main.world_renderer.refresh()
 	for _i in range(6):
 		await process_frame
 	RenderingServer.force_draw(false)
