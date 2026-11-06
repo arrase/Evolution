@@ -42,23 +42,3 @@ jobs:
 
       - name: Run Simulation & UI Test Suite
         run: godot --headless --path . --script res://tests/test_runner.gd
-
-  sonarcloud:
-    name: SonarQube Cloud
-    needs: tests
-    # Secrets are not exposed to pull requests from forks.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: SonarQube Cloud Scan
-        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

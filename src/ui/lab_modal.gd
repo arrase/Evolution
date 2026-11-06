@@ -334,7 +334,10 @@ func refresh(world_state: EvoTypes.WorldState, selected_deme_id: String = "") ->
 func set_language(lang: String) -> void:
 	_lang = lang
 	_rebuild_archetype_options()
-	_update_labels()
+	if _editing_id == "":
+		_reset_form_for_new()
+	else:
+		_update_labels()
 	if visible:
 		_rebuild_catalog_list()
 		_update_thermodynamics_preview()

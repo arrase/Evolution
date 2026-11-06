@@ -1,6 +1,6 @@
 extends SceneTree
 
-const OUTPUT_DIR: String = "/home/arrase/.gemini/antigravity/brain/02e5364c-b951-423c-9a31-f3f7df6cc2ee"
+const OUTPUT_DIR: String = "/home/arrase/Develop/Evolution/docs/images"
 
 
 func _init() -> void:
@@ -8,6 +8,8 @@ func _init() -> void:
 
 
 func _wait_and_save(main: EvoMainController, filename: String) -> void:
+	if main.hud._missing_models_modal != null:
+		main.hud._missing_models_modal.visible = false
 	main.world_renderer.refresh()
 	for _i in range(6):
 		await process_frame
@@ -30,6 +32,11 @@ func _run_captures() -> void:
 	root.add_child(main)
 	for _i in range(5):
 		await process_frame
+
+	main.hud._startup_models_checked = true
+	if main.hud._missing_models_modal != null:
+		main.hud._missing_models_modal.visible = false
+	main._on_language_changed("en")
 
 	# 1. screenshot_rift_savanna.png (6 generations, village selected)
 	main.load_preset("preset-rift-savanna")
