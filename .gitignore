@@ -1,6 +1,7 @@
 .godot/
 *.import
-export_presets.cfg
 .DS_Store
 *.tmp
 screenshots/
+build/
+release_assets/

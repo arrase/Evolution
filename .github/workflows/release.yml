@@ -1,0 +1,67 @@
+name: Release Binaries
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+
+permissions: {}
+
+jobs:
+  build-and-release:
+    name: Build & Upload Multiplatform Release Binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GODOT_VERSION: "4.7.2-stable"
+      GODOT_TEMPLATE_DIR: "4.7.2.stable"
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Godot & Export Templates
+        run: |
+          curl -fsSL "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip" -o /tmp/godot.zip
+          unzip -q /tmp/godot.zip -d /tmp
+          sudo mv "/tmp/Godot_v${GODOT_VERSION}_linux.x86_64" /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+
+          curl -fsSL "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz" -o /tmp/templates.tpz
+          mkdir -p "${HOME}/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}"
+          unzip -q /tmp/templates.tpz -d /tmp/templates_extracted
+          mv /tmp/templates_extracted/templates/* "${HOME}/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/"
+          rm -rf /tmp/godot.zip /tmp/templates.tpz /tmp/templates_extracted
+
+      - name: Export Multiplatform Builds
+        run: |
+          mkdir -p build/linux build/windows build/macos build/web release_assets
+          godot --headless --path . --import
+
+          # Linux x86_64
+          godot --headless --path . --export-release "Linux" build/linux/evolution-linux-x86_64
+          chmod +x build/linux/evolution-linux-x86_64
+          tar -czf release_assets/evolution-linux-x86_64.tar.gz -C build/linux evolution-linux-x86_64
+
+          # Windows x86_64
+          godot --headless --path . --export-release "Windows" build/windows/evolution-windows-x86_64.exe
+          zip -j release_assets/evolution-windows-x86_64.zip build/windows/evolution-windows-x86_64.exe
+
+          # macOS Universal (.app zipped by Godot)
+          godot --headless --path . --export-release "macOS" release_assets/evolution-macos-universal.zip
+
+          # Web (HTML5 / WASM)
+          godot --headless --path . --export-release "Web" build/web/index.html
+          (cd build/web && zip -r ../../release_assets/evolution-web.zip .)
+
+      - name: Upload Release Assets
+        # zizmor: ignore[superfluous-actions] -- declarative release creation and asset upload on tag push
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: release_assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
