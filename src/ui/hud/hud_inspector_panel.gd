@@ -187,7 +187,7 @@ static func rebuild_villages_list(hud: Control) -> void:
 	if hud._village_next_btn != null:
 		hud._village_next_btn.disabled = not can_cycle
 
-	var selected_idx := 0
+	var selected_idx := -1
 	var total_count := deme_list.size()
 	for i in range(total_count):
 		var d := deme_list[i]

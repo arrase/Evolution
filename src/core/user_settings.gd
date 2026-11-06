@@ -14,7 +14,10 @@ static var config_path_override: String = ""
 static func get_config_dir() -> String:
 	if config_path_override != "":
 		return config_path_override.get_base_dir()
-	return OS.get_environment("HOME").path_join(".config/Evolution")
+	var home := OS.get_environment("HOME")
+	if home == "":
+		return OS.get_user_data_dir()
+	return home.path_join(".config/Evolution")
 
 
 static func get_config_path() -> String:
@@ -28,6 +31,8 @@ static func load_settings() -> void:
 	if not FileAccess.file_exists(path):
 		return
 	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	file.close()
 	if parsed is Dictionary:
@@ -43,6 +48,8 @@ static func load_settings() -> void:
 static func save_settings() -> void:
 	DirAccess.make_dir_recursive_absolute(get_config_dir())
 	var file := FileAccess.open(get_config_path(), FileAccess.WRITE)
+	if file == null:
+		return
 	var payload := {
 		"primary_model": primary_model,
 		"secondary_model": secondary_model,

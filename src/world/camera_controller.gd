@@ -36,14 +36,16 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	var pan_speed: float = 820.0 * delta
 
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		_target_pan.y += pan_speed
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		_target_pan.y -= pan_speed
-	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-		_target_pan.x += pan_speed
-	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-		_target_pan.x -= pan_speed
+	var line_edit_focused := get_viewport() != null and get_viewport().gui_get_focus_owner() is LineEdit
+	if not line_edit_focused:
+		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+			_target_pan.y += pan_speed
+		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
+			_target_pan.y -= pan_speed
+		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+			_target_pan.x += pan_speed
+		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+			_target_pan.x -= pan_speed
 
 	_clamp_targets()
 
@@ -106,6 +108,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			pan_offset = _target_pan
 
 	elif event is InputEventKey:
+		if get_viewport() != null and get_viewport().gui_get_focus_owner() is LineEdit:
+			return
 		var ke := event as InputEventKey
 		if not ke.pressed or ke.echo:
 			return
@@ -122,7 +126,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				zoom_by(0.20)
 			KEY_MINUS, KEY_KP_SUBTRACT:
 				zoom_by(-0.20)
-			KEY_0, KEY_KP_0:
+			KEY_HOME:
 				reset_camera()
 
 

@@ -48,6 +48,7 @@ static func _make_decision(
 	var d := EvoTypes.DecisionDef.new()
 	d.id = p_id
 	d.archetype = p_archetype
+	d.origin = "catalog"
 	d.name = EvoI18n.t(lang, "decision." + p_id + ".name")
 	d.description = EvoI18n.t(lang, "decision." + p_id + ".desc")
 	d.vector = EvoTypes.BiophysicalVector.new(p_cost, p_extract, p_eco, p_mobility, p_cohesion, p_threshold)
@@ -83,7 +84,7 @@ static func create_base_decisions_catalog(lang: String = "es") -> Dictionary:
 		_make_decision("dec-cooperate-store", "cooperate", 0.25, 0.45, 0.15, -0.10, 0.65, 0.35, [], lang),
 		_make_decision("dec-exchange-symbiosis", "exchange", 0.35, 0.50, 0.20, 0.20, 0.60, 0.45, ["bio-encephalization", "bio-social-instinct"], lang),
 		_make_decision("dec-territorial-dispute", "dispute", 0.55, 0.40, -0.30, 0.25, 0.55, 0.20, [], lang),
-		_make_decision("dec-explore-innovate", "innovate", 0.50, 0.15, 0.00, 0.40, 0.35, 0.65, [], lang)
+		_make_decision("dec-explore-innovate", "innovate", 0.50, 0.15, 0.00, 0.40, 0.35, 0.65, ["bio-encephalization", "bio-social-instinct"], lang)
 	]
 	var catalog: Dictionary = {}
 	for d in decisions:

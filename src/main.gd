@@ -80,8 +80,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not ke.pressed or ke.echo:
 		return
 	if ke.keycode == KEY_SPACE:
-		if hud != null and (hud._ollama_startup_blocked or (hud._missing_models_modal != null and hud._missing_models_modal.visible)):
-			get_viewport().set_input_as_handled()
+		if get_viewport() != null and get_viewport().gui_get_focus_owner() is LineEdit:
+			return
+		if hud != null and (
+			hud._ollama_startup_blocked
+			or (hud._missing_models_modal != null and hud._missing_models_modal.visible)
+			or (hud.lab_modal != null and hud.lab_modal.visible)
+			or (hud.notebook_modal != null and hud.notebook_modal.visible)
+			or (hud.tree_modal != null and hud.tree_modal.visible)
+		):
 			return
 		_on_play_pause_toggled(not is_playing)
 		hud.set_playing_state(is_playing)
@@ -130,6 +137,7 @@ func _connect_signals() -> void:
 func load_preset(preset_id: String) -> void:
 	is_playing = false
 	_play_timer = 0.0
+	EvoOllamaClient.clear_cache()
 	world_state = EvoCatalog.create_preset_world(preset_id, lang)
 	camera.reset_camera()
 	world_renderer.highlighted_lineage_id = ""
@@ -149,6 +157,26 @@ func load_preset(preset_id: String) -> void:
 	world_renderer.refresh()
 
 
+func _sync_selection_after_world_mutation() -> void:
+	if world_state == null:
+		return
+	if world_renderer.selected_deme_id != "" and world_state.demes.has(world_renderer.selected_deme_id):
+		var d: EvoTypes.Deme = world_state.demes[world_renderer.selected_deme_id]
+		world_renderer.selected_hex_id = d.hex_id
+	else:
+		if world_state.cells.has(world_renderer.selected_hex_id):
+			var cell: EvoTypes.HexCell = world_state.cells[world_renderer.selected_hex_id]
+			if not cell.deme_ids.is_empty():
+				world_renderer.selected_deme_id = cell.deme_ids[0]
+			else:
+				world_renderer.selected_deme_id = ""
+		else:
+			world_renderer.selected_deme_id = ""
+	if hud != null:
+		hud._selected_deme_id = world_renderer.selected_deme_id
+		hud._selected_hex_id = world_renderer.selected_hex_id
+
+
 func step_generation() -> void:
 	if world_state == null:
 		return
@@ -156,18 +184,7 @@ func step_generation() -> void:
 		return
 	var res := EvoTurnEngine.advance_generation(world_state, lang)
 	hud.mark_generation_advanced()
-
-	if world_renderer.selected_deme_id != "" and not world_state.demes.has(world_renderer.selected_deme_id):
-		if not world_state.demes.is_empty():
-			var next_id := str(world_state.demes.keys()[0])
-			world_renderer.selected_deme_id = next_id
-			world_renderer.selected_hex_id = (world_state.demes[next_id] as EvoTypes.Deme).hex_id
-			hud.select_deme(next_id)
-		else:
-			world_renderer.selected_deme_id = ""
-	elif world_renderer.selected_deme_id != "" and world_state.demes.has(world_renderer.selected_deme_id):
-		var d: EvoTypes.Deme = world_state.demes[world_renderer.selected_deme_id]
-		world_renderer.selected_hex_id = d.hex_id
+	_sync_selection_after_world_mutation()
 
 	if bool(res["has_macro_outcome"]) or (world_state.auto_pause_on_milestone and bool(res["has_milestone"])):
 		is_playing = false
@@ -200,7 +217,9 @@ func _apply_brush_at_hex(hex_id: String) -> void:
 		hud.mark_tool_used()
 		world_renderer.selected_hex_id = hex_id
 		hud.select_hex(hex_id)
-		hud._update_top_bar_state()
+		world_renderer.selected_deme_id = hud._selected_deme_id
+		_sync_selection_after_world_mutation()
+		hud.refresh(world_state)
 		world_renderer.refresh()
 
 
@@ -240,6 +259,17 @@ func _on_state_imported(new_state: EvoTypes.WorldState) -> void:
 	_play_timer = 0.0
 	world_state = new_state
 	hud.set_playing_state(false)
+	if hud._world_state != world_state:
+		hud.set_world_state(world_state)
+	if not world_state.demes.has(hud._selected_deme_id):
+		hud._selected_deme_id = str(world_state.demes.keys()[0]) if not world_state.demes.is_empty() else ""
+	EvoOllamaClient.clear_cache()
+	world_renderer.selected_deme_id = hud._selected_deme_id
+	world_renderer.selected_hex_id = (world_state.demes[hud._selected_deme_id] as EvoTypes.Deme).hex_id if world_state.demes.has(hud._selected_deme_id) else ""
+	world_renderer.highlighted_lineage_id = ""
+	hud._selected_hex_id = world_renderer.selected_hex_id
+	EvoDecisionModel.evaluate_all_demes(world_state, hud._lang if hud != null else lang)
+	EvoDecisionModel.prefetch_for_state(world_state)
 	world_renderer.set_world_state(world_state)
 	hud.refresh(world_state)
 
@@ -268,6 +298,17 @@ func _on_speed_changed(p_fast: bool) -> void:
 func _on_language_changed(new_lang: String) -> void:
 	lang = new_lang
 	if world_state != null:
+		world_state.world_name = EvoI18n.preset_title(lang, world_state.preset_id)
+		for tr_id in world_state.traits_catalog.keys():
+			var tr: EvoTypes.TraitDef = world_state.traits_catalog[tr_id]
+			if tr.origin == "catalog":
+				tr.name = EvoI18n.trait_name(lang, tr)
+				tr.description = EvoI18n.trait_description(lang, tr)
+		for dec_id in world_state.decisions_catalog.keys():
+			var dec: EvoTypes.DecisionDef = world_state.decisions_catalog[dec_id]
+			if dec.origin == "catalog":
+				dec.name = EvoI18n.decision_name(lang, dec)
+				dec.description = EvoI18n.decision_description(lang, dec)
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 		if hud != null and hud._lang != lang:
 			hud.set_language(lang)
@@ -312,6 +353,7 @@ func _on_sea_level_change_requested(delta: float) -> void:
 	if EvoTurnEngine.apply_adjust_sea_level(world_state, delta, lang):
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 		hud.mark_tool_used()
+		_sync_selection_after_world_mutation()
 		hud.refresh(world_state)
 		world_renderer.refresh()
 
@@ -326,7 +368,8 @@ func _on_hud_deme_selected(deme_id: String, hex_id: String) -> void:
 	world_renderer.selected_hex_id = hex_id
 	if world_state != null and world_state.cells.has(hex_id):
 		var c: EvoTypes.HexCell = world_state.cells[hex_id]
-		camera.focus_on_hex(c.q, c.r, c.altitude)
+		var focus_alt := maxf(c.altitude, world_state.sea_level) if c.biome == "ocean" else c.altitude
+		camera.focus_on_hex(c.q, c.r, focus_alt)
 	world_renderer.refresh()
 
 
@@ -336,7 +379,8 @@ func _on_hud_hex_jump_requested(hex_id: String, deme_id: String) -> void:
 		world_renderer.selected_deme_id = deme_id
 	if world_state != null and world_state.cells.has(hex_id):
 		var c: EvoTypes.HexCell = world_state.cells[hex_id]
-		camera.focus_on_hex(c.q, c.r, c.altitude)
+		var focus_alt := maxf(c.altitude, world_state.sea_level) if c.biome == "ocean" else c.altitude
+		camera.focus_on_hex(c.q, c.r, focus_alt)
 	world_renderer.refresh()
 
 
@@ -349,8 +393,10 @@ func _on_inject_trait_requested(_deme_id: String, _trait_id: String) -> void:
 	world_renderer.refresh()
 
 
-func _on_catalog_item_saved(_item_type: String, _item_data: Dictionary) -> void:
+func _on_catalog_item_saved(_item_type: String, _item_data: Variant = null) -> void:
 	if world_state != null:
-		EvoDecisionModel.evaluate_all_demes(world_state, lang)
+		EvoOllamaClient.clear_cache()
+		EvoDecisionModel.evaluate_all_demes(world_state, hud._lang if hud != null else lang)
+		EvoDecisionModel.prefetch_for_state(world_state)
 		hud.refresh(world_state)
 		world_renderer.refresh()

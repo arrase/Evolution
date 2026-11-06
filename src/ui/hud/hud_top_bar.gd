@@ -605,11 +605,16 @@ static func update_top_bar_state(hud: Control) -> void:
 	var avg_conf := 0.0
 	for d_key in hud._world_state.demes.keys():
 		var d: EvoTypes.Deme = hud._world_state.demes[d_key]
-		if d.decision_model_tag == s_model and s_model != p_model:
+		if p_model == s_model:
+			if EvoDecisionModel.resolve_deme_decision_model_tag(d.id, "__primary__", "__secondary__") == "__secondary__":
+				secondary_count += 1
+			else:
+				primary_count += 1
+		elif d.decision_model_tag == s_model:
 			secondary_count += 1
 		elif d.decision_model_tag == p_model:
 			primary_count += 1
-		elif EvoDecisionModel.resolve_deme_decision_model_tag(d.id) == s_model:
+		elif EvoDecisionModel.resolve_deme_decision_model_tag(d.id, "__primary__", "__secondary__") == "__secondary__":
 			secondary_count += 1
 		else:
 			primary_count += 1

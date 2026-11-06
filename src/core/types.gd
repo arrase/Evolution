@@ -128,7 +128,7 @@ class TraitDef extends RefCounted:
 			"origin": origin,
 			"description": description,
 			"vector": vector.to_dict(),
-			"mutuallyExclusiveWith": mutually_exclusive_with,
+			"mutuallyExclusiveWith": mutually_exclusive_with.duplicate(),
 			"enablesCulturalTransmission": enables_cultural_transmission
 		}
 
@@ -151,6 +151,7 @@ class DecisionDef extends RefCounted:
 	var id: String = ""
 	var name: String = ""
 	var archetype: String = "forage"
+	var origin: String = "catalog"
 	var description: String = ""
 	var vector: BiophysicalVector = BiophysicalVector.new()
 	var required_trait_ids: Array[String] = []
@@ -160,6 +161,7 @@ class DecisionDef extends RefCounted:
 		dec.id = id
 		dec.name = name
 		dec.archetype = archetype
+		dec.origin = origin
 		dec.description = description
 		dec.vector = vector.duplicate_vec()
 		dec.required_trait_ids = required_trait_ids.duplicate()
@@ -170,9 +172,10 @@ class DecisionDef extends RefCounted:
 			"id": id,
 			"name": name,
 			"archetype": archetype,
+			"origin": origin,
 			"description": description,
 			"vector": vector.to_dict(),
-			"requiredTraitIds": required_trait_ids
+			"requiredTraitIds": required_trait_ids.duplicate()
 		}
 
 	static func from_dict(d: Dictionary) -> DecisionDef:
@@ -180,6 +183,7 @@ class DecisionDef extends RefCounted:
 		dec.id = str(d["id"])
 		dec.name = str(d["name"])
 		dec.archetype = str(d["archetype"])
+		dec.origin = str(d["origin"]) if d.has("origin") else "catalog"
 		dec.description = str(d["description"])
 		dec.vector = BiophysicalVector.from_dict(d["vector"])
 		dec.required_trait_ids = []
@@ -234,7 +238,7 @@ class HexCell extends RefCounted:
 			"carryingCapacity": carrying_capacity,
 			"carryingCapacityMax": carrying_capacity_max,
 			"seasonalRegenRate": seasonal_regen_rate,
-			"demeIds": deme_ids
+			"demeIds": deme_ids.duplicate()
 		}
 
 	static func from_dict(d: Dictionary) -> HexCell:
@@ -273,7 +277,7 @@ class Deme extends RefCounted:
 	var isolation_turns: int = 0
 	var decision_model_tag: String = EvoUserSettings.primary_model
 	var last_confidence: float = 0.85
-	var last_decision_probabilities: Dictionary = {} # String -> float
+	var last_decision_probabilities: Dictionary = {"dec-conservative-forage": 1.0} # String -> float
 	var last_dominant_decision_id: String = "dec-conservative-forage"
 	var last_justification: String = ""
 
@@ -337,14 +341,14 @@ class Deme extends RefCounted:
 			"population": population,
 			"energyReserves": energy_reserves,
 			"lastEnergyDelta": last_energy_delta,
-			"biologicalTraitIds": biological_trait_ids,
-			"culturalTraitIds": cultural_trait_ids,
-			"baldwinCounters": baldwin_counters,
+			"biologicalTraitIds": biological_trait_ids.duplicate(),
+			"culturalTraitIds": cultural_trait_ids.duplicate(),
+			"baldwinCounters": baldwin_counters.duplicate(),
 			"innovationCounter": innovation_counter,
 			"isolationTurns": isolation_turns,
 			"decisionModelTag": decision_model_tag,
 			"lastConfidence": last_confidence,
-			"lastDecisionProbabilities": last_decision_probabilities,
+			"lastDecisionProbabilities": last_decision_probabilities.duplicate(),
 			"lastDominantDecisionId": last_dominant_decision_id,
 			"lastJustification": last_justification
 		}
@@ -365,13 +369,22 @@ class Deme extends RefCounted:
 		d.cultural_trait_ids = []
 		for item in dict_data["culturalTraitIds"]:
 			d.cultural_trait_ids.append(str(item))
-		d.baldwin_counters = dict_data["baldwinCounters"].duplicate()
+		d.baldwin_counters = {}
+		var raw_bc: Dictionary = dict_data["baldwinCounters"]
+		for k in raw_bc.keys():
+			d.baldwin_counters[str(k)] = int(raw_bc[k])
 		d.innovation_counter = float(dict_data["innovationCounter"])
 		d.isolation_turns = int(dict_data["isolationTurns"])
 		d.decision_model_tag = str(dict_data["decisionModelTag"]) if dict_data.has("decisionModelTag") else EvoUserSettings.primary_model
 		d.last_confidence = float(dict_data["lastConfidence"]) if dict_data.has("lastConfidence") else 0.85
-		d.last_decision_probabilities = dict_data["lastDecisionProbabilities"].duplicate()
 		d.last_dominant_decision_id = str(dict_data["lastDominantDecisionId"])
+		d.last_decision_probabilities = {}
+		var raw_probs: Dictionary = dict_data["lastDecisionProbabilities"]
+		for k in raw_probs.keys():
+			d.last_decision_probabilities[str(k)] = float(raw_probs[k])
+		if d.last_decision_probabilities.is_empty():
+			var fallback_dec_id := d.last_dominant_decision_id if d.last_dominant_decision_id != "" else "dec-conservative-forage"
+			d.last_decision_probabilities = {fallback_dec_id: 1.0}
 		d.last_justification = str(dict_data["lastJustification"])
 		return d
 
@@ -410,7 +423,7 @@ class LineageNode extends RefCounted:
 			"extinctGeneration": extinct_generation,
 			"founderHexId": founder_hex_id,
 			"divergenceReason": divergence_reason,
-			"acquiredTraitIds": acquired_trait_ids
+			"acquiredTraitIds": acquired_trait_ids.duplicate()
 		}
 
 	static func from_dict(d: Dictionary) -> LineageNode:
@@ -626,7 +639,10 @@ class WorldState extends RefCounted:
 			"lineageTree": lineage_dict,
 			"chronicle": chron_arr,
 			"activeFlows": flows_arr,
+			"recentExtinctionHexes": recent_extinction_hexes.duplicate(),
+			"disusedConnections": disused_connections.duplicate(true),
 			"quietTurns": quiet_turns,
+			"previousPopulations": previous_populations.duplicate(),
 			"macroOutcomeType": macro_outcome_type,
 			"macroOutcomeTitle": macro_outcome_title,
 			"macroOutcomeSummary": macro_outcome_summary
@@ -660,7 +676,24 @@ class WorldState extends RefCounted:
 			s.chronicle.append(ChronicleEntry.from_dict(item))
 		for item in d["activeFlows"]:
 			s.active_flows.append(HexEdgeFlow.from_dict(item))
+		s.recent_extinction_hexes = []
+		if d.has("recentExtinctionHexes"):
+			for item in d["recentExtinctionHexes"]:
+				s.recent_extinction_hexes.append(str(item))
+		s.disused_connections = []
+		if d.has("disusedConnections"):
+			for item in d["disusedConnections"]:
+				if item is Dictionary:
+					s.disused_connections.append((item as Dictionary).duplicate(true))
 		s.quiet_turns = int(d["quietTurns"]) if d.has("quietTurns") else 0
+		s.previous_populations = {}
+		if d.has("previousPopulations"):
+			var raw_prev: Dictionary = d["previousPopulations"]
+			for k in raw_prev.keys():
+				s.previous_populations[str(k)] = int(raw_prev[k])
+		else:
+			for deme_id in s.demes.keys():
+				s.previous_populations[str(deme_id)] = (s.demes[deme_id] as Deme).population
 		s.macro_outcome_type = str(d["macroOutcomeType"]) if d.has("macroOutcomeType") else ""
 		s.macro_outcome_title = str(d["macroOutcomeTitle"]) if d.has("macroOutcomeTitle") else ""
 		s.macro_outcome_summary = str(d["macroOutcomeSummary"]) if d.has("macroOutcomeSummary") else ""

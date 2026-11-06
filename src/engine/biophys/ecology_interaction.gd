@@ -68,6 +68,29 @@ static func get_archetype_prob(
 	return total
 
 
+static func _can_acquire_trait(
+	deme: EvoTypes.Deme,
+	trait_id: String,
+	traits_catalog: Dictionary
+) -> bool:
+	if deme.cultural_trait_ids.has(trait_id) or deme.biological_trait_ids.has(trait_id):
+		return false
+	if not traits_catalog.has(trait_id):
+		return false
+	var tdef: EvoTypes.TraitDef = traits_catalog[trait_id]
+	for existing_id in deme.biological_trait_ids:
+		if tdef.mutually_exclusive_with.has(existing_id):
+			return false
+		if traits_catalog.has(existing_id) and (traits_catalog[existing_id] as EvoTypes.TraitDef).mutually_exclusive_with.has(trait_id):
+			return false
+	for existing_id in deme.cultural_trait_ids:
+		if tdef.mutually_exclusive_with.has(existing_id):
+			return false
+		if traits_catalog.has(existing_id) and (traits_catalog[existing_id] as EvoTypes.TraitDef).mutually_exclusive_with.has(trait_id):
+			return false
+	return true
+
+
 static func run_resource_and_symbiosis_phase(
 	state: EvoTypes.WorldState,
 	lang: String,
@@ -77,6 +100,9 @@ static func run_resource_and_symbiosis_phase(
 ) -> void:
 	var is_en := lang == "en"
 	var symbiosis_bonus_applied: Dictionary = {}
+	var initial_cultural_traits_by_deme: Dictionary = {}
+	for did in state.demes.keys():
+		initial_cultural_traits_by_deme[did] = (state.demes[did] as EvoTypes.Deme).cultural_trait_ids.duplicate()
 
 	var tragedy_hexes: Dictionary = {}
 	for entry in state.chronicle:
@@ -101,24 +127,39 @@ static func run_resource_and_symbiosis_phase(
 				float(deme.population) * 0.50 * (1.0 + 0.60 * v_eff.extraction_efficiency)
 			)
 
+		var lineages_in_hex: Dictionary = {}
+		for deme in resident_demes:
+			lineages_in_hex[deme.lineage_id] = true
+		var has_rival_lineages := lineages_in_hex.size() >= 2
+
 		var hawks: Array[EvoTypes.Deme] = []
 		var doves: Array[EvoTypes.Deme] = []
 		var exchangers: Array[EvoTypes.Deme] = []
 
 		for deme in resident_demes:
-			if get_archetype_prob(deme, state.decisions_catalog, "dispute") >= 0.25:
+			var is_active_hawk := has_rival_lineages and get_archetype_prob(deme, state.decisions_catalog, "dispute") >= 0.25
+			if is_active_hawk:
 				hawks.append(deme)
 			else:
 				doves.append(deme)
-			if get_archetype_prob(deme, state.decisions_catalog, "exchange") >= 0.20:
-				exchangers.append(deme)
+				if get_archetype_prob(deme, state.decisions_catalog, "exchange") >= 0.20:
+					exchangers.append(deme)
 
-		if resident_demes.size() >= 2:
-			if hawks.size() >= 2:
+		var hawk_lineages: Dictionary = {}
+		for hawk in hawks:
+			hawk_lineages[hawk.lineage_id] = true
+		var has_rival_hawks := hawk_lineages.size() >= 2
+
+		if has_rival_lineages:
+			if has_rival_hawks:
 				for i in range(hawks.size()):
 					var hawk := hawks[i]
 					var opp := hawks[(i + 1) % hawks.size()]
-					hawk.population = maxi(1, int(floor(float(hawk.population) * 0.85)))
+					for candidate_opp in hawks:
+						if candidate_opp.lineage_id != hawk.lineage_id:
+							opp = candidate_opp
+							break
+					hawk.population = maxi(10, int(floor(float(hawk.population) * 0.85)))
 					hawk_penalty_by_deme[hawk.id] = 1.25
 					var v_eff: EvoTypes.BiophysicalVector = effective_vec_by_deme[hawk.id]
 					demand_by_deme[hawk.id] = maxf(
@@ -134,36 +175,43 @@ static func run_resource_and_symbiosis_phase(
 					flow.to_deme_id = opp.id
 					state.active_flows.append(flow)
 			elif hawks.size() >= 1 and doves.size() >= 1:
-				var sum_dove_social: float = 0.0
-				for dove in doves:
-					sum_dove_social += (effective_vec_by_deme[dove.id] as EvoTypes.BiophysicalVector).social_cohesion
-				var avg_dove_social := sum_dove_social / float(doves.size())
-
 				for hawk in hawks:
+					var rival_doves: Array[EvoTypes.Deme] = []
+					for dove in doves:
+						if dove.lineage_id != hawk.lineage_id:
+							rival_doves.append(dove)
+					if rival_doves.is_empty():
+						continue
+					var sum_dove_social: float = 0.0
+					for dove in rival_doves:
+						sum_dove_social += (effective_vec_by_deme[dove.id] as EvoTypes.BiophysicalVector).social_cohesion
+					var avg_dove_social := sum_dove_social / float(rival_doves.size())
+
 					var hawk_social := (effective_vec_by_deme[hawk.id] as EvoTypes.BiophysicalVector).social_cohesion
 					var capture_mult := 0.25 * (1.0 + maxf(0.0, hawk_social - avg_dove_social))
 					var hawk_demand := float(demand_by_deme[hawk.id])
 					var req_bonus := hawk_demand * capture_mult
 					var total_dove_demand: float = 0.0
-					for dove in doves:
+					for dove in rival_doves:
 						total_dove_demand += float(demand_by_deme[dove.id])
 					var actual_captured := minf(total_dove_demand, req_bonus)
 
 					demand_by_deme[hawk.id] = hawk_demand + actual_captured
 					if total_dove_demand > 0.0:
-						for dove in doves:
+						for dove in rival_doves:
 							var cur_d := float(demand_by_deme[dove.id])
 							var share := cur_d / total_dove_demand
 							demand_by_deme[dove.id] = maxf(0.0, cur_d - actual_captured * share)
 
-					var flow := EvoTypes.HexEdgeFlow.new()
-					flow.from_hex_id = cell.id
-					flow.to_hex_id = cell.id
-					flow.flow_type = "dispute"
-					flow.intensity = 0.65
-					flow.from_deme_id = hawk.id
-					flow.to_deme_id = doves[0].id
-					state.active_flows.append(flow)
+					for dove in rival_doves:
+						var flow := EvoTypes.HexEdgeFlow.new()
+						flow.from_hex_id = cell.id
+						flow.to_hex_id = cell.id
+						flow.flow_type = "dispute"
+						flow.intensity = 0.65
+						flow.from_deme_id = hawk.id
+						flow.to_deme_id = dove.id
+						state.active_flows.append(flow)
 
 		var total_demand: float = 0.0
 		for deme in resident_demes:
@@ -196,40 +244,41 @@ static func run_resource_and_symbiosis_phase(
 				state.active_flows.append(flow)
 
 			for donor in exchangers:
+				var donor_initial_traits: Array = initial_cultural_traits_by_deme.get(donor.id, [])
 				for receiver in exchangers:
 					if donor.id == receiver.id:
 						continue
 					if not EvoCatalog.deme_has_cultural_capacity(receiver, state.traits_catalog):
 						continue
 					var receiver_social := (effective_vec_by_deme[receiver.id] as EvoTypes.BiophysicalVector).social_cohesion
-					for tid in donor.cultural_trait_ids:
-						if receiver.cultural_trait_ids.has(tid):
+					for tid_var in donor_initial_traits:
+						var tid := str(tid_var)
+						if not _can_acquire_trait(receiver, tid, state.traits_catalog):
 							continue
-						if state.traits_catalog.has(tid):
-							var tdef: EvoTypes.TraitDef = state.traits_catalog[tid]
-							if receiver_social >= tdef.vector.transmission_threshold:
-								receiver.cultural_trait_ids.append(tid)
-								effective_vec_by_deme[receiver.id] = compute_effective_vector(receiver, state)
-								if not logged_symbiosis_in_cell:
-									logged_symbiosis_in_cell = true
-									var tname := EvoI18n.trait_name(lang, tdef)
-									var entry := EvoTypes.ChronicleEntry.new()
-									entry.id = "chronicle-symbiosis-%d-%s-%s" % [state.generation, cell.id, receiver.id]
-									entry.generation = state.generation
-									entry.event_type = "symbiosis"
-									entry.title = ("Cultural Symbiosis: %s" if is_en else "Simbiosis Cultural: %s") % tname
-									entry.causal_explanation = (
-										"%s acquired %s through symbiotic exchange with %s in hex (%s)." % [receiver.name, tname, donor.name, cell.id]
-										if is_en
-										else "%s adquirió %s mediante intercambio simbiótico con %s en el hexágono (%s)." % [receiver.name, tname, donor.name, cell.id]
-									)
-									entry.hex_id = cell.id
-									entry.deme_id = receiver.id
-									entry.lineage_id = receiver.lineage_id
-									entry.trait_id = tid
-									state.chronicle.append(entry)
+						var tdef: EvoTypes.TraitDef = state.traits_catalog[tid]
+						if receiver_social >= tdef.vector.transmission_threshold:
+							receiver.cultural_trait_ids.append(tid)
+							if not logged_symbiosis_in_cell:
+								logged_symbiosis_in_cell = true
+								var tname := EvoI18n.trait_name(lang, tdef)
+								var entry := EvoTypes.ChronicleEntry.new()
+								entry.id = "chronicle-symbiosis-%d-%s-%s" % [state.generation, cell.id, receiver.id]
+								entry.generation = state.generation
+								entry.event_type = "symbiosis"
+								entry.title = ("Cultural Symbiosis: %s" if is_en else "Simbiosis Cultural: %s") % tname
+								entry.causal_explanation = (
+									"%s acquired %s through symbiotic exchange with %s in hex (%s)." % [receiver.name, tname, donor.name, cell.id]
+									if is_en
+									else "%s adquirió %s mediante intercambio simbiótico con %s en el hexágono (%s)." % [receiver.name, tname, donor.name, cell.id]
+								)
+								entry.hex_id = cell.id
+								entry.deme_id = receiver.id
+								entry.lineage_id = receiver.lineage_id
+								entry.trait_id = tid
+								state.chronicle.append(entry)
 
-		var natural_regen := cell.carrying_capacity * cell.seasonal_regen_rate
+		var gamma_season := 1.20 if state.season == "wet_warm" else 0.75
+		var natural_regen := cell.carrying_capacity * cell.seasonal_regen_rate * gamma_season
 		var sum_eco_impact: float = 0.0
 		var has_intensive_overexploit := false
 		for deme in resident_demes:
@@ -262,12 +311,13 @@ static func run_resource_and_symbiosis_phase(
 				entry.deme_id = primary_deme.id
 				entry.lineage_id = primary_deme.lineage_id
 				state.chronicle.append(entry)
-		elif sum_eco_impact > 0.10 and not has_intensive_overexploit and not already_logged_tragedy:
+		elif sum_eco_impact > 0.10 and not has_intensive_overexploit:
 			cell.carrying_capacity = snappedf(
 				clampf(cell.carrying_capacity * (1.0 + 0.05 * sum_eco_impact), 10.0, cell.carrying_capacity_max),
 				0.01
 			)
 
+	var exchange_flow_pairs: Dictionary = {}
 	for donor_id in state.demes.keys():
 		var donor: EvoTypes.Deme = state.demes[donor_id]
 		if get_archetype_prob(donor, state.decisions_catalog, "exchange") < 0.20:
@@ -275,8 +325,13 @@ static func run_resource_and_symbiosis_phase(
 		if not state.cells.has(donor.hex_id):
 			continue
 		var donor_cell: EvoTypes.HexCell = state.cells[donor.hex_id]
+		if donor_cell.biome == "ocean" or donor_cell.altitude > 0.85:
+			continue
+		var donor_initial_traits: Array = initial_cultural_traits_by_deme.get(donor.id, [])
 		for nid in HexMath.get_neighbor_ids(donor_cell.q, donor_cell.r, state.cells):
 			var ncell: EvoTypes.HexCell = state.cells[nid]
+			if ncell.biome == "ocean" or ncell.altitude > 0.85:
+				continue
 			for ndeme_id in ncell.deme_ids:
 				if not state.demes.has(ndeme_id):
 					continue
@@ -289,38 +344,42 @@ static func run_resource_and_symbiosis_phase(
 					extracted_energy_by_deme[donor.id] = snappedf(base_ext * 1.20, 0.0001)
 					symbiosis_bonus_applied[donor.id] = true
 
-				var flow := EvoTypes.HexEdgeFlow.new()
-				flow.from_hex_id = donor_cell.id
-				flow.to_hex_id = ncell.id
-				flow.flow_type = "exchange"
-				flow.intensity = 0.55
-				flow.from_deme_id = donor.id
-				flow.to_deme_id = receiver.id
-				state.active_flows.append(flow)
+				var pair_ab := "%s|%s" % [donor.id, receiver.id]
+				var pair_ba := "%s|%s" % [receiver.id, donor.id]
+				if not exchange_flow_pairs.has(pair_ab):
+					exchange_flow_pairs[pair_ab] = true
+					exchange_flow_pairs[pair_ba] = true
+					var flow := EvoTypes.HexEdgeFlow.new()
+					flow.from_hex_id = donor_cell.id
+					flow.to_hex_id = ncell.id
+					flow.flow_type = "exchange"
+					flow.intensity = 0.55
+					flow.from_deme_id = donor.id
+					flow.to_deme_id = receiver.id
+					state.active_flows.append(flow)
 
 				if EvoCatalog.deme_has_cultural_capacity(receiver, state.traits_catalog):
 					var receiver_social := (effective_vec_by_deme[receiver.id] as EvoTypes.BiophysicalVector).social_cohesion
-					for tid in donor.cultural_trait_ids:
-						if receiver.cultural_trait_ids.has(tid):
+					for tid_var in donor_initial_traits:
+						var tid := str(tid_var)
+						if not _can_acquire_trait(receiver, tid, state.traits_catalog):
 							continue
-						if state.traits_catalog.has(tid):
-							var tdef: EvoTypes.TraitDef = state.traits_catalog[tid]
-							if receiver_social >= tdef.vector.transmission_threshold:
-								receiver.cultural_trait_ids.append(tid)
-								effective_vec_by_deme[receiver.id] = compute_effective_vector(receiver, state)
-								var tname := EvoI18n.trait_name(lang, tdef)
-								var entry := EvoTypes.ChronicleEntry.new()
-								entry.id = "chronicle-symbiosis-%d-%s-%s-%s" % [state.generation, ncell.id, receiver.id, tid]
-								entry.generation = state.generation
-								entry.event_type = "symbiosis"
-								entry.title = ("Cultural Symbiosis: %s" if is_en else "Simbiosis Cultural: %s") % tname
-								entry.causal_explanation = (
-									"%s acquired %s through inter-deme exchange with %s across hexes (%s -> %s)." % [receiver.name, tname, donor.name, donor_cell.id, ncell.id]
-									if is_en
-									else "%s adquirió %s mediante intercambio inter-deme con %s entre hexágonos (%s -> %s)." % [receiver.name, tname, donor.name, donor_cell.id, ncell.id]
-								)
-								entry.hex_id = ncell.id
-								entry.deme_id = receiver.id
-								entry.lineage_id = receiver.lineage_id
-								entry.trait_id = tid
-								state.chronicle.append(entry)
+						var tdef: EvoTypes.TraitDef = state.traits_catalog[tid]
+						if receiver_social >= tdef.vector.transmission_threshold:
+							receiver.cultural_trait_ids.append(tid)
+							var tname := EvoI18n.trait_name(lang, tdef)
+							var entry := EvoTypes.ChronicleEntry.new()
+							entry.id = "chronicle-symbiosis-%d-%s-%s-%s" % [state.generation, ncell.id, receiver.id, tid]
+							entry.generation = state.generation
+							entry.event_type = "symbiosis"
+							entry.title = ("Cultural Symbiosis: %s" if is_en else "Simbiosis Cultural: %s") % tname
+							entry.causal_explanation = (
+								"%s acquired %s through inter-deme exchange with %s across hexes (%s -> %s)." % [receiver.name, tname, donor.name, donor_cell.id, ncell.id]
+								if is_en
+								else "%s adquirió %s mediante intercambio inter-deme con %s entre hexágonos (%s -> %s)." % [receiver.name, tname, donor.name, donor_cell.id, ncell.id]
+							)
+							entry.hex_id = ncell.id
+							entry.deme_id = receiver.id
+							entry.lineage_id = receiver.lineage_id
+							entry.trait_id = tid
+							state.chronicle.append(entry)

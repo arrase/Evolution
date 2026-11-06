@@ -43,7 +43,7 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 	state.active_flows.clear()
 	state.recent_extinction_hexes.clear()
 
-	if (state.glacial_sea_level_cycle or state.preset_id == "preset-darwin-archipelago") and next_generation % 8 == 0:
+	if state.glacial_sea_level_cycle and next_generation % 8 == 0:
 		state.sea_level = 0.12 if ((next_generation / 8) % 2 == 0) else 0.25
 
 	for cid in state.cells.keys():
@@ -59,7 +59,11 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 				cell.biome = "arid_steppe"
 			else:
 				cell.biome = "high_mountain"
-			cell.carrying_capacity_max = maxf(160.0, cell.carrying_capacity_max)
+			var defaults: Dictionary = EvoTypes.BIOME_CLIMATE_DEFAULTS[cell.biome]
+			cell.temperature = float(defaults["temperature"])
+			cell.humidity = float(defaults["humidity"])
+			cell.seasonal_regen_rate = float(defaults["regen"])
+			cell.carrying_capacity_max = maxf(float(defaults["k_max"]), cell.carrying_capacity_max)
 			cell.carrying_capacity = maxf(roundf(cell.carrying_capacity_max * 0.88), cell.carrying_capacity)
 			cell.current_resources = maxf(cell.current_resources, roundf(cell.carrying_capacity * 0.35))
 
@@ -145,7 +149,7 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 		cell.temperature = clampf(snappedf(cell.temperature + delta_temp, 0.01), -1.0, 1.0)
 		cell.humidity = clampf(snappedf(cell.humidity + delta_hum, 0.01), 0.0, 1.0)
 
-		var suffered_collapse := collapsed_prev_gen_hexes.has(cell.id)
+		var suffered_collapse := collapsed_prev_gen_hexes.has(cell.id) or cell.carrying_capacity < cell.carrying_capacity_max * 0.60
 
 		var recovery_rate: float = 0.005 if (suffered_collapse or cell.current_resources <= 0.0) else 0.05
 		var next_k := clampf(

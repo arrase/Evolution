@@ -27,12 +27,21 @@ static func check_ollama_status(force_refresh: bool = false) -> Dictionary:
 	return EvoOllamaClient.check_ollama_status(force_refresh)
 
 
-static func is_decision_eligible(deme: EvoTypes.Deme, dec: EvoTypes.DecisionDef) -> bool:
-	return EvoHeuristicScorer.is_decision_eligible(deme, dec)
+static func refresh_ollama_status_async() -> void:
+	EvoOllamaClient.refresh_ollama_status_async()
 
 
-static func get_eligible_decisions(deme: EvoTypes.Deme, decisions_catalog: Dictionary) -> Array[EvoTypes.DecisionDef]:
-	return EvoHeuristicScorer.get_eligible_decisions(deme, decisions_catalog)
+static func is_decision_eligible(deme: EvoTypes.Deme, dec: EvoTypes.DecisionDef, traits_catalog: Dictionary = {}) -> bool:
+	return EvoHeuristicScorer.is_decision_eligible(deme, dec, traits_catalog)
+
+
+static func get_eligible_decisions(
+	deme: EvoTypes.Deme,
+	decisions_catalog: Dictionary,
+	traits_catalog: Dictionary = {},
+	state: EvoTypes.WorldState = null
+) -> Array[EvoTypes.DecisionDef]:
+	return EvoHeuristicScorer.get_eligible_decisions(deme, decisions_catalog, traits_catalog, state)
 
 
 static func normalize_decision_probabilities(
@@ -95,6 +104,7 @@ static func evaluate_deme(
 		}
 
 	var sig := compute_deme_evaluation_signature(deme, state)
+	deme.set_meta("eval_sig", sig)
 	var cached_entry := EvoOllamaClient.lookup_or_enqueue_single_deme(sig, deme, state)
 	if not cached_entry.is_empty():
 		var probs: Dictionary = cached_entry["probabilities"]
@@ -113,7 +123,7 @@ static func evaluate_deme(
 		)
 		deme.last_confidence = confidence
 		return {
-			"probabilities": probs,
+			"probabilities": probs.duplicate(),
 			"dominant_decision_id": dominant_id,
 			"confidence": confidence,
 			"justification": justification

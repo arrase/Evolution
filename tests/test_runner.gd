@@ -12,6 +12,7 @@ func _init() -> void:
 	_test_hawk_dove_and_symbiosis()
 	_test_tragedy_of_the_commons()
 	_test_baldwin_innovation_and_speciation()
+	_test_kin_merge_fission_and_macro_outcome()
 	_test_interventions()
 	_test_serialization_roundtrip()
 	_test_25_generations_all_presets()
@@ -188,13 +189,30 @@ func _test_baldwin_innovation_and_speciation() -> void:
 	_assert(entries_b.size() == 1 and entries_b[0].event_type == "baldwin_trait", "Baldwin assimilation triggers at counter >= 8")
 	_assert(int(east_b.baldwin_counters["dec-cooperate-store"]) == 0, "Baldwin counter resets to 0 after assimilation")
 
-	# 2. Cultural innovation
+	# 2. Cultural innovation & dec-explore-innovate eligibility
 	var state_c := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
 	var east_c: EvoTypes.Deme = state_c.demes["deme-rift-east"]
+	var innovate_dec: EvoTypes.DecisionDef = state_c.decisions_catalog["dec-explore-innovate"]
+	_assert(EvoDecisionModel.is_decision_eligible(east_c, innovate_dec, state_c.traits_catalog), "dec-explore-innovate is eligible for deme with cultural capacity")
+	var non_cultural_deme := east_c.duplicate_deme()
+	non_cultural_deme.biological_trait_ids.assign(["bio-k-strategy"])
+	_assert(not EvoDecisionModel.is_decision_eligible(non_cultural_deme, innovate_dec, state_c.traits_catalog), "dec-explore-innovate requires cultural capacity")
+
 	east_c.innovation_counter = 1.15
+	east_c.last_energy_delta = 5.0
 	var entries_c := EvoMilestonePhase.run_milestone_phase(state_c, "es")
 	_assert(entries_c.size() == 1 and entries_c[0].event_type == "cultural_innovation", "Cultural innovation triggers at counter >= 1.0")
-	_assert(east_c.cultural_trait_ids.size() == 1, "Deme acquires newly synthesized cultural tradition")
+	_assert(east_c.cultural_trait_ids.size() == 1, "Deme acquires 1st newly synthesized cultural tradition")
+
+	east_c.innovation_counter = 1.25
+	east_c.last_energy_delta = 5.0
+	var entries_c2 := EvoMilestonePhase.run_milestone_phase(state_c, "es")
+	_assert(entries_c2.size() == 1 and entries_c2[0].event_type == "cultural_innovation" and east_c.cultural_trait_ids.size() == 2, "Deme can acquire a 2nd emergent cultural trait (emergent_cul_count < 2)")
+
+	east_c.innovation_counter = 1.25
+	east_c.last_energy_delta = 5.0
+	var entries_c3 := EvoMilestonePhase.run_milestone_phase(state_c, "es")
+	_assert(entries_c3.is_empty() and east_c.cultural_trait_ids.size() == 2, "Cultural innovation caps at 2 emergent cultural traits")
 
 	# 3. Allopatric speciation
 	var state_s := EvoCatalog.create_preset_world("preset-darwin-archipelago", "es")
@@ -213,6 +231,95 @@ func _test_baldwin_innovation_and_speciation() -> void:
 	_assert(state_s.lineage_tree.size() == 2, "Lineage tree now has 2 nodes")
 
 
+func _test_kin_merge_fission_and_macro_outcome() -> void:
+	print("-- Testing Kin Merge Flow Redirection, Fission Bottleneck & Macro-Outcome Trigger --")
+	# 1. Kin merging redirects from_deme_id and to_deme_id without corrupting inter-hex flow recipients
+	var state_m := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
+	var deme_a: EvoTypes.Deme = state_m.demes["deme-rift-west"]
+	var deme_c: EvoTypes.Deme = state_m.demes["deme-rift-east"]
+	var deme_b := deme_a.duplicate_deme()
+	deme_b.id = "deme-rift-west-m1"
+	deme_b.name = "Clan Kin B"
+	deme_b.hex_id = deme_a.hex_id
+	deme_b.population = 45
+	state_m.demes[deme_b.id] = deme_b
+	(state_m.cells[deme_a.hex_id] as EvoTypes.HexCell).deme_ids.append(deme_b.id)
+
+	var inter_flow := EvoTypes.HexEdgeFlow.new()
+	inter_flow.from_hex_id = deme_b.hex_id
+	inter_flow.to_hex_id = deme_c.hex_id
+	inter_flow.flow_type = "exchange"
+	inter_flow.from_deme_id = deme_b.id
+	inter_flow.to_deme_id = deme_c.id
+	state_m.active_flows.append(inter_flow)
+
+	var initial_pops_m := {deme_a.id: deme_a.population, deme_b.id: deme_b.population, deme_c.id: deme_c.population}
+	var eff_vecs_m := {}
+	var ext_energy_m := {}
+	for did in state_m.demes.keys():
+		var d: EvoTypes.Deme = state_m.demes[did]
+		eff_vecs_m[did] = EvoEcologyInteraction.compute_effective_vector(d, state_m)
+		ext_energy_m[did] = float(d.population) * 0.60
+		d.last_decision_probabilities = {"dec-conservative-forage": 1.0}
+		d.last_dominant_decision_id = "dec-conservative-forage"
+
+	EvoDemographyMigration.run_demography_and_migration_phase(state_m, "es", initial_pops_m, eff_vecs_m, {}, ext_energy_m)
+	_assert(not state_m.demes.has(deme_b.id), "Kin deme_b merged into deme_a")
+	var preserved_recipient := false
+	for fl in state_m.active_flows:
+		if fl.flow_type == "exchange" and fl.from_deme_id == deme_a.id and fl.to_deme_id == deme_c.id:
+			preserved_recipient = true
+			break
+	_assert(preserved_recipient, "Kin merge redirects from_deme_id to deme_a without overwriting inter-hex recipient deme_c")
+
+	# 2. Fission migration does not falsely trigger cultural_loss bottleneck on a healthy parent deme
+	var state_f := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
+	var parent_d: EvoTypes.Deme = state_f.demes["deme-rift-west"]
+	parent_d.population = 60
+	parent_d.energy_reserves = 120.0
+	parent_d.cultural_trait_ids.assign(["cul-fire-processing"])
+	parent_d.last_decision_probabilities = {"dec-selective-migration": 0.90, "dec-conservative-forage": 0.10}
+	parent_d.last_dominant_decision_id = "dec-selective-migration"
+	var init_pops_f := {parent_d.id: 60, "deme-rift-east": 140}
+	var eff_vecs_f := {}
+	var ext_energy_f := {}
+	for did in state_f.demes.keys():
+		var d: EvoTypes.Deme = state_f.demes[did]
+		eff_vecs_f[did] = EvoEcologyInteraction.compute_effective_vector(d, state_f)
+		ext_energy_f[did] = float(d.population) * 0.65
+	EvoDemographyMigration.run_demography_and_migration_phase(state_f, "es", init_pops_f, eff_vecs_f, {}, ext_energy_f)
+	var had_cultural_loss := false
+	for entry in state_f.chronicle:
+		if entry.event_type == "cultural_loss" and entry.deme_id == parent_d.id:
+			had_cultural_loss = true
+			break
+	_assert(parent_d.population < 50 and parent_d.cultural_trait_ids.has("cul-fire-processing") and not had_cultural_loss, "Healthy parent deme dropping below 50 pop solely due to fission migration does not suffer false cultural_loss")
+
+	# 3. has_macro_outcome only triggers on the turn the macro-outcome is logged, not on subsequent turns
+	var state_mo := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
+	state_mo.quiet_turns = 11
+	for did in state_mo.demes.keys():
+		var d: EvoTypes.Deme = state_mo.demes[did]
+		state_mo.previous_populations[did] = d.population
+		var sig := EvoDecisionModel.compute_deme_evaluation_signature(d, state_mo)
+		EvoOllamaClient.seed_signature_cache(sig, {
+			"probabilities": {"dec-conservative-forage": 1.0},
+			"dominant_decision_id": "dec-conservative-forage",
+			"confidence": 0.90
+		})
+	var res_mo1 := EvoTurnEngine.advance_generation(state_mo, "es")
+	# Force ecological_equilibrium on a predictable quiet state if population shifted by >5%
+	if not bool(res_mo1["has_macro_outcome"]):
+		state_mo.macro_outcome_type = "ecological_equilibrium"
+		var eq_entry := EvoTypes.ChronicleEntry.new()
+		eq_entry.id = "chronicle-equilibrium-test"
+		eq_entry.generation = state_mo.generation
+		eq_entry.event_type = "ecological_equilibrium"
+		state_mo.chronicle.append(eq_entry)
+	var res_mo2 := EvoTurnEngine.advance_generation(state_mo, "es")
+	_assert(state_mo.macro_outcome_type != "" and not bool(res_mo2["has_macro_outcome"]), "has_macro_outcome is false on subsequent turns after macro-outcome was already logged")
+
+
 func _test_interventions() -> void:
 	print("-- Testing Player Interventions (Brushes) --")
 	var state := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
@@ -220,7 +327,13 @@ func _test_interventions() -> void:
 	var targets: Array[String] = ["0,0"]
 
 	var ok_biome := EvoTurnEngine.apply_set_biome(state, targets, "tundra", "es")
-	_assert(ok_biome and (state.cells["0,0"] as EvoTypes.HexCell).biome == "tundra", "set_biome changes cell biome to tundra")
+	var c0: EvoTypes.HexCell = state.cells["0,0"]
+	var tundra_defs: Dictionary = EvoTypes.BIOME_CLIMATE_DEFAULTS["tundra"]
+	_assert(ok_biome and c0.biome == "tundra", "set_biome changes cell biome to tundra")
+	_assert(
+		is_equal_approx(c0.seasonal_regen_rate, float(tundra_defs["regen"])) and is_equal_approx(c0.carrying_capacity_max, float(tundra_defs["k_max"])),
+		"set_biome updates seasonal_regen_rate and carrying_capacity_max from BIOME_CLIMATE_DEFAULTS"
+	)
 	_assert(state.selective_pressure_points == 90, "set_biome costs 10 points")
 
 	var ok_alt := EvoTurnEngine.apply_adjust_altitude(state, targets, 0.18, "es")
@@ -239,6 +352,16 @@ func _test_serialization_roundtrip() -> void:
 	print("-- Testing JSON Serialization Round-Trip --")
 	var state := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
 	EvoTurnEngine.advance_generation(state, "es")
+	state.recent_extinction_hexes.assign(["1,-1"])
+	state.disused_connections.append({
+		"from_hex_id": "-1,0",
+		"to_hex_id": "1,0",
+		"from_deme_id": "deme-rift-west",
+		"to_deme_id": "deme-rift-east",
+		"flow_type": "exchange",
+		"age": 2
+	})
+	state.previous_populations["deme-rift-west"] = 177
 	var json_str := JSON.stringify(state.to_dict())
 	var parsed: Variant = JSON.parse_string(json_str)
 	_assert(typeof(parsed) == TYPE_DICTIONARY, "Serialized state parses back as Dictionary")
@@ -246,6 +369,9 @@ func _test_serialization_roundtrip() -> void:
 	_assert(restored.generation == state.generation, "Restored generation matches")
 	_assert(restored.cells.size() == state.cells.size(), "Restored cells count matches")
 	_assert(restored.demes.size() == state.demes.size(), "Restored demes count matches")
+	_assert(restored.recent_extinction_hexes == state.recent_extinction_hexes, "Restored recent_extinction_hexes matches")
+	_assert(restored.disused_connections.size() == 1 and int(restored.disused_connections[0]["age"]) == 2, "Restored disused_connections matches")
+	_assert(int(restored.previous_populations.get("deme-rift-west", 0)) == 177, "Restored previous_populations matches")
 
 
 func _test_25_generations_all_presets() -> void:

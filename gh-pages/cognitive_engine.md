@@ -42,7 +42,7 @@ Rather than evaluating every deme with a single monolithic prompt, **Evolution**
 
 ## 10-Part Ecological State Signature (`compute_deme_evaluation_signature`)
 
-Subpopulations experiencing identical ecological, demographic, and neighborhood conditions share a canonical **10-part pipe-delimited signature** (`heuristic_scorer.gd:316-376`), preventing redundant LLM evaluations across turns and across parallel demes:
+Subpopulations experiencing identical ecological, demographic, and neighborhood conditions share a canonical **10-part pipe-delimited signature** (`heuristic_scorer.gd:363-464`), preventing redundant LLM evaluations across turns and across parallel demes:
 
 $$\text{sig} = \texttt{model} \mid \texttt{season} \mid \texttt{biome} \mid \texttt{adequacy} \mid \texttt{health} \mid \texttt{vitality} \mid \texttt{competition} \mid \texttt{traits} \mid \texttt{dominant} \mid \texttt{neighbors}$$
 
@@ -53,10 +53,10 @@ $$\text{sig} = \texttt{model} \mid \texttt{season} \mid \texttt{biome} \mid \tex
 | **3** | `biome` | `current_cell.biome` | Captures local habitat class (`tropical_forest`, `savanna`, etc.). |
 | **4** | `adequacy_bucket` | $\min\big(6,\ \lfloor \text{adequacy\_ratio} \times 2.0 \rfloor\big)$ where $\text{adequacy\_ratio} = \dfrac{R_{\text{cell}}}{\max(10.0,\ 0.48 \cdot P_{\text{cell\_total}})}$ | Quantizes local food abundance relative to total hex population into 7 tiers (`0..6`). |
 | **5** | `health_bucket` | $\lfloor (K_{\text{cell}} / \max(1.0, K_{\max})) \times 4.0 \rfloor$ | Quantizes ecological carrying capacity health $K / K_{\max}$ into 5 tiers (`0..4`). |
-| **6** | `vitality` | `"starving"`, `"struggling"`, `"stable"`, or `"thriving"` | Reflects `energy_reserves`, `last_energy_delta`, and `adequacy_ratio`. |
-| **7** | `competition_key` | `"%d:%d:%s" % [rival_count, kin_count, "viable" if pop >= 40 else "small"]` | Captures intra-hex Hawk-Dove and symbiosis potential plus fission viability. |
-| **8** | `traits_key` | Sorted comma-joined `biological_trait_ids + cultural_trait_ids` | Encodes exact 6-axis genetic and cultural capabilities. |
-| **9** | `dominant_key` | `deme.last_dominant_decision_id` | Preserves behavioral momentum toward Baldwin assimilation. |
+| **6** | `vitality` | `"starving"`, `"struggling"`, `"stable"`, or `"thriving"` | Reflects `energy_reserves` and `last_energy_delta`. |
+| **7** | `competition_key` | `"%d:%d:%s:%d" % [rival_count, kin_count, "viable" if pop >= 40 else "small", 1 if has_nearby_rival else 0]` | Captures intra-hex and adjacent-hex competition plus fission viability. |
+| **8** | `traits_key` | Sorted comma-joined `biological_trait_ids + cultural_trait_ids` with 5-axis biophysical vectors | Encodes exact genetic and cultural capabilities and custom Lab edits. |
+| **9** | `dominant_key` | `"%s:%d:%d:%x" % [last_dominant_decision_id, baldwin_bucket, innov_bucket, dec_hash]` | Preserves behavioral momentum, Baldwin/innovation progress, and decision catalog state. |
 | **10** | `neighbor_key` | Top 2 passable neighbors ranked by $R / \max(10, P)$: `"%s:%s:%d" % [biome, "empty"\|"occupied", round(R/100)]` | Summarizes adjacent dispersal and trade opportunities. |
 
 ---
@@ -68,13 +68,13 @@ When querying Ollama (`POST http://127.0.0.1:11434/v1/systemone`), `EvoHeuristic
 
 ```text
 Gen 6 (wet_warm) | Hex 2,-1 (arid_steppe): resources=260/335 (health=88% of Kmax=380), caloricAdequacy=3.87x, temp=+0.60, hum=0.30, alt=0.42
-Deme "Eastern Savanna Hominids": pop=140 (thriving), reserves=180, delta=+8.0 | CellCompetition: totalPop=140, cohabiting=1 (rivals=0, kin=0)
+Deme "Eastern Savanna Hominids": pop=140 (thriving), reserves=180, delta=+8 | CellCompetition: totalPop=140, cohabiting=0 (rivals=0, kin=0)
 Traits: K-Strategy[cost:+0.20,extract:+0.25,eco:+0.15,mobility:+0.05,cohesion:+0.40]; Instinctive Sociability[cost:+0.20,extract:+0.20,eco:+0.05,mobility:+0.10,cohesion:+0.60]
 lastDominant=dec-cooperate-store, baldwin=5/8, innovation=0.72/2.0 | Neighbors: 1,-1(savanna, res=260, pop=0, empty), 2,0(savanna, res=260, pop=0, empty)
 ```
 
 ### 2. Non-Blocking Worker Pool, Hot-Swapping & Prefetching
-* **Concurrent HTTP Batching**: `_run_ollama_worker` runs on Godot's `WorkerThreadPool`, popping up to **4 pending signatures per batch** and polling non-blocking `HTTPClient` connections concurrently (`EVAL_TIMEOUT_MS = 4500` ms, `keep_alive = "30m"`).
+* **Concurrent HTTP Batching**: `_run_ollama_worker` runs on Godot's `WorkerThreadPool`, popping up to **4 pending signatures per batch** and polling non-blocking `HTTPClient` connections concurrently (`EVAL_TIMEOUT_MS = 12000` ms, `keep_alive = "30m"`).
 * **Live Intra-Turn Hot-Swap**: Whenever a background batch completes, `_completed_revision` increments. On the very next frame (`_process`), `EvoMainController` calls `EvoDecisionModel.apply_completed_live_results`, immediately updating deme decision bars, justifications, and 2.5D village action structures without stalling UI rendering.
 * **Post-Turn Prefetching (`prefetch_for_state`)**: At Stage 5 of every generation, the engine computes the next turn's signatures for all surviving demes and enqueues any uncached states ahead of time—so when playing at `1x` (`1.50s/gen`), live LLM scores are already cached before the next generation triggers. While any batch remains pending, automatic generational progression waits for the models to complete their evaluation.
 
@@ -85,8 +85,8 @@ lastDominant=dec-cooperate-store, baldwin=5/8, innovation=0.72/2.0 | Neighbors: 
 ### Decision Eligibility Rule (`is_decision_eligible`)
 A decision `dec` is eligible if `dec.required_trait_ids.is_empty()` or the deme possesses **at least one** trait in `dec.required_trait_ids`. Specifically:
 
-* **6 Base Decisions** (`dec-conservative-forage`, `dec-intensive-overexploit`, `dec-selective-migration`, `dec-cooperate-store`, `dec-territorial-dispute`, `dec-explore-innovate`) are always eligible.
-* **`dec-exchange-symbiosis`** requires `bio-encephalization` OR `bio-social-instinct`.
+* **5 Base Decisions** (`dec-conservative-forage`, `dec-intensive-overexploit`, `dec-selective-migration`, `dec-cooperate-store`, `dec-territorial-dispute`) require no special traits (with `dec-territorial-dispute` filtered out when no rival lineage is present in the current or adjacent hexes).
+* **`dec-exchange-symbiosis` and `dec-explore-innovate`** require cultural capacity (`bio-encephalization` OR `bio-social-instinct`).
 
 ### Probability Normalization (`normalize_decision_probabilities`)
 Raw LLM probability scores returned by Ollama `/v1/systemone` are normalized via `EvoHeuristicScorer.normalize_decision_probabilities(raw_scores, eligible_ids)`:
@@ -101,7 +101,7 @@ Raw LLM probability scores returned by Ollama `/v1/systemone` are normalized via
 
 ## Startup Ollama Verification, Blocking Offline Notice & Model Download
 
-When **Evolution** starts, `EvoDecisionModel.check_ollama_status(true)` asynchronously queries `GET http://127.0.0.1:11434/api/tags` and `POST /api/show` to verify connectivity and inspect installed models advertising the `"decision"` capability (`EvoOllamaClient.filter_decision_models_from_tags`).
+When **Evolution** starts, `EvoDecisionModel.check_ollama_status(true)` asynchronously queries `GET http://127.0.0.1:11434/api/tags` to verify connectivity and inspect installed models advertising the `"decision"` capability in their `capabilities` array (`EvoOllamaClient.filter_decision_models_from_tags`).
 
 * **Ollama Offline Blocking Popup (`show_ollama_offline_popup`)**:
   * If Ollama is offline or unreachable (`http://127.0.0.1:11434`), **Evolution** displays a full-screen blocking warning popup (`_missing_models_modal`) notifying the user that Ollama is offline and required to run the simulation.

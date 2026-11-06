@@ -6,7 +6,8 @@ const DEFAULT_OLLAMA_PORT: int = 11434
 const DEFAULT_SYSTEM_ONE_MODEL: String = EvoUserSettings.DEFAULT_PRIMARY_MODEL
 const SECONDARY_SYSTEM_ONE_MODEL: String = EvoUserSettings.DEFAULT_SECONDARY_MODEL
 const STATUS_TIMEOUT_MS: int = 1500
-const EVAL_TIMEOUT_MS: int = 4500
+const EVAL_TIMEOUT_MS: int = 60000
+const PULL_STALL_TIMEOUT_MS: int = 60000
 const SYSTEM_ONE_INSTRUCTIONS: String = "Evaluate the ecological, energetic, and social state of the deme and its passable neighbors to score each behavioral decision."
 
 static var _mutex := Mutex.new()
@@ -84,7 +85,7 @@ static func check_ollama_status(force_refresh: bool = false) -> Dictionary:
 	_mutex.unlock()
 
 	if should_launch:
-		if task_to_reap != -1 and WorkerThreadPool.is_task_completed(task_to_reap):
+		if task_to_reap != -1:
 			WorkerThreadPool.wait_for_task_completion(task_to_reap)
 		var new_task_id := WorkerThreadPool.add_task(Callable(EvoOllamaClient, "_probe_ollama_status_worker"))
 		_mutex.lock()
@@ -92,6 +93,10 @@ static func check_ollama_status(force_refresh: bool = false) -> Dictionary:
 		_mutex.unlock()
 
 	return snapshot
+
+
+static func refresh_ollama_status_async() -> void:
+	check_ollama_status(true)
 
 
 static func _probe_ollama_status_worker() -> void:
@@ -223,12 +228,16 @@ static func start_pull_models(models: Array[String]) -> void:
 	_pull_task_id = -1
 	_mutex.unlock()
 
-	if task_to_reap != -1 and WorkerThreadPool.is_task_completed(task_to_reap):
+	if task_to_reap != -1:
 		WorkerThreadPool.wait_for_task_completion(task_to_reap)
 	var new_task_id := WorkerThreadPool.add_task(Callable(EvoOllamaClient, "_run_pull_worker"))
 	_mutex.lock()
 	_pull_task_id = new_task_id
 	_mutex.unlock()
+
+
+static func trigger_auto_pull_missing_models(models: Array[String]) -> void:
+	start_pull_models(models)
 
 
 static func cancel_pull() -> void:
@@ -306,8 +315,12 @@ static func _pull_single_model_sync(model_name: String, model_idx: int, total_mo
 		client.close()
 		return false
 
+	var req_start := Time.get_ticks_msec()
 	while not _shutdown_requested and not _pull_cancel_requested and client.get_status() == HTTPClient.STATUS_REQUESTING:
 		client.poll()
+		if Time.get_ticks_msec() - req_start > PULL_STALL_TIMEOUT_MS:
+			client.close()
+			return false
 		OS.delay_msec(10)
 
 	if not client.has_response() or client.get_response_code() != 200:
@@ -316,10 +329,12 @@ static func _pull_single_model_sync(model_name: String, model_idx: int, total_mo
 
 	var buffer := ""
 	var had_error := false
+	var last_progress_ms := Time.get_ticks_msec()
 	while not _shutdown_requested and not _pull_cancel_requested and client.get_status() == HTTPClient.STATUS_BODY:
 		client.poll()
 		var chunk := client.read_response_body_chunk()
 		if chunk.size() > 0:
+			last_progress_ms = Time.get_ticks_msec()
 			buffer += chunk.get_string_from_utf8()
 			var lines := buffer.split("\n")
 			buffer = lines[lines.size() - 1]
@@ -344,6 +359,9 @@ static func _pull_single_model_sync(model_name: String, model_idx: int, total_mo
 					_pull_state["percent"] = global_pct
 					_mutex.unlock()
 		else:
+			if Time.get_ticks_msec() - last_progress_ms > PULL_STALL_TIMEOUT_MS:
+				client.close()
+				return false
 			OS.delay_msec(10)
 
 	client.close()
@@ -368,7 +386,7 @@ static func _resolve_ollama_model_for_tag(desired: String, status: Dictionary) -
 static func build_live_job(sig: String, rep: EvoTypes.Deme, state: EvoTypes.WorldState) -> Dictionary:
 	if not state.cells.has(rep.hex_id):
 		return {}
-	var eligible_decisions := EvoHeuristicScorer.get_eligible_decisions(rep, state.decisions_catalog)
+	var eligible_decisions := EvoHeuristicScorer.get_eligible_decisions(rep, state.decisions_catalog, state.traits_catalog, state)
 	var eligible_ids: Array[String] = []
 	for dec in eligible_decisions:
 		eligible_ids.append(dec.id)
@@ -456,10 +474,10 @@ static func sync_and_enqueue_batch(buckets: Dictionary, state: EvoTypes.WorldSta
 static func prefetch_for_reps(reps_by_sig: Dictionary, state: EvoTypes.WorldState) -> void:
 	var missing_sigs: Array[String] = []
 	_mutex.lock()
+	for pending_sig in _pending_jobs_by_sig.keys():
+		if not reps_by_sig.has(pending_sig):
+			_pending_jobs_by_sig.erase(pending_sig)
 	if not _shutdown_requested:
-		for pending_sig in _pending_jobs_by_sig.keys():
-			if not reps_by_sig.has(pending_sig):
-				_pending_jobs_by_sig.erase(pending_sig)
 		for sig in reps_by_sig.keys():
 			if not _live_signature_cache.has(sig) and not _pending_jobs_by_sig.has(sig):
 				missing_sigs.append(str(sig))
@@ -507,7 +525,7 @@ static func _start_worker_if_needed() -> void:
 	_mutex.unlock()
 
 	if should_start:
-		if task_to_reap != -1 and WorkerThreadPool.is_task_completed(task_to_reap):
+		if task_to_reap != -1:
 			WorkerThreadPool.wait_for_task_completion(task_to_reap)
 		var new_task_id := WorkerThreadPool.add_task(Callable(EvoOllamaClient, "_run_ollama_worker"))
 		_mutex.lock()

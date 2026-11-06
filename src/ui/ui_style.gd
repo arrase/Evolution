@@ -33,6 +33,7 @@ const COLOR_GOLD_TEXT := Color("#ffd97d")
 
 const COLOR_GREEN_OK := Color("#15803d")
 const COLOR_AMBER_WARN := Color("#b45309")
+const COLOR_GOLD_WARN := Color("#b45309")
 const COLOR_RED_DANGER := Color("#b91c1c")
 const COLOR_BLUE_INFO := Color("#1d4ed8")
 const COLOR_PURPLE_CULTURE := Color("#7e22ce")
@@ -367,6 +368,10 @@ static func get_event_type_color(event_type: String) -> Color:
 			return Color("#c2410c")
 		"extinction":
 			return Color("#b91c1c")
+		"single_survivor":
+			return Color("#ca8a04")
+		"ecological_equilibrium":
+			return Color("#059669")
 	return COLOR_SEPIA
 
 
@@ -388,6 +393,10 @@ static func get_event_type_label(event_type: String, lang: String = "es") -> Str
 			return tr_text(lang, "Pérdida Cultural", "Cultural Loss")
 		"extinction":
 			return tr_text(lang, "Extinción", "Extinction")
+		"single_survivor":
+			return tr_text(lang, "Hegemonía Evolutiva", "Evolutionary Hegemony")
+		"ecological_equilibrium":
+			return tr_text(lang, "Equilibrio Ecológico", "Ecological Equilibrium")
 	return event_type
 
 

@@ -16,6 +16,8 @@ static func make_id(q: int, r: int) -> String:
 
 static func parse_id(hex_id: String) -> Vector2i:
 	var parts := hex_id.split(",")
+	if parts.size() < 2:
+		return Vector2i.ZERO
 	return Vector2i(int(parts[0]), int(parts[1]))
 
 static func hex_distance(q1: int, r1: int, q2: int, r2: int) -> int:
@@ -39,9 +41,13 @@ static func get_brush_hex_ids(center_id: String, radius: int, valid_cells: Dicti
 	if radius <= 1:
 		return result
 	var center := parse_id(center_id)
-	for n_id in get_neighbor_ids(center.x, center.y, valid_cells):
-		if not result.has(n_id):
-			result.append(n_id)
+	for cell_id in valid_cells.keys():
+		var cid := str(cell_id)
+		if cid == center_id:
+			continue
+		var coords := parse_id(cid)
+		if hex_distance(center.x, center.y, coords.x, coords.y) <= radius - 1:
+			result.append(cid)
 	return result
 
 static func generate_hex_spiral(radius: int) -> Array[Vector2i]:
@@ -67,6 +73,7 @@ static func compute_village_sector_offset(index: int, total_count: int, hex_size
 		var dy := hex_size * 0.14
 		return Vector2(-dx if index == 0 else dx, -dy if index == 0 else dy)
 	var angles := [-PI * 0.5, PI * 0.18, PI * 0.82]
-	var ang: float = angles[index % 3]
-	var rad := hex_size * (0.48 if index % 3 == 0 else 0.52)
+	var sector := posmod(index, 3)
+	var ang: float = angles[sector]
+	var rad := hex_size * (0.48 if sector == 0 else 0.52)
 	return Vector2(cos(ang) * rad, sin(ang) * rad)

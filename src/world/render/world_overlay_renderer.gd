@@ -48,8 +48,8 @@ static func init_particles(particles: Array[Dictionary]) -> void:
 	particles.clear()
 	for i in range(42):
 		particles.append({
-			"x": float((i * 97) % 1280),
-			"y": float((i * 53) % 720),
+			"x": float((i * 97) % 1600),
+			"y": float((i * 53) % 960),
 			"speed": 14.0 + float((i * 19) % 22),
 			"phase": float(i) * 0.65,
 			"size": 2.0 + float(i % 2)
@@ -57,6 +57,8 @@ static func init_particles(particles: Array[Dictionary]) -> void:
 
 
 static func update_particles(r: Node2D, delta: float) -> void:
+	if r.world_state == null:
+		return
 	var vp_size := r.get_viewport_rect().size if r.is_inside_tree() else Vector2(1600.0, 960.0)
 	var is_wet: bool = r.world_state.season == "wet_warm"
 	for p in r._particles:
@@ -72,6 +74,8 @@ static func update_particles(r: Node2D, delta: float) -> void:
 
 
 static func draw_overlay(r: Node2D) -> void:
+	if r.world_state == null:
+		return
 	var to_screen: Transform2D = r._world_layer.transform
 	var vp_size := r.get_viewport_rect().size if r.is_inside_tree() else Vector2(1600.0, 960.0)
 	var screen_cull_rect := Rect2(Vector2(-240.0, -200.0), vp_size + Vector2(480.0, 400.0))

@@ -320,6 +320,8 @@ static func biome_name(lang: String, biome: String) -> String:
 
 
 static func trait_name(lang: String, trait_def: EvoTypes.TraitDef) -> String:
+	if trait_def is Object and trait_def.get("origin") != null and str(trait_def.get("origin")) != "catalog":
+		return str(trait_def.name)
 	var key := "trait." + trait_def.id + ".name"
 	var table: Dictionary = STRINGS[resolve_lang(lang)]
 	if table.has(key):
@@ -328,6 +330,8 @@ static func trait_name(lang: String, trait_def: EvoTypes.TraitDef) -> String:
 
 
 static func trait_description(lang: String, trait_def: EvoTypes.TraitDef) -> String:
+	if trait_def is Object and trait_def.get("origin") != null and str(trait_def.get("origin")) != "catalog":
+		return str(trait_def.description)
 	var key := "trait." + trait_def.id + ".desc"
 	var table: Dictionary = STRINGS[resolve_lang(lang)]
 	if table.has(key):
@@ -336,17 +340,25 @@ static func trait_description(lang: String, trait_def: EvoTypes.TraitDef) -> Str
 
 
 static func decision_name(lang: String, dec_def: EvoTypes.DecisionDef) -> String:
+	if dec_def is Object and dec_def.get("origin") != null and str(dec_def.get("origin")) != "catalog":
+		return str(dec_def.name)
 	var key := "decision." + dec_def.id + ".name"
 	var table: Dictionary = STRINGS[resolve_lang(lang)]
 	if table.has(key):
+		if dec_def.name != "" and dec_def.name != str(STRINGS["es"][key]) and dec_def.name != str(STRINGS["en"][key]):
+			return dec_def.name
 		return str(table[key])
 	return dec_def.name
 
 
 static func decision_description(lang: String, dec_def: EvoTypes.DecisionDef) -> String:
+	if dec_def is Object and dec_def.get("origin") != null and str(dec_def.get("origin")) != "catalog":
+		return str(dec_def.description)
 	var key := "decision." + dec_def.id + ".desc"
 	var table: Dictionary = STRINGS[resolve_lang(lang)]
 	if table.has(key):
+		if dec_def.description != "" and dec_def.description != str(STRINGS["es"][key]) and dec_def.description != str(STRINGS["en"][key]):
+			return dec_def.description
 		return str(table[key])
 	return dec_def.description
 

@@ -50,6 +50,39 @@ static func _strip_migration_suffix(id_str: String) -> String:
 	return id_str
 
 
+static func _is_connected_to_founder(
+	cell: EvoTypes.HexCell,
+	founder_hex_id: String,
+	mobility: float,
+	cells: Dictionary
+) -> bool:
+	if founder_hex_id == "" or not cells.has(founder_hex_id):
+		return false
+	if cell.id == founder_hex_id:
+		return true
+	var visited: Dictionary = {cell.id: 0}
+	var queue: Array[String] = [cell.id]
+	var head := 0
+	while head < queue.size():
+		var cur_id := queue[head]
+		head += 1
+		var cur_dist: int = int(visited[cur_id])
+		if cur_dist >= 3:
+			continue
+		var cur_cell: EvoTypes.HexCell = cells[cur_id]
+		for nid in HexMath.get_neighbor_ids(cur_cell.q, cur_cell.r, cells):
+			if visited.has(nid):
+				continue
+			var ncell: EvoTypes.HexCell = cells[nid]
+			if not is_hex_passable_for_deme(ncell, mobility):
+				continue
+			if nid == founder_hex_id:
+				return true
+			visited[nid] = cur_dist + 1
+			queue.append(nid)
+	return false
+
+
 static func run_demography_and_migration_phase(
 	state: EvoTypes.WorldState,
 	lang: String,
@@ -61,6 +94,7 @@ static func run_demography_and_migration_phase(
 	var is_en := lang == "en"
 	var had_lineage_contact: Dictionary = {}
 	var newly_created_demes: Dictionary = {}
+	var pre_fission_pop_by_deme: Dictionary = {}
 
 	for did in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[did]
@@ -84,24 +118,22 @@ static func run_demography_and_migration_phase(
 
 		var delta_e := extracted - metabolic_cost
 		var prev_reserves := deme.energy_reserves
-		var effective_delta_e := (
-			(delta_e + minf(-delta_e, prev_reserves * 0.50))
-			if (delta_e < 0.0 and prev_reserves > float(deme.population) * 0.30)
-			else delta_e
-		)
+		var reserve_draw := minf(-delta_e, prev_reserves * 0.50) if delta_e < 0.0 else 0.0
+		var effective_delta_e := delta_e + reserve_draw
 
 		deme.last_energy_delta = snappedf(delta_e, 0.01)
 		deme.energy_reserves = maxf(0.0, snappedf(prev_reserves + delta_e, 0.01))
 
-		var growth_rate := clampf((effective_delta_e / maxf(10.0, float(deme.population))) * 0.45, -0.45, 0.35)
-		if deme.biological_trait_ids.has("bio-r-strategy"):
-			growth_rate *= 1.35
+		var raw_growth := (effective_delta_e / maxf(10.0, float(deme.population))) * 0.45
+		if deme.biological_trait_ids.has("bio-r-strategy") and raw_growth > 0.0:
+			raw_growth *= 1.35
 		if deme.biological_trait_ids.has("bio-k-strategy"):
-			growth_rate *= 0.75
-		growth_rate = clampf(growth_rate, -0.45, 0.35)
+			raw_growth *= 0.75
+		var growth_rate := clampf(raw_growth, -0.45, 0.35)
 
 		var next_pop := int(roundf(float(deme.population) * (1.0 + growth_rate)))
 		deme.population = (deme.population - 1) if (effective_delta_e < 0.0 and next_pop >= deme.population) else next_pop
+		pre_fission_pop_by_deme[deme.id] = deme.population
 
 		for dec_id in deme.last_decision_probabilities.keys():
 			var prob := float(deme.last_decision_probabilities[dec_id])
@@ -125,7 +157,6 @@ static func run_demography_and_migration_phase(
 			continue
 		var current_cell: EvoTypes.HexCell = state.cells[deme.hex_id]
 		var p_migrate := EvoEcologyInteraction.get_archetype_prob(deme, state.decisions_catalog, "migrate")
-		var migrants := int(floor(float(deme.population) * p_migrate * 0.45))
 		var is_emergency := (
 			current_cell.current_resources < float(deme.population) * 0.20
 			and deme.energy_reserves < float(deme.population) * 0.35
@@ -136,15 +167,24 @@ static func run_demography_and_migration_phase(
 			or current_cell.biome == "coastal_shallows"
 			or is_emergency
 		)
+		var eff_p_migrate := p_migrate
+		if is_emergency:
+			eff_p_migrate = maxf(eff_p_migrate, 0.35)
+		elif current_cell.biome == "coastal_shallows" or deme.last_dominant_decision_id == "dec-selective-migration" or p_migrate >= 0.15:
+			eff_p_migrate = maxf(eff_p_migrate, 0.25)
+		var migrants := int(floor(float(deme.population) * eff_p_migrate * 0.45))
+		if has_intentional_migration and deme.population >= 25 and migrants < 10:
+			migrants = 10
 
 		if not has_intentional_migration or migrants < 10 or (deme.population - migrants) < 10:
 			continue
 
 		var v_eff_mobility := (effective_vec_by_deme[deme.id] as EvoTypes.BiophysicalVector).spatial_mobility
+		var mig_mobility := clampf(v_eff_mobility + (1.0 - p_migrate) * 0.50, -1.5, 1.5)
 		var candidates: Array[EvoTypes.HexCell] = []
 		for nid in HexMath.get_neighbor_ids(current_cell.q, current_cell.r, state.cells):
 			var ncell: EvoTypes.HexCell = state.cells[nid]
-			if not is_hex_passable_for_deme(ncell, v_eff_mobility):
+			if not is_hex_passable_for_deme(ncell, mig_mobility):
 				continue
 			if ncell.deme_ids.size() >= 3:
 				continue
@@ -175,7 +215,6 @@ static func run_demography_and_migration_phase(
 		var transferred_energy := snappedf(energy_fraction * 0.85, 0.01)
 
 		deme.population -= migrants
-		initial_pop_by_deme[deme.id] = int(initial_pop_by_deme[deme.id]) - migrants
 		deme.energy_reserves = maxf(0.0, snappedf(deme.energy_reserves - energy_fraction, 0.01))
 
 		var root_id := _strip_migration_suffix(deme.id)
@@ -211,6 +250,7 @@ static func run_demography_and_migration_phase(
 		newly_created_demes[daughter_id] = true
 		target_cell.deme_ids.append(daughter_id)
 		initial_pop_by_deme[daughter_id] = migrants
+		pre_fission_pop_by_deme[daughter_id] = migrants
 		effective_vec_by_deme[daughter_id] = effective_vec_by_deme[deme.id]
 
 		var flow := EvoTypes.HexEdgeFlow.new()
@@ -260,8 +300,9 @@ static func run_demography_and_migration_phase(
 			continue
 
 		var init_pop: int = int(initial_pop_by_deme[deme.id]) if initial_pop_by_deme.has(deme.id) else deme.population
-		var lost_half := float(deme.population) <= float(init_pop) * 0.50
-		var small_bottleneck := deme.population < 50 and (deme.population <= init_pop or init_pop >= 50 or state.generation == 0)
+		var pre_fission_pop: int = int(pre_fission_pop_by_deme[deme.id]) if pre_fission_pop_by_deme.has(deme.id) else deme.population
+		var lost_half := float(pre_fission_pop) <= float(init_pop) * 0.50
+		var small_bottleneck := pre_fission_pop < 50 and pre_fission_pop < init_pop
 
 		if not newly_created_demes.has(deme.id) and (lost_half or small_bottleneck) and not deme.cultural_trait_ids.is_empty():
 			var highest_tid := ""
@@ -303,8 +344,10 @@ static func run_demography_and_migration_phase(
 					var deme_b: EvoTypes.Deme = state.demes[id_b]
 					if deme_a.lineage_id == deme_b.lineage_id and compute_deme_divergence(deme_a, deme_b) < 0.25:
 						var total_pop := deme_a.population + deme_b.population
-						var w_a := float(deme_a.population) / float(total_pop)
-						var w_b := float(deme_b.population) / float(total_pop)
+						var a_new := newly_created_demes.has(deme_a.id)
+						var b_new := newly_created_demes.has(deme_b.id)
+						var w_a := 1.0 if (b_new and not a_new) else (0.0 if (a_new and not b_new) else float(deme_a.population) / float(total_pop))
+						var w_b := 1.0 - w_a
 
 						deme_a.innovation_counter = minf(
 							2.0,
@@ -326,17 +369,27 @@ static func run_demography_and_migration_phase(
 						deme_a.population = total_pop
 						deme_a.energy_reserves = snappedf(deme_a.energy_reserves + deme_b.energy_reserves, 0.01)
 						for tid in deme_b.biological_trait_ids:
-							if not deme_a.biological_trait_ids.has(tid):
+							if EvoEcologyInteraction._can_acquire_trait(deme_a, tid, state.traits_catalog):
 								deme_a.biological_trait_ids.append(tid)
 						for tid in deme_b.cultural_trait_ids:
-							if not deme_a.cultural_trait_ids.has(tid):
+							if EvoEcologyInteraction._can_acquire_trait(deme_a, tid, state.traits_catalog):
 								deme_a.cultural_trait_ids.append(tid)
 
+						var kept_flows: Array[EvoTypes.HexEdgeFlow] = []
 						for fl in state.active_flows:
 							if fl.to_deme_id == deme_b.id:
 								fl.to_deme_id = deme_a.id
-							if fl.from_deme_id == deme_b.id and fl.from_hex_id != fl.to_hex_id:
-								fl.to_deme_id = deme_a.id
+							if fl.from_deme_id == deme_b.id:
+								fl.from_deme_id = deme_a.id
+							if fl.from_deme_id == fl.to_deme_id and fl.from_hex_id == fl.to_hex_id and fl.flow_type != "migration":
+								continue
+							kept_flows.append(fl)
+						state.active_flows = kept_flows
+						for dc in state.disused_connections:
+							if str(dc.get("from_deme_id", "")) == deme_b.id:
+								dc["from_deme_id"] = deme_a.id
+							if str(dc.get("to_deme_id", "")) == deme_b.id:
+								dc["to_deme_id"] = deme_a.id
 
 						var merge_flow := EvoTypes.HexEdgeFlow.new()
 						merge_flow.from_hex_id = cell.id
@@ -368,16 +421,7 @@ static func run_demography_and_migration_phase(
 			continue
 
 		var v_eff := EvoEcologyInteraction.compute_effective_vector(deme, state)
-		var connected_to_founder := false
-		if founder_hex_id != "":
-			for nid in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
-				if nid == founder_hex_id:
-					var ncell: EvoTypes.HexCell = state.cells[nid]
-					if is_hex_passable_for_deme(ncell, v_eff.spatial_mobility):
-						for oid in ncell.deme_ids:
-							if state.demes.has(oid) and (state.demes[oid] as EvoTypes.Deme).lineage_id == deme.lineage_id:
-								connected_to_founder = true
-								break
+		var connected_to_founder := _is_connected_to_founder(cell, founder_hex_id, v_eff.spatial_mobility, state.cells)
 
 		if had_lineage_contact.has(deme.id) or connected_to_founder:
 			deme.isolation_turns = 0
@@ -416,7 +460,11 @@ static func run_demography_and_migration_phase(
 			if not state.cells.has(deme_b.hex_id):
 				continue
 			var cell_b: EvoTypes.HexCell = state.cells[deme_b.hex_id]
-			if HexMath.hex_distance(cell_a.q, cell_a.r, cell_b.q, cell_b.r) > 1:
+			var dist := HexMath.hex_distance(cell_a.q, cell_a.r, cell_b.q, cell_b.r)
+			if dist > 1:
+				continue
+			var same_hex := dist == 0
+			if not same_hex and (cell_a.altitude > 0.85 or cell_b.altitude > 0.85 or cell_a.biome == "ocean" or cell_b.biome == "ocean"):
 				continue
 
 			var p_disp_b := EvoEcologyInteraction.get_archetype_prob(deme_b, state.decisions_catalog, "dispute")
@@ -427,10 +475,9 @@ static func run_demography_and_migration_phase(
 			var pair_key := "%s|%s" % [id_a, id_b]
 			var is_rival := deme_a.lineage_id != deme_b.lineage_id
 			var has_conflict_pressure := (
-				p_disp_a >= 0.12
-				or p_disp_b >= 0.12
-				or p_over_a >= 0.35
-				or p_over_b >= 0.35
+				(p_disp_a >= 0.12 or p_disp_b >= 0.12 or p_over_a >= 0.35 or p_over_b >= 0.35)
+				if same_hex
+				else (p_disp_a >= 0.25 or p_disp_b >= 0.25)
 			)
 			if is_rival and has_conflict_pressure:
 				if not dispute_flow_pairs.has(pair_key):
@@ -441,7 +488,7 @@ static func run_demography_and_migration_phase(
 					disp_flow.to_hex_id = cell_b.id
 					disp_flow.flow_type = "dispute"
 					disp_flow.intensity = snappedf(
-						clampf(maxf(maxf(p_disp_a, p_disp_b), maxf(p_over_a, p_over_b) * 0.85), 0.35, 0.90),
+						clampf(maxf(maxf(p_disp_a, p_disp_b), (maxf(p_over_a, p_over_b) * 0.85) if same_hex else 0.0), 0.35, 0.90),
 						0.01
 					)
 					disp_flow.from_deme_id = id_a

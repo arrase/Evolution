@@ -12,7 +12,9 @@ const FILTER_KEYS: Array[String] = [
 	"symbiosis",
 	"tragedy_of_commons",
 	"cultural_loss",
-	"extinction"
+	"extinction",
+	"single_survivor",
+	"ecological_equilibrium"
 ]
 
 var _world_state: EvoTypes.WorldState = null

@@ -237,7 +237,7 @@ func _build_ui() -> void:
 		var slider := HSlider.new()
 		slider.min_value = 0.0 if s_key == "transmission_threshold" else -1.0
 		slider.max_value = 1.0
-		slider.step = 0.05
+		slider.step = 0.01
 		slider.value = 0.20 if s_key == "transmission_threshold" else 0.0
 		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slider.value_changed.connect(_on_slider_value_changed.bind(s_key))
@@ -585,6 +585,7 @@ func _save_current_item_to_catalog() -> String:
 		dec.name = clean_name
 		dec.description = clean_desc
 		dec.archetype = _get_selected_archetype()
+		dec.origin = "custom"
 		dec.vector = final_vec
 		if _world_state != null and _world_state.decisions_catalog.has(dec.id):
 			var prev_dec: EvoTypes.DecisionDef = _world_state.decisions_catalog[dec.id]
@@ -672,6 +673,7 @@ func _on_auto_balance_pressed() -> void:
 
 func _on_save_pressed() -> void:
 	var saved_id := _save_current_item_to_catalog()
+	_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
 	_feedback_lbl.text = EvoUiStyle.tr_text(
 		_lang,
 		"✓ Guardado en el catálogo (%s)" % saved_id,
@@ -683,6 +685,17 @@ func _on_inject_pressed() -> void:
 	if _active_tab == "decision" or _selected_deme_id == "":
 		return
 	var saved_id := _save_current_item_to_catalog()
+	if _active_tab == "cultural" and _world_state != null and _world_state.demes.has(_selected_deme_id):
+		var target_deme: EvoTypes.Deme = _world_state.demes[_selected_deme_id]
+		if not EvoCatalog.deme_has_cultural_capacity(target_deme, _world_state.traits_catalog):
+			_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_WARN)
+			_feedback_lbl.text = EvoUiStyle.tr_text(
+				_lang,
+				"⚠ La aldea seleccionada carece de capacidad cultural (requiere Encefalización o Sociabilidad Instintiva).",
+				"⚠ Selected village lacks cultural capacity (requires Encephalization or Instinctive Sociability)."
+			)
+			return
+	_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
 	inject_trait_requested.emit(_selected_deme_id, saved_id)
 	_feedback_lbl.text = EvoUiStyle.tr_text(
 		_lang,

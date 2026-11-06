@@ -63,7 +63,8 @@ static func run_milestone_phase(
 			var founder_traits: Dictionary = {}
 			if founder_lineage != null:
 				for tid in founder_lineage.acquired_trait_ids:
-					founder_traits[tid] = true
+					if not state.traits_catalog.has(tid) or (state.traits_catalog[tid] as EvoTypes.TraitDef).category == "biological":
+						founder_traits[tid] = true
 
 			var deme_traits: Dictionary = {}
 			var has_novel_bio := false
@@ -71,8 +72,6 @@ static func run_milestone_phase(
 				deme_traits[tid] = true
 				if not founder_traits.has(tid):
 					has_novel_bio = true
-			for tid in deme.cultural_trait_ids:
-				deme_traits[tid] = true
 
 			var div_from_founder := _compute_set_divergence(deme_traits, founder_traits)
 			var founder_cell: EvoTypes.HexCell = (
@@ -111,7 +110,7 @@ static func run_milestone_phase(
 				"decision_id": triggered_baldwin_dec
 			})
 
-		if deme.innovation_counter >= 1.0 and EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog) and emergent_cul_count == 0 and deme.last_energy_delta >= 0.0:
+		if deme.innovation_counter >= 1.0 and EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog) and emergent_cul_count < 2 and deme.last_energy_delta >= 0.0:
 			candidates.append({
 				"priority": 2,
 				"trigger_type": "cultural_innovation",
@@ -212,6 +211,20 @@ static func run_milestone_phase(
 			if is_en
 			else "Todas las poblaciones se han extinguido en el ecosistema."
 		)
+		var already_logged_total := false
+		for e in state.chronicle:
+			if e.event_type == "total_extinction":
+				already_logged_total = true
+				break
+		if not already_logged_total:
+			var ext_entry := EvoTypes.ChronicleEntry.new()
+			ext_entry.id = "chronicle-total-extinction-%d" % state.generation
+			ext_entry.generation = state.generation
+			ext_entry.event_type = "total_extinction"
+			ext_entry.title = state.macro_outcome_title
+			ext_entry.causal_explanation = state.macro_outcome_summary
+			state.chronicle.append(ext_entry)
+			added_entries.append(ext_entry)
 		state.previous_populations.clear()
 		return added_entries
 
@@ -219,6 +232,18 @@ static func run_milestone_phase(
 	for did in state.demes.keys():
 		living_demes.append(state.demes[did])
 	var survivor := living_demes[0]
+	var survivor_root_id := EvoDemographyMigration._strip_migration_suffix(survivor.id)
+
+	var ancestor_lineages: Dictionary = {survivor.lineage_id: true}
+	var cur_lid := survivor.lineage_id
+	var guard := 0
+	while state.lineage_tree.has(cur_lid) and guard < 64:
+		var p_lid := (state.lineage_tree[cur_lid] as EvoTypes.LineageNode).parent_id
+		if p_lid == "" or ancestor_lineages.has(p_lid):
+			break
+		ancestor_lineages[p_lid] = true
+		cur_lid = p_lid
+		guard += 1
 
 	var has_prior_extinction := false
 	var has_non_migrant_extinction := false
@@ -231,7 +256,8 @@ static func run_milestone_phase(
 			had_chronicle_this_turn = true
 		if e.event_type == "extinction":
 			has_prior_extinction = true
-			if e.lineage_id != survivor.lineage_id or not e.deme_id.contains("-m"):
+			var e_root_id := EvoDemographyMigration._strip_migration_suffix(e.deme_id)
+			if not ancestor_lineages.has(e.lineage_id) or (e_root_id != survivor_root_id and not e.deme_id.contains("-m")):
 				has_non_migrant_extinction = true
 		elif e.event_type == "single_survivor":
 			already_logged_single = true
@@ -247,7 +273,7 @@ static func run_milestone_phase(
 	var total_lineages := state.lineage_tree.size()
 	var has_extinct_lineage := false
 	for lid in state.lineage_tree.keys():
-		if (state.lineage_tree[lid] as EvoTypes.LineageNode).extinct_generation >= 0:
+		if not ancestor_lineages.has(lid) and (state.lineage_tree[lid] as EvoTypes.LineageNode).extinct_generation >= 0:
 			has_extinct_lineage = true
 			break
 

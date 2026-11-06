@@ -157,6 +157,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if world_state == null or camera == null:
+		return
 	_anim_time += delta
 	EvoWorldOverlayRenderer.update_particles(self, delta)
 
@@ -489,6 +491,8 @@ func _cell_seed(q: int, r: int, salt: int = 0) -> int:
 # ============================================================================
 
 func _draw() -> void:
+	if world_state == null or camera == null:
+		return
 	var vp_size := get_viewport_rect().size
 	var is_wet := world_state.season == "wet_warm"
 	draw_rect(Rect2(Vector2.ZERO, vp_size), Color("#0e3352") if is_wet else Color("#0b2840"), true)

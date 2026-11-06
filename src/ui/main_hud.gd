@@ -224,6 +224,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	var ke := event as InputEventKey
 	if not ke.pressed or ke.echo:
 		return
+	if get_viewport() != null and get_viewport().gui_get_focus_owner() is LineEdit:
+		return
 	if _ollama_startup_blocked or (_missing_models_modal != null and _missing_models_modal.visible):
 		return
 	if (notebook_modal != null and notebook_modal.visible) or (tree_modal != null and tree_modal.visible) or (lab_modal != null and lab_modal.visible):
@@ -315,6 +317,8 @@ func set_world_state(world_state: EvoTypes.WorldState) -> void:
 				_selected_deme_id = first_id
 				var d: EvoTypes.Deme = _world_state.demes[first_id]
 				_selected_hex_id = d.hex_id
+			else:
+				_selected_deme_id = ""
 		if not _world_state.cells.has(_selected_hex_id) and not _world_state.cells.is_empty():
 			_selected_hex_id = str(_world_state.cells.keys()[0])
 	refresh(_world_state)
@@ -674,7 +678,7 @@ func _on_secondary_model_selected(index: int) -> void:
 
 
 func _on_refresh_models_pressed() -> void:
-	EvoOllamaClient._probe_ollama_status_sync()
+	EvoOllamaClient.refresh_ollama_status_async()
 	EvoHudTopBar.refresh_decision_model_selectors(self)
 	_update_top_bar_state()
 
