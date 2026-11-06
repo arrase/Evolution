@@ -1,6 +1,6 @@
 extends SceneTree
 
-const OUTPUT_DIR: String = "/home/arrase/Develop/Evolution/docs/images"
+const OUTPUT_DIR: String = "/home/arrase/Develop/Evolution/gh-pages/assets/img"
 
 
 func _init() -> void:

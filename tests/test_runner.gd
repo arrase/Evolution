@@ -291,7 +291,6 @@ func _test_main_scene_and_ui_integration() -> void:
 	_assert(ollama_status.has("secondary_tag") and ollama_status["secondary_tag"] == "tev1:4b", "Ollama status reports secondary System 1 model tev1:4b")
 
 	var mock_tags := [
-		{"name": "gemma4:e2b", "capabilities": ["completion", "vision"]},
 		{"name": "d3:4b", "capabilities": ["decision", "vision"]},
 		{"name": "tev1:4b", "capabilities": ["decision"]},
 		{"name": "embeddinggemma:latest", "capabilities": ["embedding"]}

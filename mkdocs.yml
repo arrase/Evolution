@@ -1,0 +1,91 @@
+site_name: Evolution
+site_description: Interactive bio-cultural and evolutionary population simulator built with Godot 4.7, featuring a cozy isometric hexagonal ecosystem, 6-axis thermodynamic conservation, and a dual-frequency Ollama cognitive engine.
+site_author: Arrase
+site_url: https://arrase.github.io/Evolution/
+docs_dir: gh-pages
+
+repo_name: arrase/Evolution
+repo_url: https://github.com/arrase/Evolution
+
+nav:
+  - Overview: index.md
+  - Worlds & Ecosystem:
+      - Worlds, Biomes & Presets: worlds_biomes.md
+      - 6-Axis Thermodynamics & Catalog: thermodynamics_catalog.md
+  - Simulation Mechanics:
+      - Generational Loop & Dynamics: turn_iterations_mechanics.md
+      - Cognitive Engine & Ollama AI: cognitive_engine.md
+  - Interface & Engineering:
+      - HUD, Modals & God-Mode Tools: ui_tools_controls.md
+      - System Architecture & Developer Guide: architecture_developer.md
+
+theme:
+  name: material
+  language: en
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    logo: material/dna
+  palette:
+    # Palette toggle for light/dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - navigation.sections
+    - content.code.copy
+
+plugins:
+  - search
+
+extra_css:
+  - https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/ecosystem.js
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+markdown_extensions:
+  - attr_list
+  - md_in_html
+  - admonition
+  - pymdownx.details
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.tabbed:
+      alternate_style: true
+
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/arrase/Evolution

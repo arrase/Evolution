@@ -8,7 +8,7 @@
 
 Rather than commanding individual units directly, you act as the **Selective Pressure** and **Evolutionary Architect**—shaping climates, terrain altitude, sea levels, habitat carrying capacity ($K$), and genetic or cultural traits—while local subpopulations (*demes*) autonomously evaluate their surroundings, adapt, migrate, cooperate, innovate, or diverge into new species.
 
-![The Rift Valley — Isometric Hexagonal Ecosystem & HUD](docs/images/screenshot_rift_savanna.png)
+![The Rift Valley — Isometric Hexagonal Ecosystem & HUD](gh-pages/assets/img/screenshot_rift_savanna.png)
 
 ---
 
@@ -22,9 +22,9 @@ The simulation separates **behavioral intent** (probabilistic decision-making pe
 - **Evolutionary Game Theory:** Cohabiting and neighboring demes navigate *Hawk-Dove* territorial disputes, reciprocal symbiosis, or the *Tragedy of the Commons* when intensive overexploitation degrades $K$ below $60\%$ of $K_{\max}$.
 - **Allopatric Speciation:** Geographic isolation across mountain ridges or flooded glacial land bridges triggers phylogenetic divergence into new lineages.
 
-### 2. Dual-Frequency Multi-Model Cognitive Architecture (Ollama + Heuristic Engine)
+### 2. Dual-Model System 1 Cognitive Architecture (Ollama + Heuristic Engine)
 - **System 1 (High-Frequency Turn Scoring — `d3:4b` & `tev1:4b`):** Evaluates each deme and its 6-hex neighborhood every generation, deterministically assigning subpopulations across the primary (`d3:4b`) and secondary (`tev1:4b`) decision models to compute normalized probability distributions over behavioral archetypes.
-- **System 2 (Low-Frequency Milestone Synthesis — `gemma4:e2b`):** Synthesizes emergent traits, cultural innovations, and natural history chronicle entries within strict thermodynamic bounds.
+- **Deterministic Milestone Synthesis (`EvoMilestonePhase`):** Synthesizes emergent traits, cultural innovations, allopatric speciation, and natural history chronicle entries within strict thermodynamic bounds.
 - **Zero-Latency Deterministic Fallback:** Runs seamlessly offline or while background Ollama worker threads complete via a calibrated 6-axis biophysical heuristic scorer.
 
 ### 3. Standardized 6-Axis Biophysical Vector & Thermodynamic Conservation
@@ -45,17 +45,17 @@ No trait or decision can violate thermodynamic conservation: high caloric extrac
 ### The Rift Valley (`preset-rift-savanna`)
 A tectonic mountain ridge divides a stable western tropical rainforest from a drying eastern savanna-steppe mosaic. Eastern demes under seasonal aridification elevate cooperation, storage, and migration, driving Baldwin assimilation and cultural innovation while western forest populations maintain conservative foraging.
 
-![Late Simulation in The Rift Valley — Consolidated Settlements & Road Networks](docs/images/screenshot_late_simulation.png)
+![Late Simulation in The Rift Valley — Consolidated Settlements & Road Networks](gh-pages/assets/img/screenshot_late_simulation.png)
 
 ### Darwin's Archipelago (`preset-darwin-archipelago`)
 Volcanic islands linked by shallow coastal land bridges that periodically emerge and flood with glacial sea-level cycles. Founders disperse across temporary land bridges during low tides and undergo allopatric speciation when rising seas isolate island populations across tundra, forest, and arid steppe biomes.
 
-![Darwin's Archipelago — Insular Dispersal & Land Bridges](docs/images/screenshot_darwin_archipelago.png)
+![Darwin's Archipelago — Insular Dispersal & Land Bridges](gh-pages/assets/img/screenshot_darwin_archipelago.png)
 
 ### The Finite Island (`preset-finite-island`)
 A fertile but geographically bounded island surrounded by deep ocean and inhabited by three competing clans equipped with specialized extraction tools. Without communal conservation norms, intensive overexploitation degrades local carrying capacity $K$ and triggers the *Tragedy of the Commons*.
 
-![The Finite Island — Ecological Health Lens & Valley Legend](docs/images/screenshot_finite_island.png)
+![The Finite Island — Ecological Health Lens & Valley Legend](gh-pages/assets/img/screenshot_finite_island.png)
 
 ---
 
@@ -64,17 +64,17 @@ A fertile but geographically bounded island surrounded by deep ocean and inhabit
 ### Naturalist's Notebook — Evolutionary Chronicle
 Tracks every evolutionary milestone (Baldwin Effect, Cultural Innovation, Allopatric Speciation, Symbiosis, Tragedy of the Commons, Cultural Loss, and Extinction) with category filters and one-click camera jumps to the exact hexagon where the event occurred.
 
-![Naturalist's Notebook — Evolutionary Chronicle Modal](docs/images/screenshot_notebook_modal.png)
+![Naturalist's Notebook — Evolutionary Chronicle Modal](gh-pages/assets/img/screenshot_notebook_modal.png)
 
 ### Phylo-Cultural Lineage Tree
 Visualizes ancestral and diverged lineages, founding and extinction generations, acquired biological and cultural traits, and active villages, with interactive map lineage highlighting.
 
-![Phylo-Cultural Lineage Tree Modal](docs/images/screenshot_tree_modal.png)
+![Phylo-Cultural Lineage Tree Modal](gh-pages/assets/img/screenshot_tree_modal.png)
 
 ### Trait & Decision Forge — Evolutionary Laboratory
 An open catalog editor to inspect, tweak, or craft new biological traits, cultural traditions, and behavioral decisions with a live **Thermodynamic Balance Meter** (`Auto-Balance Vector`) and direct trait injection into any active village.
 
-![Trait & Decision Forge — Evolutionary Laboratory Modal](docs/images/screenshot_lab_modal.png)
+![Trait & Decision Forge — Evolutionary Laboratory Modal](gh-pages/assets/img/screenshot_lab_modal.png)
 
 ---
 
@@ -95,7 +95,7 @@ An open catalog editor to inspect, tweak, or craft new biological traits, cultur
 
 ### Prerequisites
 - **Godot Engine 4.7+** (`4.7.2-stable` recommended)
-- *(Optional)* **[Ollama](https://ollama.com/)** running locally on `http://127.0.0.1:11434` for live LLM cognitive scoring (`d3:4b`, `tev1:4b`) and milestone synthesis (`gemma4:e2b`). If Ollama is not running, the simulator automatically uses its built-in deterministic biophysical heuristic engine.
+- *(Optional)* **[Ollama](https://ollama.com/)** running locally on `http://127.0.0.1:11434` for live LLM cognitive scoring (`d3:4b`, `tev1:4b`). If Ollama is not running, the simulator automatically uses its built-in deterministic biophysical heuristic engine.
 
 ### Running from Source
 ```bash
@@ -110,7 +110,7 @@ godot --headless --path . --script res://tests/test_runner.gd
 ```
 
 ### Regenerating Documentation Screenshots
-To regenerate all English screenshots in `docs/images/`:
+To regenerate all English screenshots in `gh-pages/assets/img/`:
 ```bash
 godot --path . --script res://tests/test_visual_capture.gd
 ```
@@ -121,7 +121,7 @@ godot --path . --script res://tests/test_visual_capture.gd
 
 ```text
 ├── assets/                 # Themes and sprite directories
-├── docs/images/            # Application screenshots (ignored by Godot import via .gdignore)
+├── gh-pages/               # MkDocs documentation & shared screenshots (ignored by Godot via .gdignore)
 ├── scenes/main.tscn        # Root scene entry point
 ├── src/
 │   ├── main.gd             # Main controller, turn loop timer, and signal orchestration
