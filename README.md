@@ -3,7 +3,6 @@
 [![CI](https://github.com/arrase/Evolution/actions/workflows/ci.yml/badge.svg)](https://github.com/arrase/Evolution/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/arrase/Evolution/actions/workflows/codeql.yml/badge.svg)](https://github.com/arrase/Evolution/actions/workflows/codeql.yml)
 [![Security Audit](https://github.com/arrase/Evolution/actions/workflows/security.yml/badge.svg)](https://github.com/arrase/Evolution/actions/workflows/security.yml)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=arrase_Evolution&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=arrase_Evolution)
 
 **Evolution: Stardew Valley Edition** is an interactive bio-cultural and evolutionary population simulator built with **Godot 4.7**, featuring a handcrafted cozy pixel-art aesthetic inspired by *Stardew Valley* on an isometric hexagonal ecosystem.
 

@@ -317,7 +317,10 @@ func open_modal(world_state: EvoTypes.WorldState, lang: String = "es", selected_
 	_feedback_lbl.text = ""
 	visible = true
 	_rebuild_archetype_options()
-	_update_labels()
+	if _editing_id == "":
+		_reset_form_for_new()
+	else:
+		_update_labels()
 	_rebuild_catalog_list()
 	_update_thermodynamics_preview()
 
@@ -333,6 +336,8 @@ func refresh(world_state: EvoTypes.WorldState, selected_deme_id: String = "") ->
 
 func set_language(lang: String) -> void:
 	_lang = lang
+	if _title_label == null:
+		return
 	_rebuild_archetype_options()
 	if _editing_id == "":
 		_reset_form_for_new()
