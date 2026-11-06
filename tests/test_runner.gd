@@ -383,6 +383,23 @@ func _test_main_scene_and_ui_integration() -> void:
 	var rel_lines := main.hud._build_deme_relations_lines(life_state.demes["deme-island-1"] as EvoTypes.Deme)
 	_assert(rel_lines.size() >= 2, "HUD inspector preserves both active/severed paths and cohabiting village relations without information loss")
 
+	# Verify Right Inspector Village Selector & Cycling
+	_assert(main.hud._village_selector_opt != null and main.hud._village_selector_opt.item_count == life_state.demes.size(), "Right Inspector village selector populated with all demes")
+	var prev_sel_deme := main.hud._selected_deme_id
+	main.hud._on_village_cycle_pressed(1)
+	_assert(main.hud._selected_deme_id != prev_sel_deme, "Right Inspector village cycle button advances selected village")
+
+	# Verify clicking an empty hex in inspect mode clears selected deme and switches inspector tab to habitat
+	main.load_preset("preset-rift-savanna")
+	main.hud._on_tool_button_pressed("inspect")
+	var empty_hex_id := ""
+	for hid in main.world_state.cells.keys():
+		if (main.world_state.cells[hid] as EvoTypes.HexCell).deme_ids.is_empty():
+			empty_hex_id = str(hid)
+			break
+	main._on_world_hex_clicked(empty_hex_id, MOUSE_BUTTON_LEFT)
+	_assert(main.world_renderer.selected_deme_id == "" and main.hud._selected_deme_id == "" and main.hud._inspector_tab == "habitat", "Clicking empty hex in inspect mode clears selected deme and switches inspector tab to habitat")
+
 	main.free()
 
 

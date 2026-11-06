@@ -119,6 +119,9 @@ var _inspector_body_vbox: VBoxContainer
 var _inspector_minimized: bool = false
 var _inspector_minimize_btn: Button
 var _inspector_tab: String = "deme" # "deme" | "traits" | "habitat"
+var _village_prev_btn: Button
+var _village_selector_opt: OptionButton
+var _village_next_btn: Button
 var _inspector_header_swatch: ColorRect
 var _inspector_header_title: Label
 var _inspector_header_hl_btn: Button
@@ -150,6 +153,9 @@ var lab_modal: EvoLabModal
 class SeasonTidePortrait extends Control:
 	var is_wet_warm: bool = true
 	var sea_level_ratio: float = 0.12
+
+	func _init() -> void:
+		clip_contents = true
 
 	func set_state(p_wet_warm: bool, p_sea_level: float) -> void:
 		if is_wet_warm != p_wet_warm or not is_equal_approx(sea_level_ratio, p_sea_level):
@@ -186,24 +192,42 @@ class SeasonTidePortrait extends Control:
 				var sy := int(sx * 1.3) % int(maxf(20.0, r.size.y * 0.55)) + 6
 				draw_rect(Rect2(sx, sy, 2, 2), Color("#f8fafc"), true)
 
-		# Distant mountain & rolling hills
-		var hill_back := Color("#15803d") if is_wet_warm else Color("#64748b")
-		var hill_front := Color("#22c55e") if is_wet_warm else Color("#cbd5e1")
-		var horizon_y := r.size.y * 0.56
-		draw_circle(Vector2(r.size.x * 0.28, horizon_y + 18.0), 30.0, hill_back)
-		draw_circle(Vector2(r.size.x * 0.74, horizon_y + 16.0), 28.0, hill_back.darkened(0.12))
-		draw_circle(Vector2(r.size.x * 0.50, horizon_y + 24.0), 34.0, hill_front)
-
-		# Pixel tree silhouette on hill
-		var tx := r.size.x * 0.32
-		var ty := horizon_y - 4.0
-		draw_rect(Rect2(tx - 1.5, ty, 3.0, 7.0), Color("#5c3218"), true)
-		draw_circle(Vector2(tx, ty - 2.0), 5.5, Color("#166534") if is_wet_warm else Color("#f1f5f9"))
-
-		# Sea level tide at bottom
+		# Compute water line first so hills clamp cleanly above the sea
 		var water_frac := clampf(0.18 + sea_level_ratio * 0.55, 0.14, 0.48)
 		var water_h := r.size.y * water_frac
 		var water_y := r.size.y - water_h
+
+		# Distant mountain & rolling hills clamped at water_y
+		var hill_back := Color("#15803d") if is_wet_warm else Color("#64748b")
+		var hill_front := Color("#22c55e") if is_wet_warm else Color("#cbd5e1")
+		var horizon_y := minf(r.size.y * 0.50, water_y - 6.0)
+		var back_poly := PackedVector2Array([
+			Vector2(0.0, water_y),
+			Vector2(0.0, horizon_y + 4.0),
+			Vector2(r.size.x * 0.26, horizon_y - 3.0),
+			Vector2(r.size.x * 0.54, horizon_y + 2.0),
+			Vector2(r.size.x * 0.78, horizon_y - 2.0),
+			Vector2(r.size.x, horizon_y + 3.0),
+			Vector2(r.size.x, water_y),
+		])
+		draw_colored_polygon(back_poly, hill_back)
+		var front_poly := PackedVector2Array([
+			Vector2(0.0, water_y),
+			Vector2(0.0, horizon_y + 7.0),
+			Vector2(r.size.x * 0.36, horizon_y + 1.0),
+			Vector2(r.size.x * 0.66, horizon_y + 5.0),
+			Vector2(r.size.x, horizon_y + 2.0),
+			Vector2(r.size.x, water_y),
+		])
+		draw_colored_polygon(front_poly, hill_front)
+
+		# Pixel tree silhouette on hill
+		var tx := r.size.x * 0.32
+		var ty := horizon_y - 1.0
+		draw_rect(Rect2(tx - 1.0, ty - 3.0, 2.0, 5.0), Color("#5c3218"), true)
+		draw_circle(Vector2(tx, ty - 5.0), 3.5, Color("#166534") if is_wet_warm else Color("#f1f5f9"))
+
+		# Sea level tide at bottom
 		var sea_col := Color("#0284c7") if is_wet_warm else Color("#1e3a8a")
 		var foam_col := Color("#7dd3fc") if is_wet_warm else Color("#bae6fd")
 		draw_rect(Rect2(0, water_y, r.size.x, water_h), sea_col, true)
@@ -291,7 +315,7 @@ func _build_ui() -> void:
 
 
 func _build_top_left_valley_sign_and_medallions() -> void:
-	# 1. Hanging Wooden Valley Sign (~364 px wide in top-left corner)
+	# Hanging Wooden Valley Sign (~364 px wide in top-left corner)
 	var sign_frame := PanelContainer.new()
 	sign_frame.anchor_left = 0.0
 	sign_frame.anchor_right = 0.0
@@ -300,7 +324,7 @@ func _build_top_left_valley_sign_and_medallions() -> void:
 	sign_frame.offset_left = 10
 	sign_frame.offset_right = 376
 	sign_frame.offset_top = 10
-	sign_frame.offset_bottom = 128
+	sign_frame.offset_bottom = 122
 	sign_frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(7))
 	add_child(sign_frame)
 
@@ -330,7 +354,7 @@ func _build_top_left_valley_sign_and_medallions() -> void:
 	_import_btn.pressed.connect(_on_import_pressed)
 	preset_row.add_child(_import_btn)
 
-	# Row 2: 4 Artifact Buttons (Diario, Linajes, Forja, Lente)
+	# Row 2: 3 Artifact Buttons (Diario, Linajes, Forja)
 	var artifacts_row := HBoxContainer.new()
 	artifacts_row.add_theme_constant_override("separation", 4)
 	sign_vbox.add_child(artifacts_row)
@@ -349,11 +373,6 @@ func _build_top_left_valley_sign_and_medallions() -> void:
 	_lab_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_lab_btn.pressed.connect(open_lab_modal)
 	artifacts_row.add_child(_lab_btn)
-
-	_lens_cycle_btn = Button.new()
-	_lens_cycle_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_lens_cycle_btn.pressed.connect(_on_lens_cycle_btn_pressed)
-	artifacts_row.add_child(_lens_cycle_btn)
 
 	# Row 3: Compact Lens Pills + Map Legend Toggle
 	_lens_strip_panel = PanelContainer.new()
@@ -377,43 +396,6 @@ func _build_top_left_valley_sign_and_medallions() -> void:
 	_legend_toggle_btn.pressed.connect(_on_legend_toggle_pressed)
 	lens_hbox.add_child(_legend_toggle_btn)
 
-	# 2. Compact Strip of Living Village Medallions right below the Valley Sign
-	var medallions_frame := PanelContainer.new()
-	medallions_frame.anchor_left = 0.0
-	medallions_frame.anchor_right = 0.0
-	medallions_frame.anchor_top = 0.0
-	medallions_frame.anchor_bottom = 0.0
-	medallions_frame.offset_left = 10
-	medallions_frame.offset_right = 278
-	medallions_frame.offset_top = 134
-	medallions_frame.offset_bottom = 330
-	medallions_frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(6))
-	add_child(medallions_frame)
-
-	var med_inner := PanelContainer.new()
-	med_inner.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(6, true))
-	medallions_frame.add_child(med_inner)
-
-	var med_vbox := VBoxContainer.new()
-	med_vbox.add_theme_constant_override("separation", 4)
-	med_inner.add_child(med_vbox)
-
-	_villages_title_lbl = Label.new()
-	_villages_title_lbl.add_theme_font_size_override("font_size", 12)
-	_villages_title_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
-	med_vbox.add_child(_villages_title_lbl)
-
-	var med_scroll := ScrollContainer.new()
-	med_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	med_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	med_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	med_vbox.add_child(med_scroll)
-
-	_villages_list_vbox = VBoxContainer.new()
-	_villages_list_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_villages_list_vbox.add_theme_constant_override("separation", 4)
-	med_scroll.add_child(_villages_list_vbox)
-
 
 func _build_top_right_stardew_clock() -> void:
 	var clock_frame := PanelContainer.new()
@@ -424,7 +406,7 @@ func _build_top_right_stardew_clock() -> void:
 	clock_frame.offset_left = -356
 	clock_frame.offset_right = -10
 	clock_frame.offset_top = 10
-	clock_frame.offset_bottom = 160
+	clock_frame.offset_bottom = 126
 	clock_frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(7))
 	add_child(clock_frame)
 
@@ -434,7 +416,7 @@ func _build_top_right_stardew_clock() -> void:
 
 	# Left: Illustrated Season & Tide Window
 	var portrait_card := PanelContainer.new()
-	portrait_card.custom_minimum_size = Vector2(92, 0)
+	portrait_card.custom_minimum_size = Vector2(80, 0)
 	portrait_card.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(EvoStardewStyle.COLOR_WOOD_DARK, EvoStardewStyle.COLOR_GOLD_BEVEL, 3))
 	clock_hbox.add_child(portrait_card)
 
@@ -445,7 +427,7 @@ func _build_top_right_stardew_clock() -> void:
 	_season_portrait = SeasonTidePortrait.new()
 	_season_portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_season_portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_season_portrait.custom_minimum_size = Vector2(82, 96)
+	_season_portrait.custom_minimum_size = Vector2(72, 76)
 	portrait_vbox.add_child(_season_portrait)
 
 	var tide_row := HBoxContainer.new()
@@ -453,20 +435,13 @@ func _build_top_right_stardew_clock() -> void:
 	tide_row.add_theme_constant_override("separation", 3)
 	portrait_vbox.add_child(tide_row)
 
-	_season_icon = TextureRect.new()
-	_season_icon.custom_minimum_size = Vector2(14, 14)
-	_season_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_season_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_season_icon.texture = EvoStardewStyle.get_pixel_icon("season_wet")
-	tide_row.add_child(_season_icon)
-
 	_sea_level_label = Label.new()
 	_sea_level_label.text = "🌊 12%"
 	_sea_level_label.add_theme_font_size_override("font_size", 11)
 	_sea_level_label.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT)
 	tide_row.add_child(_sea_level_label)
 
-	# Right: Generation Dial, Time Controls, Mana Bar & System 1 Models Badge
+	# Right: Generation Dial, Time Controls & Mana Bar
 	var dial_panel := PanelContainer.new()
 	dial_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	dial_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(6, false))
@@ -496,7 +471,7 @@ func _build_top_right_stardew_clock() -> void:
 	_season_label.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
 	gen_row.add_child(_season_label)
 
-	# Row 2: Tactile Wood/Gold Time Controls
+	# Row 2: Tactile Wood/Gold Time Controls + Settings Gear
 	var time_row := HBoxContainer.new()
 	time_row.add_theme_constant_override("separation", 4)
 	dial_vbox.add_child(time_row)
@@ -514,6 +489,13 @@ func _build_top_right_stardew_clock() -> void:
 	_speed_btn = Button.new()
 	_speed_btn.pressed.connect(_on_speed_pressed)
 	time_row.add_child(_speed_btn)
+
+	_settings_btn = Button.new()
+	_settings_btn.text = "⚙️"
+	_settings_btn.custom_minimum_size = Vector2(30, 0)
+	_settings_btn.add_theme_font_size_override("font_size", 11)
+	_settings_btn.pressed.connect(_on_settings_btn_pressed)
+	time_row.add_child(_settings_btn)
 
 	# Row 3: Selective Pressure / Mana Bar (Stardew Energy Bar)
 	var mana_box := PanelContainer.new()
@@ -540,13 +522,6 @@ func _build_top_right_stardew_clock() -> void:
 	EvoStardewStyle.style_progress_bar(_pressure_bar, Color("#22c55e"))
 	mana_vbox.add_child(_pressure_bar)
 
-	# Row 4: System 1 Decision Models Badge Button (opens Settings/Camera/Models popup)
-	_settings_btn = Button.new()
-	_settings_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_settings_btn.add_theme_font_size_override("font_size", 11)
-	_settings_btn.pressed.connect(_on_settings_btn_pressed)
-	dial_vbox.add_child(_settings_btn)
-
 
 func _build_settings_popup() -> void:
 	_settings_popup = PanelContainer.new()
@@ -555,10 +530,10 @@ func _build_settings_popup() -> void:
 	_settings_popup.anchor_right = 1.0
 	_settings_popup.anchor_top = 0.0
 	_settings_popup.anchor_bottom = 0.0
-	_settings_popup.offset_left = -364
-	_settings_popup.offset_right = -10
-	_settings_popup.offset_top = 166
-	_settings_popup.offset_bottom = 486
+	_settings_popup.offset_left = -718
+	_settings_popup.offset_right = -364
+	_settings_popup.offset_top = 10
+	_settings_popup.offset_bottom = 330
 	_settings_popup.z_index = 30
 	_settings_popup.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(8))
 	add_child(_settings_popup)
@@ -655,7 +630,7 @@ func _build_settings_popup() -> void:
 
 
 func _build_bottom_stardew_hotbar() -> void:
-	# 1. Floating Sub-Options Bar (appears above the hotbar when Sea Level / extra biomes active)
+	# 1. Floating Sub-Options Bar (appears right above the hotbar when Sea Level / extra biomes active)
 	_sub_options_panel = PanelContainer.new()
 	_sub_options_panel.visible = false
 	_sub_options_panel.anchor_left = 0.5
@@ -664,8 +639,8 @@ func _build_bottom_stardew_hotbar() -> void:
 	_sub_options_panel.anchor_bottom = 1.0
 	_sub_options_panel.offset_left = -280
 	_sub_options_panel.offset_right = 280
-	_sub_options_panel.offset_top = -140
-	_sub_options_panel.offset_bottom = -104
+	_sub_options_panel.offset_top = -112
+	_sub_options_panel.offset_bottom = -76
 	_sub_options_panel.z_index = 16
 	_sub_options_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(5))
 	add_child(_sub_options_panel)
@@ -676,8 +651,9 @@ func _build_bottom_stardew_hotbar() -> void:
 	_sub_options_flow.add_theme_constant_override("v_separation", 4)
 	_sub_options_panel.add_child(_sub_options_flow)
 
-	# 2. Floating Golden Equipped Tool Plaque right above the Hotbar
+	# 2. Hidden Equipped Tool Plaque (tooltips + hotbar slot badges handle display)
 	_equipped_tool_banner = PanelContainer.new()
+	_equipped_tool_banner.visible = false
 	_equipped_tool_banner.anchor_left = 0.5
 	_equipped_tool_banner.anchor_right = 0.5
 	_equipped_tool_banner.anchor_top = 1.0
@@ -829,8 +805,8 @@ func _build_right_scroll_inspector() -> void:
 	_inspector_frame.anchor_bottom = 0.0
 	_inspector_frame.offset_left = -356
 	_inspector_frame.offset_right = -10
-	_inspector_frame.offset_top = 162
-	_inspector_frame.offset_bottom = 840
+	_inspector_frame.offset_top = 132
+	_inspector_frame.offset_bottom = 865
 	_inspector_frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(7))
 	add_child(_inspector_frame)
 
@@ -844,46 +820,75 @@ func _build_right_scroll_inspector() -> void:
 	outer_vbox.add_child(header_box)
 
 	var header_vbox := VBoxContainer.new()
-	header_vbox.add_theme_constant_override("separation", 3)
+	header_vbox.add_theme_constant_override("separation", 4)
 	header_box.add_child(header_vbox)
 
-	var h_top := HBoxContainer.new()
-	h_top.add_theme_constant_override("separation", 6)
-	header_vbox.add_child(h_top)
+	# Row 1: Compact Village Selector Row (Swatch + ◀ + OptionButton + ▶ + Minimize)
+	var village_sel_row := HBoxContainer.new()
+	village_sel_row.add_theme_constant_override("separation", 4)
+	header_vbox.add_child(village_sel_row)
 
 	_inspector_header_swatch = ColorRect.new()
-	_inspector_header_swatch.custom_minimum_size = Vector2(14, 14)
+	_inspector_header_swatch.custom_minimum_size = Vector2(12, 20)
+	_inspector_header_swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_inspector_header_swatch.color = Color("#E07A5F")
-	h_top.add_child(_inspector_header_swatch)
+	village_sel_row.add_child(_inspector_header_swatch)
+
+	_village_prev_btn = Button.new()
+	_village_prev_btn.text = "◀"
+	_village_prev_btn.custom_minimum_size = Vector2(24, 24)
+	_village_prev_btn.add_theme_font_size_override("font_size", 10)
+	_village_prev_btn.pressed.connect(_on_village_cycle_pressed.bind(-1))
+	village_sel_row.add_child(_village_prev_btn)
+
+	_village_selector_opt = OptionButton.new()
+	_village_selector_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_village_selector_opt.fit_to_longest_item = false
+	_village_selector_opt.clip_text = true
+	_village_selector_opt.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_village_selector_opt.add_theme_font_size_override("font_size", 11)
+	_village_selector_opt.item_selected.connect(_on_village_selector_item_selected)
+	village_sel_row.add_child(_village_selector_opt)
+
+	_village_next_btn = Button.new()
+	_village_next_btn.text = "▶"
+	_village_next_btn.custom_minimum_size = Vector2(24, 24)
+	_village_next_btn.add_theme_font_size_override("font_size", 10)
+	_village_next_btn.pressed.connect(_on_village_cycle_pressed.bind(1))
+	village_sel_row.add_child(_village_next_btn)
+
+	_inspector_minimize_btn = Button.new()
+	_inspector_minimize_btn.text = "▾"
+	_inspector_minimize_btn.custom_minimum_size = Vector2(24, 24)
+	_inspector_minimize_btn.pressed.connect(_on_toggle_inspector_minimize)
+	village_sel_row.add_child(_inspector_minimize_btn)
+
+	# Row 2: System 1 Decision Model Badge + Lineage Highlight Button
+	var h_top := HBoxContainer.new()
+	h_top.add_theme_constant_override("separation", 5)
+	header_vbox.add_child(h_top)
+
+	var model_badge_panel := PanelContainer.new()
+	model_badge_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	model_badge_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_badge_style(Color("#271306"), EvoStardewStyle.COLOR_GOLD_BEVEL))
+	h_top.add_child(model_badge_panel)
+
+	_inspector_model_badge_lbl = Label.new()
+	_inspector_model_badge_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_inspector_model_badge_lbl.clip_text = true
+	_inspector_model_badge_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_inspector_model_badge_lbl.add_theme_font_size_override("font_size", 11)
+	_inspector_model_badge_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_CREAM_TEXT)
+	model_badge_panel.add_child(_inspector_model_badge_lbl)
 
 	_inspector_header_title = Label.new()
-	_inspector_header_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_inspector_header_title.clip_text = true
-	_inspector_header_title.add_theme_font_size_override("font_size", 13)
-	_inspector_header_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT)
+	_inspector_header_title.visible = false
 	h_top.add_child(_inspector_header_title)
 
 	_inspector_header_hl_btn = Button.new()
 	_inspector_header_hl_btn.add_theme_font_size_override("font_size", 10)
 	_inspector_header_hl_btn.pressed.connect(_on_header_highlight_pressed)
 	h_top.add_child(_inspector_header_hl_btn)
-
-	_inspector_minimize_btn = Button.new()
-	_inspector_minimize_btn.text = "▾"
-	_inspector_minimize_btn.custom_minimum_size = Vector2(26, 22)
-	_inspector_minimize_btn.pressed.connect(_on_toggle_inspector_minimize)
-	h_top.add_child(_inspector_minimize_btn)
-
-	# System 1 Decision Model Badge inside Scroll Header
-	var model_badge_panel := PanelContainer.new()
-	model_badge_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_badge_style(Color("#271306"), EvoStardewStyle.COLOR_GOLD_BEVEL))
-	header_vbox.add_child(model_badge_panel)
-
-	_inspector_model_badge_lbl = Label.new()
-	_inspector_model_badge_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_inspector_model_badge_lbl.add_theme_font_size_override("font_size", 11)
-	_inspector_model_badge_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_CREAM_TEXT)
-	model_badge_panel.add_child(_inspector_model_badge_lbl)
 
 	# Collapsible Scroll Body (3 Tabs + Cream Parchment Content)
 	_inspector_body_vbox = VBoxContainer.new()
@@ -1003,15 +1008,16 @@ func _build_banners_and_toasts() -> void:
 	_toast_vbox.anchor_bottom = 1.0
 	_toast_vbox.offset_left = 10
 	_toast_vbox.offset_right = 310
-	_toast_vbox.offset_top = -310
-	_toast_vbox.offset_bottom = -96
+	_toast_vbox.offset_top = -240
+	_toast_vbox.offset_bottom = -16
 	_toast_vbox.alignment = BoxContainer.ALIGNMENT_END
 	_toast_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_toast_vbox.add_theme_constant_override("separation", 5)
 	add_child(_toast_vbox)
 
-	# Compact Collapsible First-Steps Quest Note (Bottom-Left)
+	# Compact Collapsible First-Steps Quest Note (Hidden by default to keep bottom-left clear)
 	_first_steps_panel = PanelContainer.new()
+	_first_steps_panel.visible = false
 	_first_steps_panel.anchor_left = 0.0
 	_first_steps_panel.anchor_right = 0.0
 	_first_steps_panel.anchor_top = 1.0
@@ -1111,8 +1117,6 @@ func refresh(world_state: EvoTypes.WorldState = null) -> void:
 		for i in range(_last_seen_chronicle_count, _world_state.chronicle.size()):
 			var entry: EvoTypes.ChronicleEntry = _world_state.chronicle[i]
 			push_chronicle_toast(entry)
-			if entry.event_type in ["baldwin_trait", "cultural_innovation", "allopatric_speciation"]:
-				show_milestone_banner(entry.title, entry.causal_explanation, false)
 		_last_seen_chronicle_count = _world_state.chronicle.size()
 	elif _world_state.chronicle.size() < _last_seen_chronicle_count:
 		_last_seen_chronicle_count = _world_state.chronicle.size()
@@ -1154,6 +1158,7 @@ func select_hex(hex_id: String) -> void:
 			if _inspector_tab == "habitat":
 				_set_inspector_tab("deme")
 		else:
+			_selected_deme_id = ""
 			_set_inspector_tab("habitat")
 	_rebuild_villages_list()
 	_rebuild_active_inspector_sheet()
@@ -1245,10 +1250,38 @@ func show_milestone_banner(title: String, summary: String, is_macro: bool = fals
 	_milestone_banner.visible = true
 
 
+func _clean_toast_title(raw_title: String) -> String:
+	var cleaned := raw_title.strip_edges()
+	for prefix in ["Hito Evolutivo en ", "Evolutionary Milestone in ", "Pérdida Cultural: ", "Cultural Loss: "]:
+		if cleaned.begins_with(prefix):
+			cleaned = cleaned.substr(prefix.length()).strip_edges()
+			break
+	return cleaned
+
+
 func push_chronicle_toast(entry: EvoTypes.ChronicleEntry) -> void:
 	if _toast_vbox == null:
 		return
-	while _toast_vbox.get_child_count() >= 3:
+
+	var header_text := "G%d · %s · 📍(%s)" % [
+		entry.generation,
+		EvoStardewStyle.get_event_type_label(entry.event_type, _lang),
+		entry.hex_id
+	]
+	var body_text := _clean_toast_title(entry.title)
+
+	if _toast_vbox.get_child_count() > 0:
+		var newest := _toast_vbox.get_child(_toast_vbox.get_child_count() - 1)
+		if int(newest.get_meta("generation", -1)) == entry.generation and str(newest.get_meta("event_type", "")) == entry.event_type:
+			var top_existing := newest.get_meta("top_lbl") as Label
+			var title_existing := newest.get_meta("title_lbl") as Label
+			top_existing.text = header_text
+			title_existing.text = body_text
+			newest.set_meta("ttl", 3.8)
+			(newest as CanvasItem).modulate.a = 1.0
+			return
+
+	while _toast_vbox.get_child_count() >= 2:
 		var oldest := _toast_vbox.get_child(0)
 		_toast_vbox.remove_child(oldest)
 		oldest.queue_free()
@@ -1256,28 +1289,34 @@ func push_chronicle_toast(entry: EvoTypes.ChronicleEntry) -> void:
 	var ev_color := EvoStardewStyle.get_event_type_color(entry.event_type)
 	var toast := PanelContainer.new()
 	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	toast.set_meta("ttl", 5.5)
-	var style := EvoStardewStyle.make_parchment_card(Color("#fbf2de"), ev_color, 6)
-	style.border_width_left = 5
+	toast.set_meta("ttl", 3.8)
+	toast.set_meta("generation", entry.generation)
+	toast.set_meta("event_type", entry.event_type)
+	var style := EvoStardewStyle.make_parchment_card(Color("#fbf2de"), ev_color, 5)
+	style.border_width_left = 4
 	toast.add_theme_stylebox_override("panel", style)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 2)
 	toast.add_child(vbox)
 
-	var badge_lbl := Label.new()
-	badge_lbl.text = "G%d · %s (%s)" % [entry.generation, EvoStardewStyle.get_event_type_label(entry.event_type, _lang), entry.hex_id]
-	badge_lbl.add_theme_font_size_override("font_size", 10)
-	badge_lbl.add_theme_color_override("font_color", ev_color)
-	vbox.add_child(badge_lbl)
+	var top_lbl := Label.new()
+	top_lbl.text = header_text
+	top_lbl.add_theme_font_size_override("font_size", 10)
+	top_lbl.add_theme_color_override("font_color", ev_color)
+	vbox.add_child(top_lbl)
 
 	var title_lbl := Label.new()
-	title_lbl.text = entry.title
+	title_lbl.text = body_text
 	title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title_lbl.max_lines_visible = 2
+	title_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_lbl.add_theme_font_size_override("font_size", 11)
 	title_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
 	vbox.add_child(title_lbl)
 
+	toast.set_meta("top_lbl", top_lbl)
+	toast.set_meta("title_lbl", title_lbl)
 	_toast_vbox.add_child(toast)
 
 
@@ -1326,7 +1365,8 @@ func _update_static_labels() -> void:
 	_notebook_btn.text = EvoStardewStyle.tr_text(_lang, "📖 Diario", "📖 Journal")
 	_tree_btn.text = EvoStardewStyle.tr_text(_lang, "🌳 Linajes", "🌳 Lineages")
 	_lab_btn.text = EvoStardewStyle.tr_text(_lang, "⚗️ Forja", "⚗️ Forge")
-	_lens_cycle_btn.text = EvoStardewStyle.tr_text(_lang, "👁️ Lente", "👁️ Lens")
+	if _lens_cycle_btn != null:
+		_lens_cycle_btn.text = EvoStardewStyle.tr_text(_lang, "👁️ Lente", "👁️ Lens")
 
 	EvoStardewStyle.apply_button_active(_lang_es_btn, _lang == "es")
 	EvoStardewStyle.apply_button_active(_lang_en_btn, _lang == "en")
@@ -1364,7 +1404,8 @@ func _update_static_labels() -> void:
 	EvoStardewStyle.apply_button_active(_tab_traits_btn, _inspector_tab == "traits")
 	EvoStardewStyle.apply_button_active(_tab_habitat_btn, _inspector_tab == "habitat")
 
-	_villages_title_lbl.text = EvoStardewStyle.tr_text(_lang, "🏘️ Aldeas Vivas del Valle", "🏘️ Living Valley Villages")
+	if _villages_title_lbl != null:
+		_villages_title_lbl.text = EvoStardewStyle.tr_text(_lang, "🏘️ Aldeas Vivas del Valle", "🏘️ Living Valley Villages")
 	_update_hotbar_visuals()
 	_update_first_steps_labels()
 
@@ -1381,10 +1422,12 @@ func _update_top_bar_state() -> void:
 	var is_wet := (_world_state.season == "wet_warm")
 	if is_wet:
 		_season_label.text = EvoStardewStyle.tr_text(_lang, "☀️ Primavera Cálida", "☀️ Warm Spring")
-		_season_icon.texture = EvoStardewStyle.get_pixel_icon("season_wet")
+		if _season_icon != null:
+			_season_icon.texture = EvoStardewStyle.get_pixel_icon("season_wet")
 	else:
 		_season_label.text = EvoStardewStyle.tr_text(_lang, "❄️ Invierno Seco", "❄️ Dry Winter")
-		_season_icon.texture = EvoStardewStyle.get_pixel_icon("season_dry")
+		if _season_icon != null:
+			_season_icon.texture = EvoStardewStyle.get_pixel_icon("season_dry")
 
 	var sea_pct := int(round(_world_state.sea_level * 100.0))
 	_sea_level_label.text = "🌊 %d%%" % sea_pct
@@ -1412,7 +1455,8 @@ func _update_top_bar_state() -> void:
 		avg_conf /= float(_world_state.demes.size())
 
 	var mode_tag := "ON" if _world_state.use_live_decision_models else "HEUR"
-	_settings_btn.text = "🧠 d3:4b · tev1:4b [%s] ⚙️" % mode_tag
+	_settings_btn.text = "⚙️"
+	_settings_btn.tooltip_text = "🧠 d3:4b (%d) · tev1:4b (%d) [%s]" % [d3_count, tev1_count, mode_tag]
 	_models_diag_lbl.text = EvoStardewStyle.tr_text(
 		_lang,
 		"🧠 Motores Cognitivos Sistema 1:\n• d3:4b (Táctico/Instinto): %d aldeas\n• tev1:4b (Ecológico/Estratégico): %d aldeas\n• Confianza media: %d%%" % [d3_count, tev1_count, int(round(avg_conf * 100.0))],
@@ -1577,73 +1621,65 @@ func _rebuild_legend_content() -> void:
 
 
 func _rebuild_villages_list() -> void:
-	if _villages_list_vbox == null:
+	if _village_selector_opt == null:
 		return
+
+	_village_selector_opt.clear()
 
 	if _world_state == null or _world_state.demes.is_empty():
-		for btn in _village_buttons_pool:
-			btn.visible = false
-		if _empty_villages_lbl == null:
-			_empty_villages_lbl = Label.new()
-			_empty_villages_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_RED_DANGER)
-			_empty_villages_lbl.add_theme_font_size_override("font_size", 11)
-			_villages_list_vbox.add_child(_empty_villages_lbl)
-		_empty_villages_lbl.text = EvoStardewStyle.tr_text(_lang, "Sin aldeas vivas.", "No living villages.")
-		_empty_villages_lbl.visible = true
+		_village_selector_opt.add_item(EvoStardewStyle.tr_text(_lang, "🏘️ 0 Aldeas Vivas", "🏘️ 0 Living Villages"), 0)
+		_village_selector_opt.set_item_metadata(0, "")
+		_village_selector_opt.disabled = true
+		if _village_prev_btn != null:
+			_village_prev_btn.disabled = true
+		if _village_next_btn != null:
+			_village_next_btn.disabled = true
 		return
 
-	if _empty_villages_lbl != null:
-		_empty_villages_lbl.visible = false
+	_village_selector_opt.disabled = false
 
 	var deme_list: Array[EvoTypes.Deme] = []
 	for d_id in _world_state.demes.keys():
 		deme_list.append(_world_state.demes[d_id])
 	deme_list.sort_custom(func(a: EvoTypes.Deme, b: EvoTypes.Deme) -> bool: return a.population > b.population)
 
-	_villages_title_lbl.text = EvoStardewStyle.tr_text(
-		_lang,
-		"🏘️ Aldeas Vivas (%d)" % deme_list.size(),
-		"🏘️ Living Villages (%d)" % deme_list.size()
-	)
+	var can_cycle := deme_list.size() > 1
+	if _village_prev_btn != null:
+		_village_prev_btn.disabled = not can_cycle
+	if _village_next_btn != null:
+		_village_next_btn.disabled = not can_cycle
 
-	while _village_buttons_pool.size() < deme_list.size():
-		var btn := Button.new()
-		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn.clip_text = true
-		btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		btn.add_theme_font_size_override("font_size", 11)
-		btn.pressed.connect(_on_pooled_village_btn_pressed.bind(btn))
-		_villages_list_vbox.add_child(btn)
-		_village_buttons_pool.append(btn)
-
-	for i in range(_village_buttons_pool.size()):
-		var btn := _village_buttons_pool[i]
-		if i >= deme_list.size():
-			btn.visible = false
-			continue
+	var selected_idx := 0
+	var total_count := deme_list.size()
+	for i in range(total_count):
 		var d := deme_list[i]
 		var status_key := d.get_vital_status()
 		var heart := EvoStardewStyle.get_vital_status_heart(status_key)
-		var short_model := "tev1" if "tev1" in d.decision_model_tag else "d3"
-		var short_name := d.name
-		if short_name.length() > 14:
-			short_name = short_name.substr(0, 13) + "…"
+		var item_lbl := "%s [%d/%d] %s" % [heart, i + 1, total_count, _format_deme_with_hex(d)]
+		_village_selector_opt.add_item(item_lbl, i)
+		_village_selector_opt.set_item_metadata(i, d.id)
+		if d.id == _selected_deme_id:
+			selected_idx = i
 
-		btn.visible = true
-		btn.text = "%s %s · %s·%d [🧠%s]" % [heart, short_name, d.get_village_roman(), d.population, short_model]
-		btn.tooltip_text = "%s (%s)\n%s · %d hab · 🧠 %s" % [
-			d.name,
-			d.hex_id,
-			EvoStardewStyle.get_village_tier_label(d.population, _lang),
-			d.population,
-			d.decision_model_tag
-		]
-		btn.set_meta("deme_id", d.id)
-		btn.set_meta("hex_id", d.hex_id)
-		var is_active := d.id == _selected_deme_id
-		if not btn.has_meta("is_active") or bool(btn.get_meta("is_active")) != is_active:
-			btn.set_meta("is_active", is_active)
-			EvoStardewStyle.apply_button_active(btn, is_active)
+	_village_selector_opt.select(selected_idx)
+
+
+func _on_village_selector_item_selected(index: int) -> void:
+	if _village_selector_opt == null or index < 0 or index >= _village_selector_opt.item_count:
+		return
+	var deme_id := str(_village_selector_opt.get_item_metadata(index))
+	if deme_id != "" and _world_state != null and _world_state.demes.has(deme_id):
+		var d: EvoTypes.Deme = _world_state.demes[deme_id]
+		_on_village_list_item_pressed(d.id, d.hex_id)
+
+
+func _on_village_cycle_pressed(step: int) -> void:
+	if _village_selector_opt == null or _village_selector_opt.item_count <= 1:
+		return
+	var cur := maxi(0, _village_selector_opt.selected)
+	var next_idx := posmod(cur + step, _village_selector_opt.item_count)
+	_village_selector_opt.select(next_idx)
+	_on_village_selector_item_selected(next_idx)
 
 
 func _on_pooled_village_btn_pressed(btn: Button) -> void:
@@ -1656,10 +1692,12 @@ func _on_pooled_village_btn_pressed(btn: Button) -> void:
 func _rebuild_deme_sheet() -> void:
 	if _deme_sheet_vbox == null or _traits_sheet_vbox == null:
 		return
-	for child in _deme_sheet_vbox.get_children():
-		child.queue_free()
-	for child in _traits_sheet_vbox.get_children():
-		child.queue_free()
+	if _inspector_tab == "traits":
+		for child in _traits_sheet_vbox.get_children():
+			child.queue_free()
+	else:
+		for child in _deme_sheet_vbox.get_children():
+			child.queue_free()
 
 	if _world_state == null or _selected_deme_id == "" or not _world_state.demes.has(_selected_deme_id):
 		_inspector_header_title.text = EvoStardewStyle.tr_text(_lang, "Hex (%s)" % _selected_hex_id, "Hex (%s)" % _selected_hex_id)
@@ -1668,13 +1706,14 @@ func _rebuild_deme_sheet() -> void:
 		var empty_lbl := Label.new()
 		empty_lbl.text = EvoStardewStyle.tr_text(
 			_lang,
-			"Haz clic en un medallón de aldea o en el mapa para abrir su pergamino.",
-			"Click a village medallion or on the map to open its scroll."
+			"Selecciona una aldea en el selector superior o en el mapa para abrir su pergamino.",
+			"Select a village in the top selector or on the map to open its scroll."
 		)
 		empty_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		empty_lbl.add_theme_font_size_override("font_size", 11)
 		empty_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
-		_deme_sheet_vbox.add_child(empty_lbl)
+		var target_box := _traits_sheet_vbox if _inspector_tab == "traits" else _deme_sheet_vbox
+		target_box.add_child(empty_lbl)
 		return
 
 	var d: EvoTypes.Deme = _world_state.demes[_selected_deme_id]
@@ -1693,12 +1732,75 @@ func _rebuild_deme_sheet() -> void:
 	var conf_pct := int(round(d.last_confidence * 100.0))
 	_inspector_model_badge_lbl.text = EvoStardewStyle.tr_text(
 		_lang,
-		"🧠 Modelo: %s · Confianza %d%%" % [d.decision_model_tag, conf_pct],
-		"🧠 Model: %s · Confidence %d%%" % [d.decision_model_tag, conf_pct]
+		"🧠 Modelo: %s · %d%% · 📍 (%s)" % [d.decision_model_tag, conf_pct, d.hex_id],
+		"🧠 Model: %s · %d%% · 📍 (%s)" % [d.decision_model_tag, conf_pct, d.hex_id]
 	)
 
+	if _inspector_tab == "traits":
+		# ========================================================================
+		# TAB 2: 🧬 RASGOS E HITOS (Built lazily only when active)
+		# ========================================================================
+		var mile_title := Label.new()
+		mile_title.text = EvoStardewStyle.tr_text(_lang, "⏳ Medidores de Hitos Evolutivos", "⏳ Evolutionary Milestone Meters")
+		mile_title.add_theme_font_size_override("font_size", 12)
+		mile_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+		_traits_sheet_vbox.add_child(mile_title)
+
+		var max_baldwin := 0
+		for b_k in d.baldwin_counters.keys():
+			var cnt := int(d.baldwin_counters[b_k])
+			if cnt > max_baldwin:
+				max_baldwin = cnt
+		_add_milestone_bar(
+			_traits_sheet_vbox,
+			EvoStardewStyle.tr_text(_lang, "Asimilación Genética (Baldwin)", "Genetic Assimilation (Baldwin)"),
+			"%d / 8 gen" % max_baldwin,
+			clampf(float(max_baldwin) / 8.0 * 100.0, 0.0, 100.0),
+			Color("#0d9488")
+		)
+
+		var innov_pct := clampf(d.innovation_counter * 100.0, 0.0, 100.0)
+		_add_milestone_bar(
+			_traits_sheet_vbox,
+			EvoStardewStyle.tr_text(_lang, "Innovación Cultural", "Cultural Innovation"),
+			"%d%%" % int(round(innov_pct)),
+			innov_pct,
+			EvoStardewStyle.COLOR_PURPLE_CULTURE
+		)
+
+		_add_milestone_bar(
+			_traits_sheet_vbox,
+			EvoStardewStyle.tr_text(_lang, "Aislamiento Alopátrico", "Allopatric Isolation"),
+			"%d / 10 gen" % d.isolation_turns,
+			clampf(float(d.isolation_turns) / 10.0 * 100.0, 0.0, 100.0),
+			EvoStardewStyle.COLOR_BLUE_INFO
+		)
+
+		var traits_title := Label.new()
+		traits_title.text = EvoStardewStyle.tr_text(_lang, "🧬 Medallones de Rasgos y Tradiciones", "🧬 Trait & Tradition Medallions")
+		traits_title.add_theme_font_size_override("font_size", 12)
+		traits_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+		_traits_sheet_vbox.add_child(traits_title)
+
+		var traits_flow := HFlowContainer.new()
+		traits_flow.add_theme_constant_override("h_separation", 4)
+		traits_flow.add_theme_constant_override("v_separation", 4)
+		_traits_sheet_vbox.add_child(traits_flow)
+
+		for t_id in d.biological_trait_ids:
+			traits_flow.add_child(_make_trait_tag(t_id, false))
+		for t_id in d.cultural_trait_ids:
+			traits_flow.add_child(_make_trait_tag(t_id, true))
+
+		var open_forge_btn := Button.new()
+		open_forge_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		open_forge_btn.text = EvoStardewStyle.tr_text(_lang, "⚗️ Abrir Forja / Inyectar Rasgo", "⚗️ Open Forge / Inject Trait")
+		open_forge_btn.pressed.connect(open_lab_modal)
+		_traits_sheet_vbox.add_child(open_forge_btn)
+		return
+
 	# ========================================================================
-	# TAB 1: 🧠 ALDEA Y DECISIONES
+	# TAB 1: 🧠 ALDEA Y DECISIONES (Built lazily only when active)
 	# ========================================================================
 	var meters_card := PanelContainer.new()
 	meters_card.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(Color("#fbf2de"), EvoStardewStyle.COLOR_PARCHMENT_BORDER, 6))
@@ -1733,58 +1835,37 @@ func _rebuild_deme_sheet() -> void:
 		"%+.1f · %s %s" % [d.last_energy_delta, heart_icon, v_label]
 	)
 
-	# Decision Model Intention Section
+	# Decision Model Intention Section (Top 3 probabilities, dominant marked with ★)
 	var dec_title := Label.new()
 	dec_title.text = EvoStardewStyle.tr_text(
 		_lang,
-		"🧠 Intención (%s):" % d.decision_model_tag,
-		"🧠 Intention (%s):" % d.decision_model_tag
+		"🧠 Intención Dominante:",
+		"🧠 Dominant Intention:"
 	)
 	dec_title.add_theme_font_size_override("font_size", 12)
 	dec_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
 	_deme_sheet_vbox.add_child(dec_title)
 
-	var dom_name := d.last_dominant_decision_id
-	if _world_state.decisions_catalog.has(d.last_dominant_decision_id):
-		dom_name = (_world_state.decisions_catalog[d.last_dominant_decision_id] as EvoTypes.DecisionDef).name
-
-	var dom_row := HBoxContainer.new()
-	dom_row.add_theme_constant_override("separation", 6)
-	_deme_sheet_vbox.add_child(dom_row)
-
-	var dom_icon := TextureRect.new()
-	dom_icon.custom_minimum_size = Vector2(18, 18)
-	dom_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	dom_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	dom_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	dom_icon.texture = EvoStardewStyle.get_pixel_icon(EvoStardewStyle.get_decision_icon_key(d.last_dominant_decision_id, _world_state))
-	dom_row.add_child(dom_icon)
-
-	var dom_lbl := Label.new()
-	dom_lbl.text = dom_name
-	dom_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	dom_lbl.clip_text = true
-	dom_lbl.add_theme_font_size_override("font_size", 12)
-	dom_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
-	dom_row.add_child(dom_lbl)
-
 	var prob_keys := d.last_decision_probabilities.keys()
 	prob_keys.sort_custom(func(a: Variant, b: Variant) -> bool:
 		return float(d.last_decision_probabilities[a]) > float(d.last_decision_probabilities[b])
 	)
-	for dec_id_var in prob_keys:
-		var dec_id := str(dec_id_var)
+	for i in range(mini(3, prob_keys.size())):
+		var dec_id := str(prob_keys[i])
 		var prob: float = float(d.last_decision_probabilities[dec_id])
 		var dec_lbl_str := dec_id
 		if _world_state.decisions_catalog.has(dec_id):
 			dec_lbl_str = (_world_state.decisions_catalog[dec_id] as EvoTypes.DecisionDef).name
+		var is_dom := (i == 0 or dec_id == d.last_dominant_decision_id)
+		if i == 0:
+			dec_lbl_str = "★ " + dec_lbl_str
 
 		_add_milestone_bar(
 			_deme_sheet_vbox,
 			dec_lbl_str,
 			"%d%%" % int(round(prob * 100.0)),
 			prob * 100.0,
-			EvoStardewStyle.COLOR_GOLD_BEVEL if dec_id == d.last_dominant_decision_id else EvoStardewStyle.COLOR_SEPIA
+			EvoStardewStyle.COLOR_GOLD_BEVEL if is_dom else EvoStardewStyle.COLOR_SEPIA
 		)
 
 	# Village Relations & Roads Summary
@@ -1824,85 +1905,6 @@ func _rebuild_deme_sheet() -> void:
 	just_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
 	just_card.add_child(just_lbl)
 
-	# ========================================================================
-	# TAB 2: 🧬 RASGOS E HITOS
-	# ========================================================================
-	var mile_title := Label.new()
-	mile_title.text = EvoStardewStyle.tr_text(_lang, "⏳ Medidores de Hitos Evolutivos", "⏳ Evolutionary Milestone Meters")
-	mile_title.add_theme_font_size_override("font_size", 12)
-	mile_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
-	_traits_sheet_vbox.add_child(mile_title)
-
-	var max_baldwin := 0
-	for b_k in d.baldwin_counters.keys():
-		var cnt := int(d.baldwin_counters[b_k])
-		if cnt > max_baldwin:
-			max_baldwin = cnt
-	_add_milestone_bar(
-		_traits_sheet_vbox,
-		EvoStardewStyle.tr_text(_lang, "Asimilación Genética (Baldwin)", "Genetic Assimilation (Baldwin)"),
-		"%d / 8 gen" % max_baldwin,
-		clampf(float(max_baldwin) / 8.0 * 100.0, 0.0, 100.0),
-		Color("#0d9488")
-	)
-
-	var innov_pct := clampf(d.innovation_counter * 100.0, 0.0, 100.0)
-	_add_milestone_bar(
-		_traits_sheet_vbox,
-		EvoStardewStyle.tr_text(_lang, "Innovación Cultural", "Cultural Innovation"),
-		"%d%%" % int(round(innov_pct)),
-		innov_pct,
-		EvoStardewStyle.COLOR_PURPLE_CULTURE
-	)
-
-	_add_milestone_bar(
-		_traits_sheet_vbox,
-		EvoStardewStyle.tr_text(_lang, "Aislamiento Alopátrico", "Allopatric Isolation"),
-		"%d / 10 gen" % d.isolation_turns,
-		clampf(float(d.isolation_turns) / 10.0 * 100.0, 0.0, 100.0),
-		EvoStardewStyle.COLOR_BLUE_INFO
-	)
-
-	var traits_title := Label.new()
-	traits_title.text = EvoStardewStyle.tr_text(_lang, "🧬 Medallones de Rasgos y Tradiciones", "🧬 Trait & Tradition Medallions")
-	traits_title.add_theme_font_size_override("font_size", 12)
-	traits_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
-	_traits_sheet_vbox.add_child(traits_title)
-
-	var traits_flow := HFlowContainer.new()
-	traits_flow.add_theme_constant_override("h_separation", 4)
-	traits_flow.add_theme_constant_override("v_separation", 4)
-	_traits_sheet_vbox.add_child(traits_flow)
-
-	for t_id in d.biological_trait_ids:
-		traits_flow.add_child(_make_trait_tag(t_id, false))
-	for t_id in d.cultural_trait_ids:
-		traits_flow.add_child(_make_trait_tag(t_id, true))
-
-	var inject_row := HBoxContainer.new()
-	inject_row.add_theme_constant_override("separation", 4)
-	_traits_sheet_vbox.add_child(inject_row)
-
-	var trait_opt := OptionButton.new()
-	trait_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	trait_opt.fit_to_longest_item = false
-	trait_opt.clip_text = true
-	trait_opt.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	trait_opt.add_item(EvoStardewStyle.tr_text(_lang, "➕ Inyectar Rasgo Experimental...", "➕ Inject Experimental Trait..."), 0)
-	trait_opt.set_item_metadata(0, "")
-	var idx_counter := 1
-	for cat_t_id in _world_state.traits_catalog.keys():
-		var tr_def: EvoTypes.TraitDef = _world_state.traits_catalog[cat_t_id]
-		trait_opt.add_item("%s (%s)" % [tr_def.name, tr_def.category], idx_counter)
-		trait_opt.set_item_metadata(idx_counter, tr_def.id)
-		idx_counter += 1
-	trait_opt.item_selected.connect(func(sel_idx: int) -> void:
-		var chosen_id := str(trait_opt.get_item_metadata(sel_idx))
-		if chosen_id != "":
-			_inject_trait_into_deme(d.id, chosen_id)
-	)
-	inject_row.add_child(trait_opt)
-
 
 func _format_deme_with_hex(od: EvoTypes.Deme) -> String:
 	var suffix := "(%s)" % od.hex_id
@@ -1911,35 +1913,118 @@ func _format_deme_with_hex(od: EvoTypes.Deme) -> String:
 	return "%s %s" % [od.name, suffix]
 
 
+func _format_short_deme_label(od: EvoTypes.Deme) -> String:
+	var suffix := "(%s)" % od.hex_id
+	var base := od.name
+	if base.ends_with(suffix):
+		base = base.substr(0, base.length() - suffix.length()).strip_edges()
+	if base.length() > 16:
+		base = base.substr(0, 15) + "…"
+	return "%s (%s)" % [base, od.hex_id]
+
+
+func _format_relation_category(
+	single_es: String,
+	single_en: String,
+	multi_es: String,
+	multi_en: String,
+	full_list: Array[String],
+	short_list: Array[String],
+	coord_list: Array[String]
+) -> String:
+	var n := full_list.size()
+	if n == 0:
+		return ""
+	if n == 1:
+		return EvoStardewStyle.tr_text(_lang, single_es % full_list[0], single_en % full_list[0])
+	if n == 2:
+		var joined_two := ", ".join(short_list)
+		return EvoStardewStyle.tr_text(_lang, multi_es % [n, joined_two], multi_en % [n, joined_two])
+	var shown: Array[String] = []
+	for i in range(mini(4, n)):
+		shown.append(coord_list[i])
+	if n > 4:
+		shown.append(EvoStardewStyle.tr_text(_lang, "+%d más" % (n - 4), "+%d more" % (n - 4)))
+	var joined_many := ", ".join(shown)
+	return EvoStardewStyle.tr_text(_lang, multi_es % [n, joined_many], multi_en % [n, joined_many])
+
+
 func _build_deme_relations_lines(d: EvoTypes.Deme) -> Array[String]:
 	var lines: Array[String] = []
 	if _world_state == null:
 		return lines
 
 	var mentioned_deme_ids: Dictionary = {}
+	var coop_full: Array[String] = []
+	var coop_short: Array[String] = []
+	var coop_coord: Array[String] = []
+	var dispute_full: Array[String] = []
+	var dispute_short: Array[String] = []
+	var dispute_coord: Array[String] = []
+	var mig_full: Array[String] = []
+	var mig_short: Array[String] = []
+	var mig_coord: Array[String] = []
+
 	for fl in _world_state.active_flows:
 		var has_deme_endpoints := (fl.from_deme_id != "" or fl.to_deme_id != "")
 		var touches := (fl.from_deme_id == d.id or fl.to_deme_id == d.id) if has_deme_endpoints else (fl.from_hex_id == d.hex_id or fl.to_hex_id == d.hex_id)
 		if not touches:
 			continue
 		var other_hex := fl.to_hex_id if fl.from_hex_id == d.hex_id else fl.from_hex_id
-		var other_name := ("Hex (%s)" % other_hex)
+		var coord_lbl := "(%s)" % other_hex
+		var full_lbl := "Hex (%s)" % other_hex
+		var short_lbl := coord_lbl
 		var other_deme_id := fl.to_deme_id if fl.from_deme_id == d.id else fl.from_deme_id
 		if other_deme_id != "" and _world_state.demes.has(other_deme_id):
 			var od_flow: EvoTypes.Deme = _world_state.demes[other_deme_id]
-			other_name = _format_deme_with_hex(od_flow)
+			full_lbl = _format_deme_with_hex(od_flow)
+			short_lbl = _format_short_deme_label(od_flow)
+			coord_lbl = "(%s)" % od_flow.hex_id
 			mentioned_deme_ids[other_deme_id] = true
-		var line_str := ""
 		match fl.flow_type:
 			"exchange", "cooperate", "merge":
-				line_str = EvoStardewStyle.tr_text(_lang, "🛣️ Vía de cooperación activa con %s" % other_name, "🛣️ Active cooperation road with %s" % other_name)
+				if not coop_full.has(full_lbl):
+					coop_full.append(full_lbl)
+					coop_short.append(short_lbl)
+					coop_coord.append(coord_lbl)
 			"dispute":
-				line_str = EvoStardewStyle.tr_text(_lang, "⚔️ En conflicto / barricadas con %s" % other_name, "⚔️ In conflict / barricades with %s" % other_name)
+				if not dispute_full.has(full_lbl):
+					dispute_full.append(full_lbl)
+					dispute_short.append(short_lbl)
+					dispute_coord.append(coord_lbl)
 			"migration":
-				line_str = EvoStardewStyle.tr_text(_lang, "🧭 Expedición migratoria hacia (%s)" % other_hex, "🧭 Migratory expedition toward (%s)" % other_hex)
-		if line_str != "" and not lines.has(line_str):
-			lines.append(line_str)
+				if not mig_full.has(coord_lbl):
+					mig_full.append(coord_lbl)
+					mig_short.append(coord_lbl)
+					mig_coord.append(coord_lbl)
 
+	var coop_line := _format_relation_category(
+		"🛣️ Cooperación activa: %s", "🛣️ Active cooperation: %s",
+		"🛣️ Cooperación activa (%d): %s", "🛣️ Active cooperation (%d): %s",
+		coop_full, coop_short, coop_coord
+	)
+	if coop_line != "":
+		lines.append(coop_line)
+
+	var dispute_line := _format_relation_category(
+		"⚔️ En conflicto: %s", "⚔️ In conflict: %s",
+		"⚔️ En conflicto (%d): %s", "⚔️ In conflict (%d): %s",
+		dispute_full, dispute_short, dispute_coord
+	)
+	if dispute_line != "":
+		lines.append(dispute_line)
+
+	var mig_line := _format_relation_category(
+		"🧭 Expedición migratoria hacia %s", "🧭 Migratory expedition toward %s",
+		"🧭 Migración (%d): %s", "🧭 Migration (%d): %s",
+		mig_full, mig_short, mig_coord
+	)
+	if mig_line != "":
+		lines.append(mig_line)
+
+	var sev_full: Array[String] = []
+	var sev_short: Array[String] = []
+	var sev_coord: Array[String] = []
 	for dis in _world_state.disused_connections:
 		var f_deme := str(dis.get("from_deme_id", ""))
 		var t_deme := str(dis.get("to_deme_id", ""))
@@ -1950,40 +2035,72 @@ func _build_deme_relations_lines(d: EvoTypes.Deme) -> Array[String]:
 		if touches_dis:
 			var other_d_id := t_deme if f_deme == d.id else f_deme
 			var target_h := t_hex if f_hex == d.hex_id else f_hex
-			var target_label := "(%s)" % target_h
+			var coord_s := "(%s)" % target_h
+			var full_s := coord_s
+			var short_s := coord_s
 			if other_d_id != "" and other_d_id != d.id and _world_state.demes.has(other_d_id):
 				var od_dis: EvoTypes.Deme = _world_state.demes[other_d_id]
-				target_label = _format_deme_with_hex(od_dis)
+				full_s = _format_deme_with_hex(od_dis)
+				short_s = _format_short_deme_label(od_dis)
+				coord_s = "(%s)" % od_dis.hex_id
 			var age_val := int(dis.get("age", 0))
-			var dis_str := ""
 			if age_val > 0:
-				dis_str = EvoStardewStyle.tr_text(
-					_lang,
-					"🚧 Camino cortado con %s (hace %d gen.)" % [target_label, age_val],
-					"🚧 Severed path with %s (%d gen. ago)" % [target_label, age_val]
-				)
-			else:
-				dis_str = EvoStardewStyle.tr_text(
-					_lang,
-					"🚧 Camino cortado con %s" % target_label,
-					"🚧 Severed path with %s" % target_label
-				)
-			if not lines.has(dis_str):
-				lines.append(dis_str)
+				full_s = EvoStardewStyle.tr_text(_lang, "%s (hace %d gen.)" % [full_s, age_val], "%s (%d gen. ago)" % [full_s, age_val])
+			if not sev_full.has(full_s):
+				sev_full.append(full_s)
+				sev_short.append(short_s)
+				sev_coord.append(coord_s)
+
+	var sev_line := _format_relation_category(
+		"🚧 Camino cortado con %s", "🚧 Severed path with %s",
+		"🚧 Caminos cortados (%d): %s", "🚧 Severed paths (%d): %s",
+		sev_full, sev_short, sev_coord
+	)
+	if sev_line != "":
+		lines.append(sev_line)
 
 	if _world_state.cells.has(d.hex_id):
 		var c: EvoTypes.HexCell = _world_state.cells[d.hex_id]
+		var coh_full: Array[String] = []
+		var coh_short: Array[String] = []
+		var coh_coord: Array[String] = []
 		for other_id in c.deme_ids:
 			if other_id != d.id and not mentioned_deme_ids.has(other_id) and _world_state.demes.has(other_id):
 				var od: EvoTypes.Deme = _world_state.demes[other_id]
-				lines.append(EvoStardewStyle.tr_text(_lang, "🤝 Coexistiendo en (%s) con %s" % [d.hex_id, od.name], "🤝 Coexisting at (%s) with %s" % [d.hex_id, od.name]))
+				var flbl := _format_deme_with_hex(od)
+				if not coh_full.has(flbl):
+					coh_full.append(flbl)
+					coh_short.append(_format_short_deme_label(od))
+					coh_coord.append("(%s)" % od.hex_id)
+		var coh_line := _format_relation_category(
+			"🤝 Coexistiendo con %s", "🤝 Coexisting with %s",
+			"🤝 Coexistiendo (%d): %s", "🤝 Coexisting (%d): %s",
+			coh_full, coh_short, coh_coord
+		)
+		if coh_line != "":
+			lines.append(coh_line)
+
+		var neigh_full: Array[String] = []
+		var neigh_short: Array[String] = []
+		var neigh_coord: Array[String] = []
 		var n_ids := HexMath.get_neighbor_ids(c.q, c.r, _world_state.cells)
 		for nid in n_ids:
 			var nc: EvoTypes.HexCell = _world_state.cells[nid]
 			for nd_id in nc.deme_ids:
 				if not mentioned_deme_ids.has(nd_id) and _world_state.demes.has(nd_id):
 					var nd: EvoTypes.Deme = _world_state.demes[nd_id]
-					lines.append(EvoStardewStyle.tr_text(_lang, "🏘️ Aldea vecina: %s" % _format_deme_with_hex(nd), "🏘️ Neighbor village: %s" % _format_deme_with_hex(nd)))
+					var nlbl := _format_deme_with_hex(nd)
+					if not neigh_full.has(nlbl):
+						neigh_full.append(nlbl)
+						neigh_short.append(_format_short_deme_label(nd))
+						neigh_coord.append("(%s)" % nd.hex_id)
+		var neigh_line := _format_relation_category(
+			"🏘️ Aldea vecina: %s", "🏘️ Neighbor village: %s",
+			"🏘️ Aldeas vecinas (%d): %s", "🏘️ Neighbor villages (%d): %s",
+			neigh_full, neigh_short, neigh_coord
+		)
+		if neigh_line != "":
+			lines.append(neigh_line)
 
 	if lines.is_empty():
 		lines.append(EvoStardewStyle.tr_text(_lang, "🏞️ Sin caminos exteriores activos (aldea aislada)", "🏞️ No active outer roads (isolated village)"))
@@ -2058,6 +2175,11 @@ func _rebuild_hex_sheet() -> void:
 		return
 
 	var cell: EvoTypes.HexCell = _world_state.cells[_selected_hex_id]
+	if _selected_deme_id == "" or not _world_state.demes.has(_selected_deme_id):
+		_inspector_header_swatch.color = EvoStardewStyle.get_biome_color(cell.biome)
+		_inspector_header_title.text = "%s (%d, %d)" % [EvoStardewStyle.get_biome_label(cell.biome, _lang), cell.q, cell.r]
+		_inspector_model_badge_lbl.text = EvoStardewStyle.tr_text(_lang, "🌿 Parcela sin aldeas · 📍 (%s)" % _selected_hex_id, "🌿 Uninhabited parcel · 📍 (%s)" % _selected_hex_id)
+		_inspector_header_hl_btn.visible = false
 
 	var bio_row := HBoxContainer.new()
 	bio_row.add_theme_constant_override("separation", 8)
@@ -2171,7 +2293,7 @@ func _on_toggle_inspector_minimize() -> void:
 	_inspector_minimized = not _inspector_minimized
 	_inspector_body_vbox.visible = not _inspector_minimized
 	_inspector_minimize_btn.text = "▸" if _inspector_minimized else "▾"
-	_inspector_frame.offset_bottom = 232 if _inspector_minimized else 626
+	_inspector_frame.offset_bottom = 204 if _inspector_minimized else 865
 	if not _inspector_minimized:
 		_rebuild_active_inspector_sheet()
 

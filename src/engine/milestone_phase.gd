@@ -111,7 +111,7 @@ static func run_milestone_phase(
 				"decision_id": triggered_baldwin_dec
 			})
 
-		if deme.innovation_counter >= 1.0 and EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog) and emergent_cul_count < 3:
+		if deme.innovation_counter >= 1.0 and EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog) and emergent_cul_count == 0 and deme.last_energy_delta >= 0.0:
 			candidates.append({
 				"priority": 2,
 				"trigger_type": "cultural_innovation",
@@ -194,11 +194,7 @@ static func run_milestone_phase(
 			entry.id = "chronicle-%s-%d-%s" % [chronicle_type, state.generation, deme.id]
 			entry.generation = state.generation
 			entry.event_type = chronicle_type
-			entry.title = (
-				"Evolutionary Milestone in %s (G%d): %s" % [deme.name, state.generation, new_trait.name]
-				if is_en
-				else "Hito Evolutivo en %s (G%d): %s" % [deme.name, state.generation, new_trait.name]
-			)
+			entry.title = "%s: %s" % [deme.name, new_trait.name]
 			entry.causal_explanation = new_trait.description
 			entry.hex_id = deme.hex_id
 			entry.deme_id = deme.id

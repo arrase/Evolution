@@ -56,6 +56,8 @@ func _process(delta: float) -> void:
 	if bool(async_res["updated"]):
 		hud.refresh(world_state)
 		world_renderer.refresh_village_decisions()
+		if bool(async_res.get("dom_changed", true)):
+			world_renderer.refresh()
 
 	if not is_playing:
 		return
@@ -184,9 +186,9 @@ func _apply_brush_at_hex(hex_id: String) -> void:
 	if applied:
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 		hud.mark_tool_used()
-		hud.select_hex(hex_id)
 		world_renderer.selected_hex_id = hex_id
-		hud.refresh(world_state)
+		hud.select_hex(hex_id)
+		hud._update_top_bar_state()
 		world_renderer.refresh()
 
 
@@ -196,11 +198,13 @@ func _on_world_hex_clicked(hex_id: String, button_index: int) -> void:
 	var tool_id := hud.get_active_tool()
 	if tool_id == "inspect":
 		world_renderer.selected_hex_id = hex_id
-		hud.select_hex(hex_id)
 		if world_state != null and world_state.cells.has(hex_id):
 			var c: EvoTypes.HexCell = world_state.cells[hex_id]
 			if not c.deme_ids.is_empty():
 				world_renderer.selected_deme_id = c.deme_ids[0]
+			else:
+				world_renderer.selected_deme_id = ""
+		hud.select_hex(hex_id)
 		world_renderer.refresh()
 	elif tool_id in ["set_biome", "adjust_altitude", "adjust_carrying_capacity"]:
 		_apply_brush_at_hex(hex_id)

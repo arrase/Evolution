@@ -39,6 +39,7 @@ const COLOR_PURPLE_CULTURE := Color("#7e22ce")
 
 static var _cached_theme: Theme = null
 static var _icon_cache: Dictionary = {}
+static var _stylebox_cache: Dictionary = {}
 
 
 static func tr_text(lang: String, es_text: String, en_text: String) -> String:
@@ -135,6 +136,9 @@ static func build_theme() -> Theme:
 
 
 static func make_wood_frame_box(padding: int = 8) -> StyleBoxFlat:
+	var key := "wood_frame:%d" % padding
+	if _stylebox_cache.has(key):
+		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
 	box.bg_color = COLOR_WOOD_BG
 	box.border_color = COLOR_GOLD_BEVEL
@@ -147,10 +151,14 @@ static func make_wood_frame_box(padding: int = 8) -> StyleBoxFlat:
 	box.content_margin_right = padding
 	box.content_margin_top = padding
 	box.content_margin_bottom = padding
+	_stylebox_cache[key] = box
 	return box
 
 
 static func make_wood_header_box(padding_h: int = 10, padding_v: int = 6) -> StyleBoxFlat:
+	var key := "wood_header:%d:%d" % [padding_h, padding_v]
+	if _stylebox_cache.has(key):
+		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
 	box.bg_color = COLOR_WOOD_DARK
 	box.border_color = COLOR_GOLD_BEVEL
@@ -160,10 +168,14 @@ static func make_wood_header_box(padding_h: int = 10, padding_v: int = 6) -> Sty
 	box.content_margin_right = padding_h
 	box.content_margin_top = padding_v
 	box.content_margin_bottom = padding_v
+	_stylebox_cache[key] = box
 	return box
 
 
 static func make_hotbar_frame_box(padding_h: int = 10, padding_v: int = 8) -> StyleBoxFlat:
+	var key := "hotbar_frame:%d:%d" % [padding_h, padding_v]
+	if _stylebox_cache.has(key):
+		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
 	box.bg_color = COLOR_WOOD_PLANK
 	box.border_color = COLOR_GOLD_BEVEL
@@ -176,10 +188,14 @@ static func make_hotbar_frame_box(padding_h: int = 10, padding_v: int = 8) -> St
 	box.content_margin_right = padding_h
 	box.content_margin_top = padding_v
 	box.content_margin_bottom = padding_v
+	_stylebox_cache[key] = box
 	return box
 
 
 static func make_hotbar_slot_style(is_active: bool, is_hover: bool = false) -> StyleBoxFlat:
+	var key := "hotbar_slot:%s:%s" % [str(is_active), str(is_hover)]
+	if _stylebox_cache.has(key):
+		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
 	if is_active:
 		box.bg_color = COLOR_SLOT_ACTIVE
@@ -200,6 +216,7 @@ static func make_hotbar_slot_style(is_active: bool, is_hover: bool = false) -> S
 	box.content_margin_right = 3
 	box.content_margin_top = 3
 	box.content_margin_bottom = 3
+	_stylebox_cache[key] = box
 	return box
 
 
@@ -211,6 +228,9 @@ static func apply_hotbar_slot_style(btn: Button, is_active: bool) -> void:
 
 
 static func make_parchment_panel(padding: int = 10, alt: bool = false) -> StyleBoxFlat:
+	var key := "parchment_panel:%d:%s" % [padding, str(alt)]
+	if _stylebox_cache.has(key):
+		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
 	box.bg_color = COLOR_PARCHMENT_ALT if alt else COLOR_PARCHMENT
 	box.border_color = COLOR_PARCHMENT_BORDER
@@ -223,23 +243,34 @@ static func make_parchment_panel(padding: int = 10, alt: bool = false) -> StyleB
 	box.content_margin_right = padding
 	box.content_margin_top = padding
 	box.content_margin_bottom = padding
+	_stylebox_cache[key] = box
 	return box
 
 
 static func make_parchment_card(bg: Color = COLOR_PARCHMENT_ALT, border: Color = COLOR_PARCHMENT_BORDER, padding: int = 8) -> StyleBoxFlat:
+	var key := "parchment_card:%s:%s:%d" % [bg.to_html(), border.to_html(), padding]
+	if _stylebox_cache.has(key):
+		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
 	box.bg_color = bg
 	box.border_color = border
-	box.set_border_width_all(2)
+	box.set_border_width_all(1)
 	box.set_corner_radius_all(4)
+	box.shadow_color = Color(0.18, 0.09, 0.03, 0.10)
+	box.shadow_size = 1
+	box.shadow_offset = Vector2(0, 1)
 	box.content_margin_left = padding
 	box.content_margin_right = padding
 	box.content_margin_top = padding
 	box.content_margin_bottom = padding
+	_stylebox_cache[key] = box
 	return box
 
 
 static func make_button_style(bg: Color, border: Color, border_width: int = 2, padding_h: int = 7, padding_v: int = 4) -> StyleBoxFlat:
+	var key := "button_style:%s:%s:%d:%d:%d" % [bg.to_html(), border.to_html(), border_width, padding_h, padding_v]
+	if _stylebox_cache.has(key):
+		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
 	box.bg_color = bg
 	box.border_color = border
@@ -249,11 +280,17 @@ static func make_button_style(bg: Color, border: Color, border_width: int = 2, p
 	box.content_margin_right = padding_h
 	box.content_margin_top = padding_v
 	box.content_margin_bottom = padding_v
+	_stylebox_cache[key] = box
 	return box
 
 
 static func make_active_button_style(padding_h: int = 7, padding_v: int = 4) -> StyleBoxFlat:
-	return make_button_style(COLOR_BTN_ACTIVE_BG, COLOR_BTN_ACTIVE_BORDER, 2, padding_h, padding_v)
+	var key := "active_button_style:%d:%d" % [padding_h, padding_v]
+	if _stylebox_cache.has(key):
+		return _stylebox_cache[key]
+	var box := make_button_style(COLOR_BTN_ACTIVE_BG, COLOR_BTN_ACTIVE_BORDER, 2, padding_h, padding_v)
+	_stylebox_cache[key] = box
+	return box
 
 
 static func apply_button_active(btn: Button, is_active: bool) -> void:
@@ -269,6 +306,9 @@ static func apply_button_active(btn: Button, is_active: bool) -> void:
 
 
 static func make_badge_style(bg_color: Color, border_color: Color = Color.TRANSPARENT) -> StyleBoxFlat:
+	var key := "badge_style:%s:%s" % [bg_color.to_html(), border_color.to_html()]
+	if _stylebox_cache.has(key):
+		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
 	box.bg_color = bg_color
 	box.border_color = bg_color.darkened(0.28) if border_color == Color.TRANSPARENT else border_color
@@ -278,6 +318,7 @@ static func make_badge_style(bg_color: Color, border_color: Color = Color.TRANSP
 	box.content_margin_right = 6
 	box.content_margin_top = 2
 	box.content_margin_bottom = 2
+	_stylebox_cache[key] = box
 	return box
 
 
@@ -485,33 +526,20 @@ static func get_village_tier_label(population: int, lang: String = "es") -> Stri
 
 
 static func evaluate_thermodynamics(vec: EvoTypes.BiophysicalVector, free_sandbox: bool = false) -> Dictionary:
-	var a_plus: float = maxf(0.0, vec.extraction_efficiency) + maxf(0.0, vec.spatial_mobility) + maxf(0.0, vec.social_cohesion)
-	var c_actual: float = vec.metabolic_cost - minf(0.0, vec.ecological_impact)
-	var c_req: float = 0.5 * (a_plus - 0.60) if a_plus > 0.60 else 0.0
-	var is_balanced: bool = free_sandbox or (a_plus <= 0.60) or (c_actual >= c_req - 0.000001)
-	var balanced_vec := balance_vector(vec) if not is_balanced else vec.duplicate_vec()
+	var metrics := EvoThermodynamics.evaluate_thermodynamics(vec)
+	var is_balanced: bool = free_sandbox or bool(metrics["is_balanced"])
+	var balanced_vec := EvoThermodynamics.validate_and_balance_thermodynamics(vec, free_sandbox)
 	return {
-		"a_plus": snappedf(a_plus, 0.001),
-		"c_actual": snappedf(c_actual, 0.001),
-		"c_req": snappedf(c_req, 0.001),
+		"a_plus": metrics["positive_advantages"],
+		"c_actual": metrics["current_cost"],
+		"c_req": metrics["required_cost"],
 		"is_balanced": is_balanced,
 		"balanced_vector": balanced_vec
 	}
 
 
 static func balance_vector(vec: EvoTypes.BiophysicalVector) -> EvoTypes.BiophysicalVector:
-	var res := vec.duplicate_vec()
-	var a_plus: float = maxf(0.0, res.extraction_efficiency) + maxf(0.0, res.spatial_mobility) + maxf(0.0, res.social_cohesion)
-	var c_actual: float = res.metabolic_cost - minf(0.0, res.ecological_impact)
-	var c_req: float = 0.5 * (a_plus - 0.60) if a_plus > 0.60 else 0.0
-	if a_plus <= 0.60 or c_actual >= c_req - 0.000001:
-		return res
-	var target_metabolic: float = c_req + minf(0.0, res.ecological_impact)
-	res.metabolic_cost = snappedf(minf(1.0, target_metabolic), 0.01)
-	if target_metabolic > 1.0:
-		var excess: float = target_metabolic - 1.0
-		res.ecological_impact = snappedf(maxf(-1.0, minf(0.0, res.ecological_impact) - excess), 0.01)
-	return res
+	return EvoThermodynamics.validate_and_balance_thermodynamics(vec, false)
 
 
 static func get_pixel_icon(icon_key: String) -> ImageTexture:

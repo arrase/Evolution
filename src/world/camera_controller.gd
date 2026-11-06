@@ -8,7 +8,7 @@ const DEFAULT_YAW_DEG: float = 0.0
 const MIN_ZOOM: float = 0.28
 const MAX_ZOOM: float = 3.00
 const DEFAULT_ZOOM: float = 0.82
-const DEFAULT_PAN: Vector2 = Vector2(-128.0, 26.0)
+const DEFAULT_PAN: Vector2 = Vector2(-175.0, 26.0)
 const MAX_PAN_RADIUS: float = 3800.0
 const MAX_COLUMN_HEIGHT_PX: float = 96.0
 

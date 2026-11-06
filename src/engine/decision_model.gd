@@ -996,33 +996,20 @@ static func evaluate_deme(
 
 static func build_contextual_justification(
 	deme: EvoTypes.Deme,
-	cell: EvoTypes.HexCell,
+	_cell: EvoTypes.HexCell,
 	state: EvoTypes.WorldState,
 	dominant_id: String,
 	dominant_prob: float,
 	active_branch: String,
 	lang: String,
-	confidence: float = 0.85
+	_confidence: float = 0.85
 ) -> String:
 	var is_en := lang == "en"
 	var model_tag := deme.decision_model_tag if deme.decision_model_tag != "" else resolve_deme_decision_model_tag(deme.id)
-	var trait_names: Array[String] = []
-	for tid in deme.biological_trait_ids:
-		if state.traits_catalog.has(tid):
-			trait_names.append(EvoI18n.trait_name(lang, state.traits_catalog[tid]))
-	for tid in deme.cultural_trait_ids:
-		if state.traits_catalog.has(tid):
-			trait_names.append(EvoI18n.trait_name(lang, state.traits_catalog[tid]))
-
-	var traits_str := ", ".join(trait_names) if not trait_names.is_empty() else ("None" if is_en else "Ninguno")
 	var dec_name := dominant_id
 	if state.decisions_catalog.has(dominant_id):
 		dec_name = EvoI18n.decision_name(lang, state.decisions_catalog[dominant_id])
-	var biome_str := EvoI18n.biome_name(lang, cell.biome)
-	var cur_res := int(roundf(cell.current_resources))
-	var cap_k := int(roundf(cell.carrying_capacity))
 	var pct_str := "%.1f%%" % (dominant_prob * 100.0)
-	var conf_pct := int(roundf(confidence * 100.0))
 
 	var branch_reason := ""
 	if is_en:
@@ -1043,9 +1030,6 @@ static func build_contextual_justification(
 				branch_reason = "Resource scarcity under inter-lineage competition favors collective rationing and dispersal."
 			_:
 				branch_reason = "Predictable habitat biomass supports low-risk conservative foraging within carrying capacity."
-		return "[%s | Biome: %s | Resources: %d/%d | Key traits: %s] -> Dominant decision: %s (%s, confidence %d%%). %s" % [
-			model_tag, biome_str, cur_res, cap_k, traits_str, dec_name, pct_str, conf_pct, branch_reason
-		]
 	else:
 		match active_branch:
 			"live_system_one":
@@ -1064,9 +1048,7 @@ static func build_contextual_justification(
 				branch_reason = "La escasez de recursos bajo competencia rival favorece la cooperación y la migración."
 			_:
 				branch_reason = "La biomasa predecible del hábitat sostiene el forrajeo conservador dentro de la capacidad de carga."
-		return "[%s | Bioma: %s | Recursos: %d/%d | Rasgos clave: %s] -> Decisión dominante: %s (%s, confianza %d%%). %s" % [
-			model_tag, biome_str, cur_res, cap_k, traits_str, dec_name, pct_str, conf_pct, branch_reason
-		]
+	return "%s (%s): %s" % [dec_name, pct_str, branch_reason]
 
 
 static func evaluate_all_demes(state: EvoTypes.WorldState, lang: String = "es") -> void:
@@ -1218,12 +1200,13 @@ static func apply_completed_live_results(state: EvoTypes.WorldState, lang: Strin
 	var current_rev := _completed_revision
 	if current_rev == last_seen_rev or state == null or not state.use_live_decision_models or _newly_completed_sigs.is_empty():
 		_mutex.unlock()
-		return {"updated": false, "revision": current_rev}
+		return {"updated": false, "dom_changed": false, "revision": current_rev}
 	var newly_completed := _newly_completed_sigs.duplicate(true)
 	_newly_completed_sigs.clear()
 	_mutex.unlock()
 
 	var any_updated := false
+	var any_dom_changed := false
 	for deme_id in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[deme_id]
 		var sig: String = str(deme.get_meta("eval_sig", "")) if deme.has_meta("eval_sig") else compute_deme_evaluation_signature(deme, state)
@@ -1249,10 +1232,12 @@ static func apply_completed_live_results(state: EvoTypes.WorldState, lang: Strin
 					lang,
 					confidence
 				)
+			if dom_changed:
+				any_dom_changed = true
 			if dom_changed or deme.id != "":
 				any_updated = true
 
-	return {"updated": any_updated, "revision": current_rev}
+	return {"updated": any_updated, "dom_changed": any_dom_changed, "revision": current_rev}
 
 
 static func has_pending_jobs() -> bool:
@@ -1322,7 +1307,7 @@ static func synthesize_milestone_trait(
 	else:
 		base_name = "Adaptive Homeostasis" if is_en else "Homeostasis Adaptativa"
 
-	var candidate_name := "%s (%s G%d)" % [base_name, cell.biome, state.generation]
+	var candidate_name := "%s (%s)" % [base_name, biome_label]
 	if candidate_name.length() > 60:
 		candidate_name = candidate_name.substr(0, 60)
 

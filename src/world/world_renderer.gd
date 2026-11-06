@@ -153,6 +153,7 @@ var selected_hex_id: String = "0,0"
 var selected_deme_id: String = ""
 var highlighted_lineage_id: String = ""
 var hovered_hex_id: String = ""
+var hovered_deme_id: String = ""
 var brush_radius: int = 1
 
 # Layer stack. Pan & zoom only change _world_layer's transform, so the cached
@@ -164,6 +165,8 @@ var _anim_layer := Node2D.new() # per-frame: road traffic, beams, Y-sorted props
 var _overlay_layer := Node2D.new() # per-frame, screen-space: signboards & particles
 
 var _anim_time: float = 0.0
+var _fx_accum: float = 0.0
+var _last_vp_size: Vector2 = Vector2.ZERO
 var _dirty: bool = true
 var _built_yaw: float = NAN
 var _built_pitch: float = NAN
@@ -233,6 +236,8 @@ func _process(delta: float) -> void:
 		_reproject()
 
 	var vp_size := get_viewport_rect().size if is_inside_tree() else Vector2(1600.0, 960.0)
+	var vp_changed := vp_size != _last_vp_size
+	_last_vp_size = vp_size
 	_world_layer.position = vp_size * 0.5 + camera.pan_offset
 	_world_layer.scale = Vector2(camera.zoom_level, camera.zoom_level)
 
@@ -243,18 +248,31 @@ func _process(delta: float) -> void:
 
 	if is_inside_tree() and _world_layer.transform != _last_world_transform:
 		_last_world_transform = _world_layer.transform
-		var hit_hex := _pick_hex_at(get_viewport().get_mouse_position())
+		var mouse_pos := get_viewport().get_mouse_position()
+		var hit_hex := _pick_hex_at(mouse_pos)
 		if hit_hex != hovered_hex_id:
 			hovered_hex_id = hit_hex
 			_update_brush()
+		var hit_deme := _pick_deme_at(mouse_pos)
+		var new_hov_deme := str(hit_deme.get("deme_id", ""))
+		if new_hov_deme != hovered_deme_id:
+			hovered_deme_id = new_hov_deme
+			_network_layer.queue_redraw()
+
+	_fx_accum += delta
+	var step_fx := false
+	if _fx_accum >= 0.083:
+		_fx_accum = fposmod(_fx_accum, 0.083)
+		step_fx = true
 
 	_bob_ocean_columns()
-	for hex_id in _animated_fx_ids:
-		if _visible_world_rect.has_point(_hex_centers[hex_id]):
-			_water_fx[hex_id].queue_redraw()
+	if step_fx or vp_changed:
+		for hex_id in _animated_fx_ids:
+			if _visible_world_rect.has_point(_hex_centers[hex_id]):
+				_water_fx[hex_id].queue_redraw()
+		queue_redraw()
 	_anim_layer.queue_redraw()
 	_overlay_layer.queue_redraw()
-	queue_redraw()
 
 
 func set_world_state(p_state: EvoTypes.WorldState) -> void:
@@ -286,6 +304,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if hit_hex != hovered_hex_id:
 			hovered_hex_id = hit_hex
 			_update_brush()
+		var hit_deme := _pick_deme_at(mm.position)
+		var new_hov_deme := str(hit_deme.get("deme_id", ""))
+		if new_hov_deme != hovered_deme_id:
+			hovered_deme_id = new_hov_deme
+			_network_layer.queue_redraw()
 		if _is_left_down and active_tool != "inspect" and hit_hex != "" and hit_hex != _last_dragged_hex_id:
 			_last_dragged_hex_id = hit_hex
 			hex_dragged.emit(hit_hex)
@@ -349,11 +372,17 @@ func _create_columns() -> void:
 
 func _rebuild() -> void:
 	_dirty = false
+	_built_yaw = camera.yaw_deg
+	_built_pitch = camera.pitch_deg
+	_ground = camera.ground_transform()
+	_lift = camera.height_scale()
 	_brush_hexes = _compute_brush_hexes()
 	_rebuild_cell_topology()
 	_villages = _collect_villages()
+	_roads = _collect_roads()
 	_static_props = _collect_static_props()
 	_reproject()
+	queue_redraw()
 
 
 func _reproject() -> void:
@@ -367,7 +396,7 @@ func _reproject() -> void:
 		var sf: float = village["sf"]
 		village["pos"] = v_pos
 		village["hit_rect"] = Rect2(v_pos - Vector2(74, 76) * sf, Vector2(148, 116) * sf)
-	_roads = _collect_roads()
+	_reproject_roads()
 	for prop in _static_props:
 		prop.project(_ground, _lift)
 	_static_props.sort_custom(func(a: Prop, b: Prop) -> bool: return a.y < b.y)
@@ -545,13 +574,13 @@ func _draw() -> void:
 
 	var wave_col := Color(0.42, 0.78, 0.96, 0.18)
 	var foam_col := Color(0.85, 0.96, 1.0, 0.22)
-	var rows := int(vp_size.y / 68.0) + 1
-	var cols := int(vp_size.x / 116.0) + 1
+	var rows := int(vp_size.y / 96.0) + 1
+	var cols := int(vp_size.x / 180.0) + 1
 	for ry in range(rows):
 		for cx in range(cols):
 			var phase := _anim_time * 1.9 + float(ry) * 0.75 + float(cx) * 0.55
-			var wx := float(cx * 116) + sin(phase) * 9.0 + float((ry % 2) * 52)
-			var wy := float(ry * 68) + cos(phase * 0.8) * 3.0
+			var wx := float(cx * 180) + sin(phase) * 9.0 + float((ry % 2) * 82)
+			var wy := float(ry * 96) + cos(phase * 0.8) * 3.0
 			draw_rect(Rect2(wx, wy, 16.0, 2.0), wave_col, true)
 			draw_rect(Rect2(wx + 4.0, wy - 2.0, 8.0, 2.0), foam_col, true)
 
@@ -578,12 +607,13 @@ func _draw_hex_column(column: Node2D, hex_id: String) -> void:
 
 	if not is_ocean:
 		_draw_hex_borders(column, cell, pal, tint_col, top_pts)
-		# Ecological degradation dashed border (amber for degraded, crimson for collapsed)
-		var k_ratio: float = cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max)
-		if k_ratio < 0.60:
-			_draw_dashed_hex_border(column, top_pts, Color("#ef4444"), 2.6)
-		elif k_ratio < 0.85:
-			_draw_dashed_hex_border(column, top_pts, Color("#f59e0b"), 2.0)
+		if active_lens == "health":
+			# Ecological degradation dashed border (amber for degraded, crimson for collapsed)
+			var k_ratio: float = cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max)
+			if k_ratio < 0.60:
+				_draw_dashed_hex_border(column, top_pts, Color("#ef4444"), 2.6)
+			elif k_ratio < 0.85:
+				_draw_dashed_hex_border(column, top_pts, Color("#f59e0b"), 2.0)
 
 	# Selection / Brush highlights
 	var border_pts := top_pts.duplicate()
@@ -778,11 +808,13 @@ func _collect_roads() -> Array[Dictionary]:
 			continue
 
 		var endpoints := _resolve_road_endpoints(cell_a, cell_b, flow.from_deme_id, flow.to_deme_id)
+		var trim_a := _get_cell_plaza_trim(cell_a)
+		var trim_b := _get_cell_plaza_trim(cell_b)
 		var trimmed := _trim_road_segment(
 			endpoints["p_a"] as Vector2,
 			endpoints["p_b"] as Vector2,
-			_get_cell_plaza_trim(cell_a),
-			_get_cell_plaza_trim(cell_b)
+			trim_a,
+			trim_b
 		)
 		var p_a: Vector2 = trimmed["p_a"]
 		var p_b: Vector2 = trimmed["p_b"]
@@ -807,6 +839,14 @@ func _collect_roads() -> Array[Dictionary]:
 					"kind": "dispute",
 					"hex_a": cell_a.id,
 					"hex_b": cell_b.id,
+					"world_a": endpoints["world_a"],
+					"z_a": endpoints["z_a"],
+					"trim_a": trim_a,
+					"world_b": endpoints["world_b"],
+					"z_b": endpoints["z_b"],
+					"trim_b": trim_b,
+					"badge_world": HexMath.axial_to_world(cell_a.q, cell_a.r),
+					"badge_z": _get_cell_top_z(cell_a),
 					"p_a": p_a,
 					"p_b": p_b,
 					"is_same_hex": is_same_hex,
@@ -822,6 +862,12 @@ func _collect_roads() -> Array[Dictionary]:
 					"kind": kind,
 					"hex_a": cell_a.id,
 					"hex_b": cell_b.id,
+					"world_a": endpoints["world_a"],
+					"z_a": endpoints["z_a"],
+					"trim_a": trim_a,
+					"world_b": endpoints["world_b"],
+					"z_b": endpoints["z_b"],
+					"trim_b": trim_b,
 					"p_a": p_a,
 					"p_b": p_b,
 					"is_same_hex": is_same_hex,
@@ -835,6 +881,12 @@ func _collect_roads() -> Array[Dictionary]:
 					"kind": "expedition",
 					"hex_a": cell_a.id,
 					"hex_b": cell_b.id,
+					"world_a": endpoints["world_a"],
+					"z_a": endpoints["z_a"],
+					"trim_a": trim_a,
+					"world_b": endpoints["world_b"],
+					"z_b": endpoints["z_b"],
+					"trim_b": trim_b,
 					"p_a": p_a,
 					"p_b": p_b,
 					"curve_factor": curve_f
@@ -863,6 +915,8 @@ func _collect_roads() -> Array[Dictionary]:
 		var ca: EvoTypes.HexCell = world_state.cells[hex_id]
 		if ca.deme_ids.size() < 2:
 			continue
+		var z_ca := _get_cell_top_z(ca)
+		var world_ca := HexMath.axial_to_world(ca.q, ca.r)
 		for i in range(ca.deme_ids.size()):
 			var id_a: String = ca.deme_ids[i]
 			if not world_state.demes.has(id_a):
@@ -879,7 +933,9 @@ func _collect_roads() -> Array[Dictionary]:
 				handled_deme_pairs[d_key] = true
 
 				var trim_r := _get_cell_plaza_trim(ca)
-				var trimmed := _trim_road_segment(_get_deme_local_pos(ca, da.id), _get_deme_local_pos(ca, db.id), trim_r, trim_r)
+				var world_a := _get_deme_world_pos(ca, da.id)
+				var world_b := _get_deme_world_pos(ca, db.id)
+				var trimmed := _trim_road_segment(_project(world_a, z_ca), _project(world_b, z_ca), trim_r, trim_r)
 				var p_a: Vector2 = trimmed["p_a"]
 				var p_b: Vector2 = trimmed["p_b"]
 				var is_prio := (ca.id == selected_hex_id or ca.id == hovered_hex_id)
@@ -893,6 +949,14 @@ func _collect_roads() -> Array[Dictionary]:
 							show_badge = _register_road_badge(b_pos, badge_positions, is_prio)
 						roads.append({
 							"kind": "dispute",
+							"world_a": world_a,
+							"z_a": z_ca,
+							"trim_a": trim_r,
+							"world_b": world_b,
+							"z_b": z_ca,
+							"trim_b": trim_r,
+							"badge_world": world_ca,
+							"badge_z": z_ca,
 							"p_a": p_a,
 							"p_b": p_b,
 							"is_same_hex": true,
@@ -907,6 +971,12 @@ func _collect_roads() -> Array[Dictionary]:
 							"kind": "collab",
 							"hex_a": ca.id,
 							"hex_b": ca.id,
+							"world_a": world_a,
+							"z_a": z_ca,
+							"trim_a": trim_r,
+							"world_b": world_b,
+							"z_b": z_ca,
+							"trim_b": trim_r,
 							"p_a": p_a,
 							"p_b": p_b,
 							"is_same_hex": true,
@@ -922,6 +992,12 @@ func _collect_roads() -> Array[Dictionary]:
 							var show_badge := _register_road_badge(b_pos, badge_positions, is_prio)
 							roads.append({
 								"kind": "broken",
+								"world_a": world_a,
+								"z_a": z_ca,
+								"trim_a": trim_r,
+								"world_b": world_b,
+								"z_b": z_ca,
+								"trim_b": trim_r,
 								"p_a": p_a,
 								"p_b": p_b,
 								"show_badge": show_badge,
@@ -948,11 +1024,17 @@ func _collect_roads() -> Array[Dictionary]:
 			var da: EvoTypes.Deme = pair["da"]
 			var db: EvoTypes.Deme = pair["db"]
 			handled_deme_pairs[_make_pair_key(da.id, db.id)] = true
+			var world_a := _get_deme_world_pos(ca, da.id)
+			var z_a := _get_cell_top_z(ca)
+			var trim_a := _get_cell_plaza_trim(ca)
+			var world_b := _get_deme_world_pos(cb, db.id)
+			var z_b := _get_cell_top_z(cb)
+			var trim_b := _get_cell_plaza_trim(cb)
 			var trimmed := _trim_road_segment(
-				_get_deme_local_pos(ca, da.id),
-				_get_deme_local_pos(cb, db.id),
-				_get_cell_plaza_trim(ca),
-				_get_cell_plaza_trim(cb)
+				_project(world_a, z_a),
+				_project(world_b, z_b),
+				trim_a,
+				trim_b
 			)
 			var p_a: Vector2 = trimmed["p_a"]
 			var p_b: Vector2 = trimmed["p_b"]
@@ -964,6 +1046,12 @@ func _collect_roads() -> Array[Dictionary]:
 					var show_badge := _register_road_badge(b_pos, badge_positions, is_prio)
 					roads.append({
 						"kind": "dispute",
+						"world_a": world_a,
+						"z_a": z_a,
+						"trim_a": trim_a,
+						"world_b": world_b,
+						"z_b": z_b,
+						"trim_b": trim_b,
 						"p_a": p_a,
 						"p_b": p_b,
 						"is_same_hex": false,
@@ -979,6 +1067,12 @@ func _collect_roads() -> Array[Dictionary]:
 						"kind": kind,
 						"hex_a": ca.id,
 						"hex_b": cb.id,
+						"world_a": world_a,
+						"z_a": z_a,
+						"trim_a": trim_a,
+						"world_b": world_b,
+						"z_b": z_b,
+						"trim_b": trim_b,
 						"p_a": p_a,
 						"p_b": p_b,
 						"is_same_hex": false,
@@ -994,6 +1088,12 @@ func _collect_roads() -> Array[Dictionary]:
 						var show_badge := _register_road_badge(b_pos, badge_positions, is_prio)
 						roads.append({
 							"kind": "broken",
+							"world_a": world_a,
+							"z_a": z_a,
+							"trim_a": trim_a,
+							"world_b": world_b,
+							"z_b": z_b,
+							"trim_b": trim_b,
 							"p_a": p_a,
 							"p_b": p_b,
 							"show_badge": show_badge,
@@ -1010,19 +1110,54 @@ func _collect_roads() -> Array[Dictionary]:
 				handled_deme_pairs[d_key] = true
 				var ca: EvoTypes.HexCell = world_state.cells[da.hex_id]
 				var cb: EvoTypes.HexCell = world_state.cells[db.hex_id]
-				var p_mid := _cell_top_center(world_state.cells["0,0"])
-				var seg1 := _trim_road_segment(_get_deme_local_pos(ca, da.id), p_mid, _get_cell_plaza_trim(ca), 18.0)
-				var seg2 := _trim_road_segment(p_mid, _get_deme_local_pos(cb, db.id), 18.0, _get_cell_plaza_trim(cb))
+				var c_mid: EvoTypes.HexCell = world_state.cells["0,0"]
+				var w_a := _get_deme_world_pos(ca, da.id)
+				var z_a := _get_cell_top_z(ca)
+				var trim_a := _get_cell_plaza_trim(ca)
+				var w_mid := HexMath.axial_to_world(c_mid.q, c_mid.r)
+				var z_mid := _get_cell_top_z(c_mid)
+				var w_b := _get_deme_world_pos(cb, db.id)
+				var z_b := _get_cell_top_z(cb)
+				var trim_b := _get_cell_plaza_trim(cb)
+				var p_mid := _project(w_mid, z_mid)
+				var seg1 := _trim_road_segment(_project(w_a, z_a), p_mid, trim_a, 18.0)
+				var seg2 := _trim_road_segment(p_mid, _project(w_b, z_b), 18.0, trim_b)
 				var alpha_val := 0.90 if world_state.generation <= 1 else 0.55
-				roads.append({"kind": "broken", "p_a": seg1["p_a"], "p_b": seg1["p_b"], "show_badge": true, "alpha": alpha_val})
-				roads.append({"kind": "broken", "p_a": seg2["p_a"], "p_b": seg2["p_b"], "show_badge": true, "alpha": alpha_val})
+				roads.append({
+					"kind": "broken",
+					"world_a": w_a,
+					"z_a": z_a,
+					"trim_a": trim_a,
+					"world_b": w_mid,
+					"z_b": z_mid,
+					"trim_b": 18.0,
+					"p_a": seg1["p_a"],
+					"p_b": seg1["p_b"],
+					"show_badge": true,
+					"alpha": alpha_val
+				})
+				roads.append({
+					"kind": "broken",
+					"world_a": w_mid,
+					"z_a": z_mid,
+					"trim_a": 18.0,
+					"world_b": w_b,
+					"z_b": z_b,
+					"trim_b": trim_b,
+					"p_a": seg2["p_a"],
+					"p_b": seg2["p_b"],
+					"show_badge": true,
+					"alpha": alpha_val
+				})
 
 	# 4. Pioneer / Coastal Shallows Exploration Causeways for single isolated villages with shallow land bridges
 	for da in all_demes:
 		if connected_deme_ids.has(da.id):
 			continue
 		var ca: EvoTypes.HexCell = world_state.cells[da.hex_id]
-		var p_a_raw := _get_deme_local_pos(ca, da.id)
+		var w_a := _get_deme_world_pos(ca, da.id)
+		var z_a := _get_cell_top_z(ca)
+		var p_a_raw := _project(w_a, z_a)
 		var trim_a := _get_cell_plaza_trim(ca)
 		for n_id in HexMath.get_neighbor_ids(ca.q, ca.r, world_state.cells):
 			var ncell: EvoTypes.HexCell = world_state.cells[n_id]
@@ -1030,8 +1165,21 @@ func _collect_roads() -> Array[Dictionary]:
 				var h_key := _make_pair_key(ca.id, ncell.id)
 				if not handled_hex_pairs.has(h_key):
 					handled_hex_pairs[h_key] = true
-					var seg := _trim_road_segment(p_a_raw, _cell_top_center(ncell), trim_a, 18.0)
-					roads.append({"kind": "expedition", "p_a": seg["p_a"], "p_b": seg["p_b"], "curve_factor": 0.14})
+					var w_b := HexMath.axial_to_world(ncell.q, ncell.r)
+					var z_b := _get_cell_top_z(ncell)
+					var seg := _trim_road_segment(p_a_raw, _project(w_b, z_b), trim_a, 18.0)
+					roads.append({
+						"kind": "expedition",
+						"world_a": w_a,
+						"z_a": z_a,
+						"trim_a": trim_a,
+						"world_b": w_b,
+						"z_b": z_b,
+						"trim_b": 18.0,
+						"p_a": seg["p_a"],
+						"p_b": seg["p_b"],
+						"curve_factor": 0.14
+					})
 
 	# 5. Recent disused connections from previous turns (visual remnant up to age <= 2 on adjacent/same hexes)
 	for disused in world_state.disused_connections:
@@ -1061,11 +1209,13 @@ func _collect_roads() -> Array[Dictionary]:
 			handled_deme_pairs[d_key] = true
 
 		var endpoints := _resolve_road_endpoints(ca, cb, fa, fb)
+		var trim_a := _get_cell_plaza_trim(ca)
+		var trim_b := _get_cell_plaza_trim(cb)
 		var seg := _trim_road_segment(
 			endpoints["p_a"] as Vector2,
 			endpoints["p_b"] as Vector2,
-			_get_cell_plaza_trim(ca),
-			_get_cell_plaza_trim(cb)
+			trim_a,
+			trim_b
 		)
 		var p_a: Vector2 = seg["p_a"]
 		var p_b: Vector2 = seg["p_b"]
@@ -1073,6 +1223,12 @@ func _collect_roads() -> Array[Dictionary]:
 		var show_badge := _register_road_badge((p_a + p_b) * 0.5, badge_positions, is_prio)
 		roads.append({
 			"kind": "broken",
+			"world_a": endpoints["world_a"],
+			"z_a": endpoints["z_a"],
+			"trim_a": trim_a,
+			"world_b": endpoints["world_b"],
+			"z_b": endpoints["z_b"],
+			"trim_b": trim_b,
 			"p_a": p_a,
 			"p_b": p_b,
 			"show_badge": show_badge,
@@ -1115,8 +1271,37 @@ func _prune_redundant_triangle_chords(roads: Array[Dictionary]) -> Array[Diction
 						continue
 		if r.has("color"):
 			r["villager_textures"] = _get_villager_textures_for_color(r["color"])
+		_project_road_entry(r)
 		result.append(r)
 	return result
+
+
+func _project_road_entry(road: Dictionary) -> void:
+	var raw_a := _project(road["world_a"] as Vector2, float(road["z_a"]))
+	var raw_b := _project(road["world_b"] as Vector2, float(road["z_b"]))
+	var trimmed := _trim_road_segment(raw_a, raw_b, float(road["trim_a"]), float(road["trim_b"]))
+	var p_a: Vector2 = trimmed["p_a"]
+	var p_b: Vector2 = trimmed["p_b"]
+	road["p_a"] = p_a
+	road["p_b"] = p_b
+	road["a_pos"] = p_a
+	road["b_pos"] = p_b
+	var curve_f := float(road.get("curve_factor", 0.045))
+	var curve_sign := -1.0 if road.get("kind", "") == "expedition" else 1.0
+	var diff := p_b - p_a
+	var dist := diff.length()
+	var perp := Vector2(-diff.y, diff.x).normalized() if dist > 0.01 else Vector2.UP
+	road["ctrl"] = (p_a + p_b) * 0.5 + perp * (minf(dist * curve_f, 12.0) * curve_sign)
+	if road.get("kind", "") == "dispute":
+		if bool(road.get("is_same_hex", false)) and road.has("badge_world"):
+			road["badge_pos"] = _project(road["badge_world"] as Vector2, float(road["badge_z"]))
+		else:
+			road["badge_pos"] = (p_a + p_b) * 0.5
+
+
+func _reproject_roads() -> void:
+	for road in _roads:
+		_project_road_entry(road)
 
 
 func _draw_network() -> void:
@@ -1291,27 +1476,43 @@ func _find_closest_deme_pair(cell_a: EvoTypes.HexCell, cell_b: EvoTypes.HexCell)
 
 
 func _resolve_road_endpoints(cell_a: EvoTypes.HexCell, cell_b: EvoTypes.HexCell, from_deme_id: String, to_deme_id: String) -> Dictionary:
+	var world_a: Vector2
+	var world_b: Vector2
 	if cell_a.id != cell_b.id and not cell_a.deme_ids.is_empty() and not cell_b.deme_ids.is_empty():
 		var closest := _find_closest_deme_pair(cell_a, cell_b)
 		if not closest.is_empty():
-			return {
-				"p_a": _get_deme_local_pos(cell_a, (closest["da"] as EvoTypes.Deme).id),
-				"p_b": _get_deme_local_pos(cell_b, (closest["db"] as EvoTypes.Deme).id)
-			}
+			world_a = _get_deme_world_pos(cell_a, (closest["da"] as EvoTypes.Deme).id)
+			world_b = _get_deme_world_pos(cell_b, (closest["db"] as EvoTypes.Deme).id)
+		else:
+			world_a = _get_flow_endpoint_world(cell_a, from_deme_id, 0)
+			world_b = _get_flow_endpoint_world(cell_b, to_deme_id, 1)
+	else:
+		world_a = _get_flow_endpoint_world(cell_a, from_deme_id, 0)
+		world_b = _get_flow_endpoint_world(cell_b, to_deme_id, 1)
+	var z_a := _get_cell_top_z(cell_a)
+	var z_b := _get_cell_top_z(cell_b)
 	return {
-		"p_a": _get_flow_endpoint(cell_a, from_deme_id, 0),
-		"p_b": _get_flow_endpoint(cell_b, to_deme_id, 1)
+		"world_a": world_a,
+		"z_a": z_a,
+		"world_b": world_b,
+		"z_b": z_b,
+		"p_a": _project(world_a, z_a),
+		"p_b": _project(world_b, z_b)
 	}
 
 
-func _get_flow_endpoint(cell: EvoTypes.HexCell, deme_id: String, fallback_idx: int) -> Vector2:
+func _get_flow_endpoint_world(cell: EvoTypes.HexCell, deme_id: String, fallback_idx: int) -> Vector2:
 	var w_xy := HexMath.axial_to_world(cell.q, cell.r)
 	var idx := cell.deme_ids.find(deme_id)
 	if idx == -1 and cell.deme_ids.size() > 0:
 		idx = fallback_idx % cell.deme_ids.size()
 	if idx >= 0:
 		w_xy += HexMath.compute_village_sector_offset(idx, cell.deme_ids.size(), HexMath.HEX_SIZE)
-	return _project(w_xy, _get_cell_top_z(cell))
+	return w_xy
+
+
+func _get_flow_endpoint(cell: EvoTypes.HexCell, deme_id: String, fallback_idx: int) -> Vector2:
+	return _project(_get_flow_endpoint_world(cell, deme_id, fallback_idx), _get_cell_top_z(cell))
 
 
 func _sample_road_curve(p_a: Vector2, p_b: Vector2, t: float, curve_sign: float, curve_factor: float = 0.045) -> Vector2:
@@ -1533,32 +1734,19 @@ func _collect_villages() -> Array[Dictionary]:
 			var is_dimmed: bool = highlighted_lineage_id != "" and deme.lineage_id != highlighted_lineage_id
 			var tier := deme.get_village_tier()
 
-			var bb_offset := Vector2(0.0, -76.0 if tier >= 3 else -66.0)
-			if count == 2:
-				bb_offset = Vector2(-34.0 if idx == 0 else 34.0, -70.0)
-			elif count >= 3:
-				if idx == 0:
-					bb_offset = Vector2(0.0, -78.0)
-				elif idx == 1:
-					bb_offset = Vector2(54.0, -66.0)
-				else:
-					bb_offset = Vector2(-54.0, -66.0)
-
-			var label_text := "%s · %d" % [deme.get_village_roman(), deme.population]
-			if not deme.cultural_trait_ids.is_empty():
-				label_text += " ★%d" % deme.cultural_trait_ids.size()
-			var is_tev := deme.decision_model_tag.to_lower().begins_with("tev")
-			var model_short := "tev1" if is_tev else "d3"
-			var model_w := font.get_string_size(model_short, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x + 8.0
-			var text_w := font.get_string_size(label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-			var pill_w := text_w + model_w + 26.0
+			var bb_offset := Vector2(0.0, 32.0)
+			var sub_text := "%d" % deme.population
+			var sub_size := font.get_string_size(sub_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
+			var box_size := Vector2(maxf(38.0, sub_size.x + 20.0), 16.0)
+			var v_pos := _project(v_world, top_z)
 
 			villages.append({
 				"deme": deme,
+				"deme_id": deme.id,
 				"hex_id": hex_id,
 				"world_xy": v_world,
 				"top_z": top_z,
-				"pos": Vector2.ZERO,
+				"pos": v_pos,
 				"sf": scale_factor,
 				"modulate": Color(1, 1, 1, 0.42) if is_dimmed else Color.WHITE,
 				"is_dimmed": is_dimmed,
@@ -1568,12 +1756,12 @@ func _collect_villages() -> Array[Dictionary]:
 				"villager_count": clampi(2 + tier + int(deme.population / 110), 3, 7),
 				"villager_textures": _get_villager_textures_for_color(Color(deme.color)),
 				"bb_offset": bb_offset * scale_factor,
-				"label_text": label_text,
-				"is_tev": is_tev,
-				"model_short": model_short,
-				"model_w": model_w,
-				"pill_w": pill_w,
-				"hit_rect": Rect2()
+				"sub_text": sub_text,
+				"label_text": sub_text,
+				"sub_size": sub_size,
+				"box_size": box_size,
+				"pill_w": box_size.x,
+				"hit_rect": Rect2(v_pos - Vector2(74, 76) * scale_factor, Vector2(148, 116) * scale_factor)
 			})
 	return villages
 
@@ -1645,6 +1833,9 @@ func _draw_village_plaza(village: Dictionary) -> void:
 	if deme.id == selected_deme_id:
 		var sel_r := plinth_r + 11.0 * sf
 		_draw_ellipse_outline(ci, plaza_center, sel_r, sel_r * 0.58, C_SELECTION, 4.2)
+	elif deme.id == hovered_deme_id:
+		var hov_r := plinth_r + 9.5 * sf
+		_draw_ellipse_outline(ci, plaza_center, hov_r, hov_r * 0.58, Color(1.0, 0.92, 0.68, 0.88), 2.8)
 
 
 func _compute_cell_flora_key(cell: EvoTypes.HexCell, top_z: float) -> Array:
@@ -2042,45 +2233,22 @@ func _draw_overlay() -> void:
 	var to_screen := _world_layer.transform
 	var vp_size := get_viewport_rect().size if is_inside_tree() else Vector2(1600.0, 960.0)
 	var screen_cull_rect := Rect2(Vector2(-240.0, -200.0), vp_size + Vector2(480.0, 400.0))
-	var offset_scale := clampf(sqrt(camera.zoom_level), 0.72, 1.30)
 
 	_deme_hit_rects.clear()
-	var visible_villages: Array[Dictionary] = []
-	var bb_positions: Array[Vector2] = []
-
 	for village in _villages:
-		var screen_pos: Vector2 = to_screen * (village["pos"] as Vector2)
+		var v_pos: Vector2 = village["pos"]
+		var screen_pos: Vector2 = to_screen * v_pos
 		if not screen_cull_rect.has_point(screen_pos):
 			continue
+		var deme_id := str(village.get("deme_id", (village["deme"] as EvoTypes.Deme).id))
+		var hex_id := str(village.get("hex_id", ""))
 		_deme_hit_rects.append({
 			"rect": to_screen * (village["hit_rect"] as Rect2),
-			"deme_id": (village["deme"] as EvoTypes.Deme).id,
-			"hex_id": village["hex_id"]
+			"deme_id": deme_id,
+			"hex_id": hex_id
 		})
-		visible_villages.append(village)
-		bb_positions.append(screen_pos + (village["bb_offset"] as Vector2) * offset_scale)
-
-	# Smooth 2D screen-space separation pass so village signboards never overlap or snap during zoom
-	for _pass in range(5):
-		for i in range(bb_positions.size()):
-			for j in range(i + 1, bb_positions.size()):
-				var diff := bb_positions[j] - bb_positions[i]
-				var ax := absf(diff.x)
-				var ay := absf(diff.y)
-				if ax < 164.0 and ay < 36.0:
-					var v_weight := clampf((36.0 - ay) / 18.0, 0.0, 1.0)
-					var h_weight := clampf((164.0 - ax) / 48.0, 0.0, 1.0)
-					var push_x := (164.0 - ax) * 0.35 * v_weight
-					var sign_x := 1.0 if diff.x >= 0.0 else -1.0
-					bb_positions[i].x -= sign_x * push_x
-					bb_positions[j].x += sign_x * push_x
-					var push_y := (36.0 - ay) * 0.28 * h_weight
-					var sign_y := 1.0 if diff.y >= 0.0 else -1.0
-					bb_positions[i].y -= sign_y * push_y
-					bb_positions[j].y += sign_y * push_y
-
-	for i in range(visible_villages.size()):
-		_draw_village_billboard(visible_villages[i], bb_positions[i])
+		var crest_pos: Vector2 = to_screen * (v_pos + Vector2(0.0, 30.0 * float(village["sf"])))
+		_draw_village_billboard(village, crest_pos)
 	_draw_seasonal_particles()
 
 
@@ -2090,70 +2258,42 @@ func _draw_village_billboard(village: Dictionary, pos: Vector2) -> void:
 	var is_dimmed: bool = village["is_dimmed"]
 
 	var font := ThemeDB.fallback_font
-	var font_size := 11
-	var label_text: String = village["label_text"]
-	var is_tev: bool = village["is_tev"]
-	var model_short: String = village["model_short"]
-	var model_w: float = village["model_w"]
-	var pill_w: float = village["pill_w"]
-	var pill_h := 22.0
-	var rect := Rect2(pos.x - pill_w * 0.5, pos.y - pill_h, pill_w, pill_h)
+	var sub_text: String = village["sub_text"]
+	var box_size: Vector2 = village["box_size"]
+	var rect := Rect2(pos.x - box_size.x * 0.5, pos.y - box_size.y * 0.5, box_size.x, box_size.y)
 
 	var alpha := 0.48 if is_dimmed else 0.96
-	var outer_wood := Color("#4a2810")
-	outer_wood.a = alpha
-	var inner_parchment := Color("#f5e4c3")
-	inner_parchment.a = alpha
 	var is_selected := deme.id == selected_deme_id
-	var border_col := C_SELECTION if is_selected else Color("#8c5230")
+	var is_hovered := deme.id == hovered_deme_id
+
+	# Stationary dark-wood & brass Plaza Crest anchored at front rim of cobblestone plaza
+	if is_selected:
+		ci.draw_rect(rect.grow(2.0), Color(1.0, 0.88, 0.28, 0.38 * alpha), false, 2.0)
+		var pip_top := Vector2(pos.x, rect.position.y - 3.5)
+		ci.draw_colored_polygon(
+			PackedVector2Array([pip_top, pip_top + Vector2(-3.5, 3.5), pip_top + Vector2(3.5, 3.5)]),
+			C_SELECTION
+		)
+
+	ci.draw_rect(Rect2(rect.position + Vector2(0, 1.5), rect.size), Color(0, 0, 0, 0.34 * alpha), true)
+	ci.draw_rect(rect, Color(0.14, 0.08, 0.04, 0.90 * alpha), true)
+
+	var border_col := C_SELECTION if is_selected else (Color(1.0, 0.92, 0.68, alpha) if is_hovered else Color("#78472a"))
 	border_col.a = alpha
+	var border_w := 2.0 if is_selected else (1.6 if is_hovered else 1.2)
+	ci.draw_rect(rect, border_col, false, border_w)
 
-	# 1. Carved Stardew Wooden Signboard with drop shadow & brass corner nails
-	ci.draw_rect(Rect2(rect.position + Vector2(1, 3), rect.size), Color(0, 0, 0, 0.38 * alpha), true)
-	ci.draw_rect(rect.grow(1.5), outer_wood, true)
-	ci.draw_rect(rect, inner_parchment, true)
-	ci.draw_rect(rect, border_col, false, 2.2 if is_selected else 1.5)
-
-	for corner in [
-		rect.position + Vector2(2.5, 2.5),
-		Vector2(rect.end.x - 2.5, rect.position.y + 2.5),
-		Vector2(rect.position.x + 2.5, rect.end.y - 2.5),
-		rect.end - Vector2(2.5, 2.5)
-	]:
-		ci.draw_circle(corner, 1.3, Color(0.85, 0.65, 0.20, alpha))
-
-	# 2. Heraldic Lineage Shield Icon
-	var shield_c := Vector2(rect.position.x + 10.0, rect.position.y + pill_h * 0.5)
-	ci.draw_circle(shield_c, 5.6, Color(0.14, 0.08, 0.04, alpha))
+	var shield_c := Vector2(rect.position.x + 8.5, pos.y)
+	ci.draw_circle(shield_c, 4.6, Color(0.08, 0.04, 0.02, alpha))
 	var lin_col := Color(deme.color)
 	lin_col.a = alpha
-	ci.draw_circle(shield_c, 4.4, lin_col)
-	ci.draw_circle(shield_c + Vector2(-1.2, -1.2), 1.4, lin_col.lightened(0.32))
+	ci.draw_circle(shield_c, 3.8, lin_col)
+	ci.draw_circle(shield_c + Vector2(-1.0, -1.0), 1.1, lin_col.lightened(0.32))
 
-	# 3. Crisp Village Tier & Population Text
-	var text_pos := Vector2(rect.position.x + 18.0, rect.position.y + 15.0)
-	ci.draw_string(font, text_pos, label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.20, 0.11, 0.05, alpha))
-
-	# 4. Decision Model Tag Badge (`d3` sky-blue or `tev1` golden-amber)
-	var badge_rect := Rect2(rect.end.x - model_w - 4.0, rect.position.y + 4.0, model_w, 14.0)
-	var badge_bg := Color("#d97706") if is_tev else Color("#0284c7")
-	var badge_fg := Color("#fef9c3") if is_tev else Color("#e0f2fe")
-	badge_bg.a = alpha
-	badge_fg.a = alpha
-	ci.draw_rect(badge_rect, badge_bg, true)
-	ci.draw_rect(badge_rect, Color(0.15, 0.08, 0.04, alpha), false, 1.0)
-	ci.draw_string(font, Vector2(badge_rect.position.x + 4.0, badge_rect.position.y + 10.5), model_short, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, badge_fg)
-
-	# 5. Pixel-Art Comic Thought Bubble (`thought_bubble`) with Dominant Activity Icon
-	var village_pos: Vector2 = village["pos"]
-	var bob := sin(_anim_time * 3.2 + village_pos.x * 0.05) * 1.8
-	var bubble_rect := Rect2(rect.end.x + 3.0, rect.position.y - 5.0 + bob, 26.0, 26.0)
-	ci.draw_texture_rect(PixelArtGen.get_texture("thought_bubble"), bubble_rect, false, Color(1, 1, 1, alpha))
-
-	var icon_rect := Rect2(bubble_rect.position.x + 6.0, bubble_rect.position.y + 3.0, 14.0, 14.0)
-	ci.draw_texture_rect(PixelArtGen.get_texture("icon_" + str(village["archetype"])), icon_rect, false, Color(1, 1, 1, alpha))
-
-	_deme_hit_rects.append({"rect": rect.merge(bubble_rect), "deme_id": deme.id, "hex_id": village["hex_id"]})
+	var text_col := Color("#fde047") if is_selected else Color("#fef3c7")
+	text_col.a = alpha
+	ci.draw_string(font, Vector2(rect.position.x + 15.5, pos.y + 3.5), sub_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, text_col)
+	_deme_hit_rects.append({"rect": rect, "deme_id": deme.id, "hex_id": village["hex_id"]})
 
 
 func _init_particles() -> void:
@@ -2228,8 +2368,11 @@ func _pick_deme_at(screen_pos: Vector2) -> Dictionary:
 
 func _pick_hex_at(screen_pos: Vector2) -> String:
 	var local_pos := _world_layer.transform.affine_inverse() * screen_pos
+	var max_r_sq := HexMath.HEX_SIZE * HexMath.HEX_SIZE * 1.35
 	for i in range(_sorted_hex_ids.size() - 1, -1, -1):
 		var hex_id := _sorted_hex_ids[i]
+		if local_pos.distance_squared_to(_hex_centers.get(hex_id, local_pos)) > max_r_sq:
+			continue
 		if Geometry2D.is_point_in_polygon(local_pos, _hex_polys[hex_id]):
 			return hex_id
 	return ""

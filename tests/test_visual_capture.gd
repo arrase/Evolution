@@ -1,6 +1,6 @@
 extends SceneTree
 
-const OUTPUT_DIR: String = "/home/arrase/.gemini/antigravity/brain/b10bf90b-f7e5-40b8-b0a0-80c0877c867d"
+const OUTPUT_DIR: String = "/home/arrase/.gemini/antigravity/brain/02e5364c-b951-423c-9a31-f3f7df6cc2ee"
 
 
 func _init() -> void:
@@ -110,10 +110,10 @@ func _run_captures() -> void:
 	await _wait_and_save(main, "screenshot_lab_modal.png")
 	main.hud.lab_modal.close_modal()
 
-	# 7. screenshot_late_simulation.png (18 generations in Rift Savanna to verify clean road lifecycle and 2x villages/inhabitants)
+	# 7. screenshot_late_simulation.png (56 generations in Rift Savanna to verify clean road lifecycle and late-game UI polish)
 	main.load_preset("preset-rift-savanna")
 	main.world_state.use_live_decision_models = false
-	for _g in range(18):
+	for _g in range(56):
 		main.step_generation()
 	main.world_state.use_live_decision_models = true
 	main.hud._milestone_banner.visible = false
