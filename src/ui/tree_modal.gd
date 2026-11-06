@@ -127,8 +127,8 @@ class TreeCanvas extends Control:
 	func _draw() -> void:
 		var font := ThemeDB.fallback_font
 		if world_state == null or node_rects.is_empty():
-			var msg := EvoStardewStyle.tr_text(lang, "Sin linajes registrados.", "No lineages recorded.")
-			draw_string(font, Vector2(40, 60), msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, EvoStardewStyle.COLOR_SEPIA)
+			var msg := EvoUiStyle.tr_text(lang, "Sin linajes registrados.", "No lineages recorded.")
+			draw_string(font, Vector2(40, 60), msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, EvoUiStyle.COLOR_SEPIA)
 			return
 
 		# Draw connections first
@@ -152,7 +152,7 @@ class TreeCanvas extends Control:
 			var is_sel: bool = (str(l_id) == selected_id)
 			var lin_color := Color.from_string(node.color, Color("#E07A5F"))
 			var bg := Color("#fef3c7") if is_sel else Color("#fbf2de")
-			var border := EvoStardewStyle.COLOR_GOLD_BRIGHT if is_sel else EvoStardewStyle.COLOR_WOOD_BG
+			var border := EvoUiStyle.COLOR_GOLD_BRIGHT if is_sel else EvoUiStyle.COLOR_WOOD_BG
 
 			# Shadow & card body
 			draw_rect(Rect2(rect.position + Vector2(2, 3), rect.size), Color(0.15, 0.08, 0.02, 0.20), true)
@@ -162,41 +162,41 @@ class TreeCanvas extends Control:
 
 			# Lineage emblem circle
 			var emblem_center := rect.position + Vector2(24.0, 22.0)
-			draw_circle(emblem_center, 9.0, EvoStardewStyle.COLOR_WOOD_DARK)
+			draw_circle(emblem_center, 9.0, EvoUiStyle.COLOR_WOOD_DARK)
 			draw_circle(emblem_center, 7.0, lin_color)
 
 			# Title + Founded Gen
 			var title_str := node.name
 			if title_str.length() > 22:
 				title_str = title_str.substr(0, 20) + "…"
-			draw_string(font, rect.position + Vector2(40.0, 22.0), title_str, HORIZONTAL_ALIGNMENT_LEFT, NODE_W - 88.0, 13, EvoStardewStyle.COLOR_INK)
+			draw_string(font, rect.position + Vector2(40.0, 22.0), title_str, HORIZONTAL_ALIGNMENT_LEFT, NODE_W - 88.0, 13, EvoUiStyle.COLOR_INK)
 
 			var gen_str := "G%d" % node.founded_generation
-			draw_string(font, rect.position + Vector2(NODE_W - 44.0, 22.0), gen_str, HORIZONTAL_ALIGNMENT_RIGHT, 38.0, 12, EvoStardewStyle.COLOR_SEPIA)
+			draw_string(font, rect.position + Vector2(NODE_W - 44.0, 22.0), gen_str, HORIZONTAL_ALIGNMENT_RIGHT, 38.0, 12, EvoUiStyle.COLOR_SEPIA)
 
 			# Divergence reason
-			var reason_str := EvoStardewStyle.get_divergence_reason_label(node.divergence_reason, lang)
-			draw_string(font, rect.position + Vector2(16.0, 44.0), reason_str, HORIZONTAL_ALIGNMENT_LEFT, NODE_W - 24.0, 12, EvoStardewStyle.COLOR_SEPIA)
+			var reason_str := EvoUiStyle.get_divergence_reason_label(node.divergence_reason, lang)
+			draw_string(font, rect.position + Vector2(16.0, 44.0), reason_str, HORIZONTAL_ALIGNMENT_LEFT, NODE_W - 24.0, 12, EvoUiStyle.COLOR_SEPIA)
 
 			# Living vs extinct status
 			var alive_cnt: int = int(living_counts.get(l_id, 0))
 			var status_str := ""
-			var status_col := EvoStardewStyle.COLOR_GREEN_OK
+			var status_col := EvoUiStyle.COLOR_GREEN_OK
 			if alive_cnt > 0:
-				status_str = EvoStardewStyle.tr_text(lang, "● %d aldeas vivas" % alive_cnt, "● %d living villages" % alive_cnt)
+				status_str = EvoUiStyle.tr_text(lang, "● %d aldeas vivas" % alive_cnt, "● %d living villages" % alive_cnt)
 			else:
 				var ext_g := node.extinct_generation if node.extinct_generation >= 0 else world_state.generation
-				status_str = EvoStardewStyle.tr_text(lang, "✕ Extinto en G%d" % ext_g, "✕ Extinct at G%d" % ext_g)
-				status_col = EvoStardewStyle.COLOR_RED_DANGER
+				status_str = EvoUiStyle.tr_text(lang, "✕ Extinto en G%d" % ext_g, "✕ Extinct at G%d" % ext_g)
+				status_col = EvoUiStyle.COLOR_RED_DANGER
 			draw_string(font, rect.position + Vector2(16.0, 66.0), status_str, HORIZONTAL_ALIGNMENT_LEFT, NODE_W - 24.0, 12, status_col)
 
 			# Founder hex & traits count
-			var footer_str := EvoStardewStyle.tr_text(
+			var footer_str := EvoUiStyle.tr_text(
 				lang,
 				"Hex (%s) · %d rasgos" % [node.founder_hex_id, node.acquired_trait_ids.size()],
 				"Hex (%s) · %d traits" % [node.founder_hex_id, node.acquired_trait_ids.size()]
 			)
-			draw_string(font, rect.position + Vector2(16.0, 88.0), footer_str, HORIZONTAL_ALIGNMENT_LEFT, NODE_W - 24.0, 11, EvoStardewStyle.COLOR_MUTED)
+			draw_string(font, rect.position + Vector2(16.0, 88.0), footer_str, HORIZONTAL_ALIGNMENT_LEFT, NODE_W - 24.0, 11, EvoUiStyle.COLOR_MUTED)
 
 	func _draw_branch_curve(start: Vector2, finish: Vector2) -> void:
 		var pts := PackedVector2Array()
@@ -208,16 +208,16 @@ class TreeCanvas extends Control:
 			var omt := 1.0 - t
 			var p := (omt * omt * omt) * start + (3.0 * omt * omt * t) * c1 + (3.0 * omt * t * t) * c2 + (t * t * t) * finish
 			pts.append(p)
-		draw_polyline(pts, EvoStardewStyle.COLOR_WOOD_BG, 2.5, true)
-		draw_circle(start, 3.5, EvoStardewStyle.COLOR_GOLD_BEVEL)
-		draw_circle(finish, 3.5, EvoStardewStyle.COLOR_WOOD_BG)
+		draw_polyline(pts, EvoUiStyle.COLOR_WOOD_BG, 2.5, true)
+		draw_circle(start, 3.5, EvoUiStyle.COLOR_GOLD_BEVEL)
+		draw_circle(finish, 3.5, EvoUiStyle.COLOR_WOOD_BG)
 
 
 func _ready() -> void:
 	if _title_label != null:
 		return
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	theme = EvoStardewStyle.get_theme()
+	theme = EvoUiStyle.get_theme()
 	_build_ui()
 
 
@@ -241,7 +241,7 @@ func _build_ui() -> void:
 
 	var frame := PanelContainer.new()
 	frame.custom_minimum_size = Vector2(980, 640)
-	frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(14))
+	frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(14))
 	center.add_child(frame)
 
 	var main_vbox := VBoxContainer.new()
@@ -250,7 +250,7 @@ func _build_ui() -> void:
 
 	# Header
 	var header_panel := PanelContainer.new()
-	header_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_header_box(12, 8))
+	header_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_header_box(12, 8))
 	main_vbox.add_child(header_panel)
 
 	var header_hbox := HBoxContainer.new()
@@ -258,7 +258,7 @@ func _build_ui() -> void:
 	header_panel.add_child(header_hbox)
 
 	_title_label = Label.new()
-	_title_label.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT)
+	_title_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
 	_title_label.add_theme_font_size_override("font_size", 18)
 	_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_hbox.add_child(_title_label)
@@ -276,7 +276,7 @@ func _build_ui() -> void:
 	var canvas_panel := PanelContainer.new()
 	canvas_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	canvas_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	canvas_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(8, false))
+	canvas_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(8, false))
 	body_hbox.add_child(canvas_panel)
 
 	_scroll = ScrollContainer.new()
@@ -291,7 +291,7 @@ func _build_ui() -> void:
 	var side_panel := PanelContainer.new()
 	side_panel.custom_minimum_size = Vector2(310, 0)
 	side_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	side_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(12, true))
+	side_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(12, true))
 	body_hbox.add_child(side_panel)
 
 	var side_vbox := VBoxContainer.new()
@@ -355,14 +355,14 @@ func close_modal() -> void:
 func _update_labels() -> void:
 	if _title_label == null:
 		return
-	_title_label.text = EvoStardewStyle.tr_text(
+	_title_label.text = EvoUiStyle.tr_text(
 		_lang,
 		"🌳 Árbol Filo-Cultural de Linajes",
 		"🌳 Phylo-Cultural Lineage Tree"
 	)
-	_close_btn.text = EvoStardewStyle.tr_text(_lang, "✕ Cerrar", "✕ Close")
-	_highlight_btn.text = EvoStardewStyle.tr_text(_lang, "✨ Resaltar Linaje en el Mapa", "✨ Highlight Lineage on Map")
-	_clear_highlight_btn.text = EvoStardewStyle.tr_text(_lang, "🧹 Quitar Resaltado", "🧹 Clear Highlight")
+	_close_btn.text = EvoUiStyle.tr_text(_lang, "✕ Cerrar", "✕ Close")
+	_highlight_btn.text = EvoUiStyle.tr_text(_lang, "✨ Resaltar Linaje en el Mapa", "✨ Highlight Lineage on Map")
+	_clear_highlight_btn.text = EvoUiStyle.tr_text(_lang, "🧹 Quitar Resaltado", "🧹 Clear Highlight")
 
 
 func _refresh_view() -> void:
@@ -379,13 +379,13 @@ func _rebuild_detail_panel() -> void:
 	if _world_state == null or not _world_state.lineage_tree.has(_selected_lineage_id):
 		_highlight_btn.disabled = true
 		var empty_lbl := Label.new()
-		empty_lbl.text = EvoStardewStyle.tr_text(
+		empty_lbl.text = EvoUiStyle.tr_text(
 			_lang,
 			"Selecciona un nodo del árbol para inspeccionar su historia evolutiva.",
 			"Select a node in the tree to inspect its evolutionary history."
 		)
 		empty_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		empty_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+		empty_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 		_detail_vbox.add_child(empty_lbl)
 		return
 
@@ -407,7 +407,7 @@ func _rebuild_detail_panel() -> void:
 	name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	name_lbl.add_theme_font_size_override("font_size", 16)
-	name_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
+	name_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 	header_hbox.add_child(name_lbl)
 
 	var living_demes: Array[EvoTypes.Deme] = []
@@ -417,34 +417,34 @@ func _rebuild_detail_panel() -> void:
 			living_demes.append(d)
 
 	_add_kv_row(
-		EvoStardewStyle.tr_text(_lang, "Fundación:", "Founded:"),
+		EvoUiStyle.tr_text(_lang, "Fundación:", "Founded:"),
 		"G%d · Hex (%s)" % [node.founded_generation, node.founder_hex_id]
 	)
 	_add_kv_row(
-		EvoStardewStyle.tr_text(_lang, "Divergencia:", "Divergence:"),
-		EvoStardewStyle.get_divergence_reason_label(node.divergence_reason, _lang)
+		EvoUiStyle.tr_text(_lang, "Divergencia:", "Divergence:"),
+		EvoUiStyle.get_divergence_reason_label(node.divergence_reason, _lang)
 	)
 	if node.parent_id != "" and _world_state.lineage_tree.has(node.parent_id):
 		var p_node: EvoTypes.LineageNode = _world_state.lineage_tree[node.parent_id]
-		_add_kv_row(EvoStardewStyle.tr_text(_lang, "Ancestro:", "Parent:"), p_node.name)
+		_add_kv_row(EvoUiStyle.tr_text(_lang, "Ancestro:", "Parent:"), p_node.name)
 
 	var status_text := ""
 	if living_demes.size() > 0:
-		status_text = EvoStardewStyle.tr_text(_lang, "%d aldeas vivas" % living_demes.size(), "%d living villages" % living_demes.size())
+		status_text = EvoUiStyle.tr_text(_lang, "%d aldeas vivas" % living_demes.size(), "%d living villages" % living_demes.size())
 	else:
 		var ext_g := node.extinct_generation if node.extinct_generation >= 0 else _world_state.generation
-		status_text = EvoStardewStyle.tr_text(_lang, "Extinto en G%d" % ext_g, "Extinct at G%d" % ext_g)
-	_add_kv_row(EvoStardewStyle.tr_text(_lang, "Estado:", "Status:"), status_text)
+		status_text = EvoUiStyle.tr_text(_lang, "Extinto en G%d" % ext_g, "Extinct at G%d" % ext_g)
+	_add_kv_row(EvoUiStyle.tr_text(_lang, "Estado:", "Status:"), status_text)
 
 	# Acquired traits list
 	var traits_title := Label.new()
-	traits_title.text = EvoStardewStyle.tr_text(
+	traits_title.text = EvoUiStyle.tr_text(
 		_lang,
 		"Rasgos Fundacionales / Adquiridos (%d):" % node.acquired_trait_ids.size(),
 		"Acquired Traits (%d):" % node.acquired_trait_ids.size()
 	)
 	traits_title.add_theme_font_size_override("font_size", 13)
-	traits_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	traits_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	_detail_vbox.add_child(traits_title)
 
 	for t_id in node.acquired_trait_ids:
@@ -456,15 +456,15 @@ func _rebuild_detail_panel() -> void:
 		tl.text = t_name
 		tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		tl.add_theme_font_size_override("font_size", 12)
-		tl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+		tl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 		_detail_vbox.add_child(tl)
 
 	# Living demes list
 	if not living_demes.is_empty():
 		var villages_title := Label.new()
-		villages_title.text = EvoStardewStyle.tr_text(_lang, "Aldeas Activas:", "Active Villages:")
+		villages_title.text = EvoUiStyle.tr_text(_lang, "Aldeas Activas:", "Active Villages:")
 		villages_title.add_theme_font_size_override("font_size", 13)
-		villages_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+		villages_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 		_detail_vbox.add_child(villages_title)
 
 		for d in living_demes:
@@ -472,7 +472,7 @@ func _rebuild_detail_panel() -> void:
 			dl.text = "• %s [%s · %d hab · 🧠 %s · (%s)]" % [d.name, d.get_village_roman(), d.population, d.decision_model_tag, d.hex_id]
 			dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			dl.add_theme_font_size_override("font_size", 12)
-			dl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GREEN_OK)
+			dl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
 			_detail_vbox.add_child(dl)
 
 
@@ -483,7 +483,7 @@ func _add_kv_row(key_str: String, val_str: String) -> void:
 
 	var k_lbl := Label.new()
 	k_lbl.text = key_str
-	k_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+	k_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	k_lbl.add_theme_font_size_override("font_size", 12)
 	hbox.add_child(k_lbl)
 
@@ -491,7 +491,7 @@ func _add_kv_row(key_str: String, val_str: String) -> void:
 	v_lbl.text = val_str
 	v_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	v_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
+	v_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 	v_lbl.add_theme_font_size_override("font_size", 12)
 	hbox.add_child(v_lbl)
 

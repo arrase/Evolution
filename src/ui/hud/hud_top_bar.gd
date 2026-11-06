@@ -92,9 +92,9 @@ class SeasonTidePortrait extends Control:
 		draw_rect(Rect2(0, water_y, r.size.x, 2.0), foam_col, true)
 
 		# Inner wooden frame border + brass corner rivets
-		draw_rect(r, EvoStardewStyle.COLOR_WOOD_DARK, false, 2.0)
+		draw_rect(r, EvoUiStyle.COLOR_WOOD_DARK, false, 2.0)
 		for corner in [Vector2(3, 3), Vector2(r.size.x - 5, 3), Vector2(3, r.size.y - 5), Vector2(r.size.x - 5, r.size.y - 5)]:
-			draw_rect(Rect2(corner, Vector2(2, 2)), EvoStardewStyle.COLOR_GOLD_BRIGHT, true)
+			draw_rect(Rect2(corner, Vector2(2, 2)), EvoUiStyle.COLOR_GOLD_BRIGHT, true)
 
 
 static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
@@ -107,7 +107,7 @@ static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 	sign_frame.offset_right = 376
 	sign_frame.offset_top = 10
 	sign_frame.offset_bottom = 122
-	sign_frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(7))
+	sign_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
 	hud.add_child(sign_frame)
 
 	var sign_vbox := VBoxContainer.new()
@@ -158,7 +158,7 @@ static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 
 	# Row 3: Compact Lens Pills + Map Legend Toggle
 	hud._lens_strip_panel = PanelContainer.new()
-	hud._lens_strip_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(EvoStardewStyle.COLOR_PARCHMENT, EvoStardewStyle.COLOR_GOLD_BEVEL, 4))
+	hud._lens_strip_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_PARCHMENT, EvoUiStyle.COLOR_GOLD_BEVEL, 4))
 	sign_vbox.add_child(hud._lens_strip_panel)
 
 	var lens_hbox := HBoxContainer.new()
@@ -179,7 +179,7 @@ static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 	lens_hbox.add_child(hud._legend_toggle_btn)
 
 
-static func build_top_right_stardew_clock(hud: Control) -> void:
+static func build_top_right_clock(hud: Control) -> void:
 	var clock_frame := PanelContainer.new()
 	clock_frame.anchor_left = 1.0
 	clock_frame.anchor_right = 1.0
@@ -189,7 +189,7 @@ static func build_top_right_stardew_clock(hud: Control) -> void:
 	clock_frame.offset_right = -10
 	clock_frame.offset_top = 10
 	clock_frame.offset_bottom = 126
-	clock_frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(7))
+	clock_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
 	hud.add_child(clock_frame)
 
 	var clock_hbox := HBoxContainer.new()
@@ -199,7 +199,7 @@ static func build_top_right_stardew_clock(hud: Control) -> void:
 	# Left: Illustrated Season & Tide Window
 	var portrait_card := PanelContainer.new()
 	portrait_card.custom_minimum_size = Vector2(80, 0)
-	portrait_card.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(EvoStardewStyle.COLOR_WOOD_DARK, EvoStardewStyle.COLOR_GOLD_BEVEL, 3))
+	portrait_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_WOOD_DARK, EvoUiStyle.COLOR_GOLD_BEVEL, 3))
 	clock_hbox.add_child(portrait_card)
 
 	var portrait_vbox := VBoxContainer.new()
@@ -220,13 +220,13 @@ static func build_top_right_stardew_clock(hud: Control) -> void:
 	hud._sea_level_label = Label.new()
 	hud._sea_level_label.text = "🌊 12%"
 	hud._sea_level_label.add_theme_font_size_override("font_size", 11)
-	hud._sea_level_label.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT)
+	hud._sea_level_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
 	tide_row.add_child(hud._sea_level_label)
 
 	# Right: Generation Dial, Time Controls & Mana Bar
 	var dial_panel := PanelContainer.new()
 	dial_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	dial_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(6, false))
+	dial_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(6, false))
 	clock_hbox.add_child(dial_panel)
 
 	var dial_vbox := VBoxContainer.new()
@@ -241,7 +241,7 @@ static func build_top_right_stardew_clock(hud: Control) -> void:
 	hud._gen_label = Label.new()
 	hud._gen_label.text = "📅 Gen 0"
 	hud._gen_label.add_theme_font_size_override("font_size", 13)
-	hud._gen_label.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	hud._gen_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	gen_row.add_child(hud._gen_label)
 
 	hud._season_label = Label.new()
@@ -250,7 +250,7 @@ static func build_top_right_stardew_clock(hud: Control) -> void:
 	hud._season_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hud._season_label.clip_text = true
 	hud._season_label.add_theme_font_size_override("font_size", 11)
-	hud._season_label.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+	hud._season_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	gen_row.add_child(hud._season_label)
 
 	# Row 2: Tactile Wood/Gold Time Controls + Settings Gear
@@ -273,15 +273,15 @@ static func build_top_right_stardew_clock(hud: Control) -> void:
 	time_row.add_child(hud._speed_btn)
 
 	hud._settings_btn = Button.new()
-	hud._settings_btn.icon = EvoStardewStyle.get_pixel_icon("settings_gear")
+	hud._settings_btn.icon = EvoUiStyle.get_pixel_icon("settings_gear")
 	hud._settings_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud._settings_btn.custom_minimum_size = Vector2(30, 0)
 	hud._settings_btn.pressed.connect(hud._on_settings_btn_pressed)
 	time_row.add_child(hud._settings_btn)
 
-	# Row 3: Selective Pressure / Mana Bar (Stardew Energy Bar)
+	# Row 3: Selective Pressure / Mana Bar
 	var mana_box := PanelContainer.new()
-	mana_box.add_theme_stylebox_override("panel", EvoStardewStyle.make_badge_style(EvoStardewStyle.COLOR_WOOD_DARK, EvoStardewStyle.COLOR_GOLD_BEVEL))
+	mana_box.add_theme_stylebox_override("panel", EvoUiStyle.make_badge_style(EvoUiStyle.COLOR_WOOD_DARK, EvoUiStyle.COLOR_GOLD_BEVEL))
 	dial_vbox.add_child(mana_box)
 
 	var mana_vbox := VBoxContainer.new()
@@ -291,7 +291,7 @@ static func build_top_right_stardew_clock(hud: Control) -> void:
 	hud._pressure_label = Label.new()
 	hud._pressure_label.text = "⚡ 30 pts · +15/gen"
 	hud._pressure_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hud._pressure_label.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT)
+	hud._pressure_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
 	hud._pressure_label.add_theme_font_size_override("font_size", 11)
 	mana_vbox.add_child(hud._pressure_label)
 
@@ -301,7 +301,7 @@ static func build_top_right_stardew_clock(hud: Control) -> void:
 	hud._pressure_bar.value = 30.0
 	hud._pressure_bar.show_percentage = false
 	hud._pressure_bar.custom_minimum_size = Vector2(0, 6)
-	EvoStardewStyle.style_progress_bar(hud._pressure_bar, Color("#22c55e"))
+	EvoUiStyle.style_progress_bar(hud._pressure_bar, Color("#22c55e"))
 	mana_vbox.add_child(hud._pressure_bar)
 
 
@@ -317,11 +317,11 @@ static func build_settings_popup(hud: Control) -> void:
 	hud._settings_popup.offset_top = 10
 	hud._settings_popup.offset_bottom = 450
 	hud._settings_popup.z_index = 30
-	hud._settings_popup.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(8))
+	hud._settings_popup.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(8))
 	hud.add_child(hud._settings_popup)
 
 	var inner := PanelContainer.new()
-	inner.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(8, false))
+	inner.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(8, false))
 	hud._settings_popup.add_child(inner)
 
 	var vbox := VBoxContainer.new()
@@ -330,7 +330,7 @@ static func build_settings_popup(hud: Control) -> void:
 
 	# System 1 Ollama Models Diagnostic & Selection Card
 	var diag_card := PanelContainer.new()
-	diag_card.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(Color("#fbf2de"), EvoStardewStyle.COLOR_GOLD_BEVEL, 6))
+	diag_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_GOLD_BEVEL, 6))
 	vbox.add_child(diag_card)
 
 	var diag_vbox := VBoxContainer.new()
@@ -340,7 +340,7 @@ static func build_settings_popup(hud: Control) -> void:
 	hud._models_diag_lbl = Label.new()
 	hud._models_diag_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hud._models_diag_lbl.add_theme_font_size_override("font_size", 11)
-	hud._models_diag_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	hud._models_diag_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	diag_vbox.add_child(hud._models_diag_lbl)
 
 	# Primary Decision Model Row
@@ -351,7 +351,7 @@ static func build_settings_popup(hud: Control) -> void:
 	hud._primary_model_lbl = Label.new()
 	hud._primary_model_lbl.custom_minimum_size = Vector2(140, 0)
 	hud._primary_model_lbl.add_theme_font_size_override("font_size", 11)
-	hud._primary_model_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	hud._primary_model_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	p_row.add_child(hud._primary_model_lbl)
 
 	hud._primary_model_opt = OptionButton.new()
@@ -370,7 +370,7 @@ static func build_settings_popup(hud: Control) -> void:
 	hud._secondary_model_lbl = Label.new()
 	hud._secondary_model_lbl.custom_minimum_size = Vector2(140, 0)
 	hud._secondary_model_lbl.add_theme_font_size_override("font_size", 11)
-	hud._secondary_model_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	hud._secondary_model_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	s_row.add_child(hud._secondary_model_lbl)
 
 	hud._secondary_model_opt = OptionButton.new()
@@ -389,7 +389,7 @@ static func build_settings_popup(hud: Control) -> void:
 	hud._context_window_lbl = Label.new()
 	hud._context_window_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hud._context_window_lbl.add_theme_font_size_override("font_size", 11)
-	hud._context_window_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	hud._context_window_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	ctx_row.add_child(hud._context_window_lbl)
 
 	hud._context_window_input = LineEdit.new()
@@ -441,7 +441,7 @@ static func build_settings_popup(hud: Control) -> void:
 	vbox.add_child(hud._free_sandbox_check)
 
 	hud._cam_lbl = Label.new()
-	hud._cam_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	hud._cam_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	vbox.add_child(hud._cam_lbl)
 
 	var cam_flow := HFlowContainer.new()
@@ -499,98 +499,98 @@ static func update_static_labels(hud: Control) -> void:
 		hud._preset_option.select(prev_sel)
 
 	hud._export_btn.text = "💾"
-	hud._export_btn.tooltip_text = EvoStardewStyle.tr_text(hud._lang, "Exportar Mundo (JSON)", "Export World (JSON)")
+	hud._export_btn.tooltip_text = EvoUiStyle.tr_text(hud._lang, "Exportar Mundo (JSON)", "Export World (JSON)")
 	hud._import_btn.text = "📂"
-	hud._import_btn.tooltip_text = EvoStardewStyle.tr_text(hud._lang, "Importar Mundo (JSON)", "Import World (JSON)")
+	hud._import_btn.tooltip_text = EvoUiStyle.tr_text(hud._lang, "Importar Mundo (JSON)", "Import World (JSON)")
 
 	if hud._is_playing:
-		hud._play_btn.text = EvoStardewStyle.tr_text(hud._lang, "⏸ Pausa", "⏸ Pause")
+		hud._play_btn.text = EvoUiStyle.tr_text(hud._lang, "⏸ Pausa", "⏸ Pause")
 	else:
-		hud._play_btn.text = EvoStardewStyle.tr_text(hud._lang, "▶ Play", "▶ Play")
-	EvoStardewStyle.apply_button_active(hud._play_btn, hud._is_playing)
+		hud._play_btn.text = EvoUiStyle.tr_text(hud._lang, "▶ Play", "▶ Play")
+	EvoUiStyle.apply_button_active(hud._play_btn, hud._is_playing)
 
-	hud._step_btn.text = EvoStardewStyle.tr_text(hud._lang, "⏭ +1", "⏭ +1")
+	hud._step_btn.text = EvoUiStyle.tr_text(hud._lang, "⏭ +1", "⏭ +1")
 	hud._speed_btn.text = "2x" if hud._is_fast else "1x"
-	EvoStardewStyle.apply_button_active(hud._speed_btn, hud._is_fast)
+	EvoUiStyle.apply_button_active(hud._speed_btn, hud._is_fast)
 
-	hud._notebook_btn.text = EvoStardewStyle.tr_text(hud._lang, "📖 Diario", "📖 Journal")
-	hud._tree_btn.text = EvoStardewStyle.tr_text(hud._lang, "🌳 Linajes", "🌳 Lineages")
-	hud._lab_btn.text = EvoStardewStyle.tr_text(hud._lang, "⚗️ Forja", "⚗️ Forge")
+	hud._notebook_btn.text = EvoUiStyle.tr_text(hud._lang, "📖 Diario", "📖 Journal")
+	hud._tree_btn.text = EvoUiStyle.tr_text(hud._lang, "🌳 Linajes", "🌳 Lineages")
+	hud._lab_btn.text = EvoUiStyle.tr_text(hud._lang, "⚗️ Forja", "⚗️ Forge")
 	if hud._lens_cycle_btn != null:
-		hud._lens_cycle_btn.text = EvoStardewStyle.tr_text(hud._lang, "👁️ Lente", "👁️ Lens")
+		hud._lens_cycle_btn.text = EvoUiStyle.tr_text(hud._lang, "👁️ Lente", "👁️ Lens")
 
-	EvoStardewStyle.apply_button_active(hud._lang_es_btn, hud._lang == "es")
-	EvoStardewStyle.apply_button_active(hud._lang_en_btn, hud._lang == "en")
+	EvoUiStyle.apply_button_active(hud._lang_es_btn, hud._lang == "es")
+	EvoUiStyle.apply_button_active(hud._lang_en_btn, hud._lang == "en")
 
-	hud._primary_model_lbl.text = EvoStardewStyle.tr_text(hud._lang, "Primario (Táctico):", "Primary (Tactical):")
-	hud._secondary_model_lbl.text = EvoStardewStyle.tr_text(hud._lang, "Secundario (Ecológico):", "Secondary (Ecological):")
-	hud._refresh_models_btn.text = EvoStardewStyle.tr_text(hud._lang, "🔄 Actualizar modelos de decisión", "🔄 Refresh decision models")
-	hud._refresh_models_btn.tooltip_text = EvoStardewStyle.tr_text(
+	hud._primary_model_lbl.text = EvoUiStyle.tr_text(hud._lang, "Primario (Táctico):", "Primary (Tactical):")
+	hud._secondary_model_lbl.text = EvoUiStyle.tr_text(hud._lang, "Secundario (Ecológico):", "Secondary (Ecological):")
+	hud._refresh_models_btn.text = EvoUiStyle.tr_text(hud._lang, "🔄 Actualizar modelos de decisión", "🔄 Refresh decision models")
+	hud._refresh_models_btn.tooltip_text = EvoUiStyle.tr_text(
 		hud._lang,
 		"Volver a consultar en Ollama los modelos de decisión descargados en la máquina",
 		"Re-query Ollama for downloaded decision models on this machine"
 	)
-	hud._context_window_lbl.text = EvoStardewStyle.tr_text(hud._lang, "Ventana de contexto (num_ctx):", "Context window (num_ctx):")
+	hud._context_window_lbl.text = EvoUiStyle.tr_text(hud._lang, "Ventana de contexto (num_ctx):", "Context window (num_ctx):")
 	if not hud._context_window_input.has_focus():
 		hud._context_window_input.text = str(EvoUserSettings.context_length)
 	refresh_decision_model_selectors(hud)
-	hud._auto_pause_check.text = EvoStardewStyle.tr_text(hud._lang, "Auto-pausa en hitos", "Auto-pause on milestones")
-	hud._unlimited_pressure_check.text = EvoStardewStyle.tr_text(hud._lang, "Energía Ilimitada", "Unlimited Energy")
-	hud._free_sandbox_check.text = EvoStardewStyle.tr_text(hud._lang, "Sandbox Libre", "Free Sandbox")
-	hud._cam_lbl.text = EvoStardewStyle.tr_text(hud._lang, "🎥 Ángulo y Rotación de Cámara:", "🎥 Camera Angle & Orbit:")
+	hud._auto_pause_check.text = EvoUiStyle.tr_text(hud._lang, "Auto-pausa en hitos", "Auto-pause on milestones")
+	hud._unlimited_pressure_check.text = EvoUiStyle.tr_text(hud._lang, "Energía Ilimitada", "Unlimited Energy")
+	hud._free_sandbox_check.text = EvoUiStyle.tr_text(hud._lang, "Sandbox Libre", "Free Sandbox")
+	hud._cam_lbl.text = EvoUiStyle.tr_text(hud._lang, "🎥 Ángulo y Rotación de Cámara:", "🎥 Camera Angle & Orbit:")
 
 	hud._radius_1_btn.text = "◯ 1x"
-	hud._radius_1_btn.tooltip_text = EvoStardewStyle.tr_text(hud._lang, "Pincel de 1 hexágono", "1-hex brush")
+	hud._radius_1_btn.tooltip_text = EvoUiStyle.tr_text(hud._lang, "Pincel de 1 hexágono", "1-hex brush")
 	hud._radius_2_btn.text = "◎ 7x"
-	hud._radius_2_btn.tooltip_text = EvoStardewStyle.tr_text(hud._lang, "Pincel de 7 hexágonos", "7-hex brush")
-	EvoStardewStyle.apply_button_active(hud._radius_1_btn, hud._brush_radius == 1)
-	EvoStardewStyle.apply_button_active(hud._radius_2_btn, hud._brush_radius == 2)
+	hud._radius_2_btn.tooltip_text = EvoUiStyle.tr_text(hud._lang, "Pincel de 7 hexágonos", "7-hex brush")
+	EvoUiStyle.apply_button_active(hud._radius_1_btn, hud._brush_radius == 1)
+	EvoUiStyle.apply_button_active(hud._radius_2_btn, hud._brush_radius == 2)
 
-	(hud._lens_buttons["biome"] as Button).text = EvoStardewStyle.tr_text(hud._lang, "🌿 Bioma", "🌿 Biome")
-	(hud._lens_buttons["food"] as Button).text = EvoStardewStyle.tr_text(hud._lang, "🌾 Alimento", "🌾 Food")
-	(hud._lens_buttons["health"] as Button).text = EvoStardewStyle.tr_text(hud._lang, "💚 Salud", "💚 Health")
+	(hud._lens_buttons["biome"] as Button).text = EvoUiStyle.tr_text(hud._lang, "🌿 Bioma", "🌿 Biome")
+	(hud._lens_buttons["food"] as Button).text = EvoUiStyle.tr_text(hud._lang, "🌾 Alimento", "🌾 Food")
+	(hud._lens_buttons["health"] as Button).text = EvoUiStyle.tr_text(hud._lang, "💚 Salud", "💚 Health")
 	for l_id in hud._lens_buttons.keys():
-		EvoStardewStyle.apply_button_active(hud._lens_buttons[l_id] as Button, hud._active_lens == l_id)
+		EvoUiStyle.apply_button_active(hud._lens_buttons[l_id] as Button, hud._active_lens == l_id)
 
-	hud._legend_toggle_btn.text = EvoStardewStyle.tr_text(hud._lang, "🗺️ Leyenda", "🗺️ Legend")
-	EvoStardewStyle.apply_button_active(hud._legend_toggle_btn, hud._legend_panel.visible)
+	hud._legend_toggle_btn.text = EvoUiStyle.tr_text(hud._lang, "🗺️ Leyenda", "🗺️ Legend")
+	EvoUiStyle.apply_button_active(hud._legend_toggle_btn, hud._legend_panel.visible)
 
-	hud._tab_deme_btn.text = EvoStardewStyle.tr_text(hud._lang, "🧠 Aldea", "🧠 Village")
-	hud._tab_traits_btn.text = EvoStardewStyle.tr_text(hud._lang, "🧬 Rasgos", "🧬 Traits")
-	hud._tab_habitat_btn.text = EvoStardewStyle.tr_text(hud._lang, "🌿 Hábitat", "🌿 Habitat")
-	EvoStardewStyle.apply_button_active(hud._tab_deme_btn, hud._inspector_tab == "deme")
-	EvoStardewStyle.apply_button_active(hud._tab_traits_btn, hud._inspector_tab == "traits")
-	EvoStardewStyle.apply_button_active(hud._tab_habitat_btn, hud._inspector_tab == "habitat")
+	hud._tab_deme_btn.text = EvoUiStyle.tr_text(hud._lang, "🧠 Aldea", "🧠 Village")
+	hud._tab_traits_btn.text = EvoUiStyle.tr_text(hud._lang, "🧬 Rasgos", "🧬 Traits")
+	hud._tab_habitat_btn.text = EvoUiStyle.tr_text(hud._lang, "🌿 Hábitat", "🌿 Habitat")
+	EvoUiStyle.apply_button_active(hud._tab_deme_btn, hud._inspector_tab == "deme")
+	EvoUiStyle.apply_button_active(hud._tab_traits_btn, hud._inspector_tab == "traits")
+	EvoUiStyle.apply_button_active(hud._tab_habitat_btn, hud._inspector_tab == "habitat")
 
 	if hud._villages_title_lbl != null:
-		hud._villages_title_lbl.text = EvoStardewStyle.tr_text(hud._lang, "🏘️ Aldeas Vivas del Valle", "🏘️ Living Valley Villages")
+		hud._villages_title_lbl.text = EvoUiStyle.tr_text(hud._lang, "🏘️ Aldeas Vivas del Valle", "🏘️ Living Valley Villages")
 
 
 static func update_top_bar_state(hud: Control) -> void:
 	if hud._world_state == null:
 		return
 	var year_num := int(hud._world_state.generation / 2) + 1
-	hud._gen_label.text = EvoStardewStyle.tr_text(
+	hud._gen_label.text = EvoUiStyle.tr_text(
 		hud._lang,
 		"📅 Año %d · Gen %d" % [year_num, hud._world_state.generation],
 		"📅 Yr %d · Gen %d" % [year_num, hud._world_state.generation]
 	)
 	var is_wet: bool = (hud._world_state.season == "wet_warm")
 	if is_wet:
-		hud._season_label.text = EvoStardewStyle.tr_text(hud._lang, "☀️ Primavera Cálida", "☀️ Warm Spring")
+		hud._season_label.text = EvoUiStyle.tr_text(hud._lang, "☀️ Primavera Cálida", "☀️ Warm Spring")
 		if hud._season_icon != null:
-			hud._season_icon.texture = EvoStardewStyle.get_pixel_icon("season_wet")
+			hud._season_icon.texture = EvoUiStyle.get_pixel_icon("season_wet")
 	else:
-		hud._season_label.text = EvoStardewStyle.tr_text(hud._lang, "❄️ Invierno Seco", "❄️ Dry Winter")
+		hud._season_label.text = EvoUiStyle.tr_text(hud._lang, "❄️ Invierno Seco", "❄️ Dry Winter")
 		if hud._season_icon != null:
-			hud._season_icon.texture = EvoStardewStyle.get_pixel_icon("season_dry")
+			hud._season_icon.texture = EvoUiStyle.get_pixel_icon("season_dry")
 
 	var sea_pct := int(round(hud._world_state.sea_level * 100.0))
 	hud._sea_level_label.text = "🌊 %d%%" % sea_pct
 	hud._season_portrait.set_state(is_wet, hud._world_state.sea_level)
 
 	if hud._world_state.unlimited_pressure_mode:
-		hud._pressure_label.text = EvoStardewStyle.tr_text(hud._lang, "⚡ ∞ Maná Ilimitado", "⚡ ∞ Unlimited Mana")
+		hud._pressure_label.text = EvoUiStyle.tr_text(hud._lang, "⚡ ∞ Maná Ilimitado", "⚡ ∞ Unlimited Mana")
 		hud._pressure_bar.value = 100.0
 	else:
 		hud._pressure_label.text = "⚡ %d pts · +%d/gen" % [hud._world_state.selective_pressure_points, hud._world_state.selective_pressure_regen_per_turn]
@@ -619,9 +619,9 @@ static func update_top_bar_state(hud: Control) -> void:
 
 	var mode_tag := "ON" if hud._world_state.use_live_decision_models else "HEUR"
 	hud._settings_btn.text = ""
-	hud._settings_btn.icon = EvoStardewStyle.get_pixel_icon("settings_gear")
+	hud._settings_btn.icon = EvoUiStyle.get_pixel_icon("settings_gear")
 	hud._settings_btn.tooltip_text = "🧠 %s (%d) · %s (%d) · ctx %d [%s]" % [p_model, primary_count, s_model, secondary_count, ctx_len, mode_tag]
-	hud._models_diag_lbl.text = EvoStardewStyle.tr_text(
+	hud._models_diag_lbl.text = EvoUiStyle.tr_text(
 		hud._lang,
 		"🧠 Motores Cognitivos:\n• %s (Táctico/Instinto): %d aldeas\n• %s (Ecológico/Estratégico): %d aldeas\n• Ventana de contexto: %d · Confianza media: %d%%" % [p_model, primary_count, s_model, secondary_count, ctx_len, int(round(avg_conf * 100.0))],
 		"🧠 Cognitive Engines:\n• %s (Tactical/Instinct): %d villages\n• %s (Ecological/Strategic): %d villages\n• Context window: %d · Avg confidence: %d%%" % [p_model, primary_count, s_model, secondary_count, ctx_len, int(round(avg_conf * 100.0))]
@@ -645,7 +645,7 @@ static func refresh_decision_model_selectors(hud: Control) -> void:
 	hud._secondary_model_opt.clear()
 
 	if decision_models.is_empty():
-		var empty_lbl := EvoStardewStyle.tr_text(hud._lang, "Sin modelos de decisión descargados", "No decision models downloaded")
+		var empty_lbl := EvoUiStyle.tr_text(hud._lang, "Sin modelos de decisión descargados", "No decision models downloaded")
 		hud._primary_model_opt.add_item("%s (%s)" % [p_model, empty_lbl], 0)
 		hud._primary_model_opt.set_item_metadata(0, p_model)
 		hud._primary_model_opt.disabled = true

@@ -63,7 +63,7 @@ var _village_buttons_pool: Array[Button] = []
 var _empty_villages_lbl: Label
 var _last_hotbar_visual_key: String = ""
 
-# Top-Right Stardew Clock & Cognitive Engine Widget
+# Top-Right Clock & Cognitive Engine Widget
 var _season_portrait: EvoHudTopBar.SeasonTidePortrait
 var _season_icon: TextureRect
 var _gen_label: Label
@@ -93,7 +93,7 @@ var _unlimited_pressure_check: CheckBox
 var _free_sandbox_check: CheckBox
 var _cam_lbl: Label
 
-# Bottom-Center 10-Slot Stardew Inventory Hotbar
+# Bottom-Center 10-Slot Inventory Hotbar
 var _hotbar_slot_buttons: Array[Button] = []
 var _tool_buttons: Dictionary = {} # tool_id -> Button
 var _equipped_tool_banner: PanelContainer
@@ -103,7 +103,7 @@ var _sub_options_flow: HFlowContainer
 var _radius_1_btn: Button
 var _radius_2_btn: Button
 
-# Right Floating Parchment Scroll Inspector (`StardewScrollInspector`)
+# Right Floating Parchment Scroll Inspector
 var _inspector_frame: PanelContainer
 var _inspector_body_vbox: VBoxContainer
 var _inspector_minimized: bool = false
@@ -155,7 +155,7 @@ func _ready() -> void:
 		return
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	theme = EvoStardewStyle.get_theme()
+	theme = EvoUiStyle.get_theme()
 	_build_ui()
 	set_process(true)
 	set_process_unhandled_key_input(true)
@@ -191,7 +191,7 @@ func _poll_ollama_startup_and_download() -> void:
 		elif bool(pull_st["failed"]):
 			_pull_in_progress = false
 			_missing_models_download_btn.disabled = false
-			_missing_models_status_lbl.text = EvoStardewStyle.tr_text(
+			_missing_models_status_lbl.text = EvoUiStyle.tr_text(
 				_lang,
 				"⚠️ Error al descargar los modelos desde Ollama.",
 				"⚠️ Failed to download models from Ollama."
@@ -236,9 +236,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _build_ui() -> void:
 	EvoHudTopBar.build_top_left_valley_sign_and_medallions(self)
-	EvoHudTopBar.build_top_right_stardew_clock(self)
+	EvoHudTopBar.build_top_right_clock(self)
 	EvoHudTopBar.build_settings_popup(self)
-	EvoHudHotbarDock.build_bottom_stardew_hotbar(self)
+	EvoHudHotbarDock.build_bottom_hotbar(self)
 	EvoHudHotbarDock.build_legend_panel(self)
 	EvoHudInspectorPanel.build_right_scroll_inspector(self)
 	EvoHudBannersToasts.build_banners_and_toasts(self)
@@ -573,8 +573,8 @@ func _on_export_pressed() -> void:
 			f.store_string(json_str)
 			f.close()
 		show_milestone_banner(
-			EvoStardewStyle.tr_text(_lang, "Mundo Exportado (JSON)", "World Exported (JSON)"),
-			EvoStardewStyle.tr_text(_lang, "Guardado en %s" % DEFAULT_EXPORT_PATH, "Saved to %s" % DEFAULT_EXPORT_PATH),
+			EvoUiStyle.tr_text(_lang, "Mundo Exportado (JSON)", "World Exported (JSON)"),
+			EvoUiStyle.tr_text(_lang, "Guardado en %s" % DEFAULT_EXPORT_PATH, "Saved to %s" % DEFAULT_EXPORT_PATH),
 			false
 		)
 	export_json_requested.emit(DEFAULT_EXPORT_PATH)
@@ -699,7 +699,7 @@ func _on_missing_models_download_pressed() -> void:
 	_missing_models_progress_bar.visible = true
 	_missing_models_progress_bar.value = 0.0
 	_missing_models_status_lbl.visible = true
-	_missing_models_status_lbl.text = EvoStardewStyle.tr_text(
+	_missing_models_status_lbl.text = EvoUiStyle.tr_text(
 		_lang,
 		"Iniciando descarga desde Ollama...",
 		"Starting download from Ollama..."

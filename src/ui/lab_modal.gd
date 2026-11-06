@@ -56,7 +56,7 @@ func _ready() -> void:
 	if _title_label != null:
 		return
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	theme = EvoStardewStyle.get_theme()
+	theme = EvoUiStyle.get_theme()
 	_build_ui()
 
 
@@ -80,7 +80,7 @@ func _build_ui() -> void:
 
 	var frame := PanelContainer.new()
 	frame.custom_minimum_size = Vector2(980, 650)
-	frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(14))
+	frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(14))
 	center.add_child(frame)
 
 	var main_vbox := VBoxContainer.new()
@@ -89,7 +89,7 @@ func _build_ui() -> void:
 
 	# Header
 	var header_panel := PanelContainer.new()
-	header_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_header_box(12, 8))
+	header_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_header_box(12, 8))
 	main_vbox.add_child(header_panel)
 
 	var header_hbox := HBoxContainer.new()
@@ -97,7 +97,7 @@ func _build_ui() -> void:
 	header_panel.add_child(header_hbox)
 
 	_title_label = Label.new()
-	_title_label.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT)
+	_title_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
 	_title_label.add_theme_font_size_override("font_size", 18)
 	_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_hbox.add_child(_title_label)
@@ -132,7 +132,7 @@ func _build_ui() -> void:
 	var left_panel := PanelContainer.new()
 	left_panel.custom_minimum_size = Vector2(280, 0)
 	left_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	left_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(10, true))
+	left_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(10, true))
 	body_hbox.add_child(left_panel)
 
 	var left_vbox := VBoxContainer.new()
@@ -157,7 +157,7 @@ func _build_ui() -> void:
 	var right_panel := PanelContainer.new()
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(12, false))
+	right_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(12, false))
 	body_hbox.add_child(right_panel)
 
 	var right_scroll := ScrollContainer.new()
@@ -172,7 +172,7 @@ func _build_ui() -> void:
 
 	_form_header_lbl = Label.new()
 	_form_header_lbl.add_theme_font_size_override("font_size", 16)
-	_form_header_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	_form_header_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	form_vbox.add_child(_form_header_lbl)
 
 	var name_row := HBoxContainer.new()
@@ -216,7 +216,7 @@ func _build_ui() -> void:
 
 	# 6 Sliders box
 	var sliders_card := PanelContainer.new()
-	sliders_card.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(Color("#fbf2de"), EvoStardewStyle.COLOR_PARCHMENT_BORDER, 10))
+	sliders_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 10))
 	form_vbox.add_child(sliders_card)
 
 	var sliders_vbox := VBoxContainer.new()
@@ -253,7 +253,7 @@ func _build_ui() -> void:
 
 	# Live Thermodynamic Meter
 	var thermo_card := PanelContainer.new()
-	thermo_card.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(Color("#f4e2b8"), EvoStardewStyle.COLOR_GOLD_BEVEL, 10))
+	thermo_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#f4e2b8"), EvoUiStyle.COLOR_GOLD_BEVEL, 10))
 	form_vbox.add_child(thermo_card)
 
 	var thermo_vbox := VBoxContainer.new()
@@ -266,7 +266,7 @@ func _build_ui() -> void:
 	_thermo_title_lbl = Label.new()
 	_thermo_title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_thermo_title_lbl.add_theme_font_size_override("font_size", 14)
-	_thermo_title_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	_thermo_title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	thermo_top.add_child(_thermo_title_lbl)
 
 	_auto_balance_btn = Button.new()
@@ -275,7 +275,7 @@ func _build_ui() -> void:
 
 	_thermo_metrics_lbl = Label.new()
 	_thermo_metrics_lbl.add_theme_font_size_override("font_size", 12)
-	_thermo_metrics_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
+	_thermo_metrics_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 	thermo_vbox.add_child(_thermo_metrics_lbl)
 
 	_thermo_status_lbl = Label.new()
@@ -300,7 +300,7 @@ func _build_ui() -> void:
 
 	_feedback_lbl = Label.new()
 	_feedback_lbl.add_theme_font_size_override("font_size", 12)
-	_feedback_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GREEN_OK)
+	_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
 	form_vbox.add_child(_feedback_lbl)
 
 	_rebuild_archetype_options()
@@ -360,7 +360,7 @@ func _rebuild_archetype_options() -> void:
 	_archetype_option.clear()
 	for i in range(EvoTypes.ARCHETYPES.size()):
 		var arch: String = EvoTypes.ARCHETYPES[i]
-		_archetype_option.add_item(EvoStardewStyle.get_archetype_label(arch, _lang), i)
+		_archetype_option.add_item(EvoUiStyle.get_archetype_label(arch, _lang), i)
 		_archetype_option.set_item_metadata(i, arch)
 	if prev_idx < _archetype_option.item_count:
 		_archetype_option.select(prev_idx)
@@ -369,29 +369,29 @@ func _rebuild_archetype_options() -> void:
 func _update_labels() -> void:
 	if _title_label == null:
 		return
-	_title_label.text = EvoStardewStyle.tr_text(
+	_title_label.text = EvoUiStyle.tr_text(
 		_lang,
 		"⚗️ Forja de Rasgos y Decisiones — Laboratorio Evolutivo",
 		"⚗️ Trait & Decision Forge — Evolutionary Laboratory"
 	)
-	_close_btn.text = EvoStardewStyle.tr_text(_lang, "✕ Cerrar", "✕ Close")
-	_tab_bio_btn.text = EvoStardewStyle.tr_text(_lang, "🧬 Rasgos Biológicos", "🧬 Biological Traits")
-	_tab_cul_btn.text = EvoStardewStyle.tr_text(_lang, "🔥 Tradiciones Culturales", "🔥 Cultural Traditions")
-	_tab_dec_btn.text = EvoStardewStyle.tr_text(_lang, "⚖️ Decisiones Conductuales", "⚖️ Behavioral Decisions")
+	_close_btn.text = EvoUiStyle.tr_text(_lang, "✕ Cerrar", "✕ Close")
+	_tab_bio_btn.text = EvoUiStyle.tr_text(_lang, "🧬 Rasgos Biológicos", "🧬 Biological Traits")
+	_tab_cul_btn.text = EvoUiStyle.tr_text(_lang, "🔥 Tradiciones Culturales", "🔥 Cultural Traditions")
+	_tab_dec_btn.text = EvoUiStyle.tr_text(_lang, "⚖️ Decisiones Conductuales", "⚖️ Behavioral Decisions")
 
-	EvoStardewStyle.apply_button_active(_tab_bio_btn, _active_tab == "biological")
-	EvoStardewStyle.apply_button_active(_tab_cul_btn, _active_tab == "cultural")
-	EvoStardewStyle.apply_button_active(_tab_dec_btn, _active_tab == "decision")
+	EvoUiStyle.apply_button_active(_tab_bio_btn, _active_tab == "biological")
+	EvoUiStyle.apply_button_active(_tab_cul_btn, _active_tab == "cultural")
+	EvoUiStyle.apply_button_active(_tab_dec_btn, _active_tab == "decision")
 
-	_new_item_btn.text = EvoStardewStyle.tr_text(_lang, "+ Crear Nuevo", "+ Create New")
-	_name_lbl.text = EvoStardewStyle.tr_text(_lang, "Nombre:", "Name:")
-	_desc_lbl.text = EvoStardewStyle.tr_text(_lang, "Descripción:", "Description:")
-	_culture_check.text = EvoStardewStyle.tr_text(
+	_new_item_btn.text = EvoUiStyle.tr_text(_lang, "+ Crear Nuevo", "+ Create New")
+	_name_lbl.text = EvoUiStyle.tr_text(_lang, "Nombre:", "Name:")
+	_desc_lbl.text = EvoUiStyle.tr_text(_lang, "Descripción:", "Description:")
+	_culture_check.text = EvoUiStyle.tr_text(
 		_lang,
 		"Habilita transmisión cultural (enablesCulturalTransmission)",
 		"Enables cultural transmission (enablesCulturalTransmission)"
 	)
-	_archetype_lbl.text = EvoStardewStyle.tr_text(_lang, "Arquetipo:", "Archetype:")
+	_archetype_lbl.text = EvoUiStyle.tr_text(_lang, "Arquetipo:", "Archetype:")
 
 	_culture_check.visible = (_active_tab == "biological")
 	_archetype_row.visible = (_active_tab == "decision")
@@ -416,21 +416,21 @@ func _update_labels() -> void:
 		var lbl: Label = _slider_title_labels[s_key]
 		lbl.text = str(slider_names_en[s_key]) if _lang == "en" else str(slider_names_es[s_key])
 
-	_thermo_title_lbl.text = EvoStardewStyle.tr_text(
+	_thermo_title_lbl.text = EvoUiStyle.tr_text(
 		_lang,
 		"⚖️ Medidor de Equilibrio Termodinámico en Vivo",
 		"⚖️ Live Thermodynamic Balance Meter"
 	)
-	_auto_balance_btn.text = EvoStardewStyle.tr_text(_lang, "Auto-Equilibrar Vector", "Auto-Balance Vector")
-	_save_btn.text = EvoStardewStyle.tr_text(_lang, "💾 Guardar en el Catálogo", "💾 Save to Catalog")
-	_inject_btn.text = EvoStardewStyle.tr_text(_lang, "💉 Inyectar en Aldea Seleccionada", "💉 Inject into Selected Village")
+	_auto_balance_btn.text = EvoUiStyle.tr_text(_lang, "Auto-Equilibrar Vector", "Auto-Balance Vector")
+	_save_btn.text = EvoUiStyle.tr_text(_lang, "💾 Guardar en el Catálogo", "💾 Save to Catalog")
+	_inject_btn.text = EvoUiStyle.tr_text(_lang, "💉 Inyectar en Aldea Seleccionada", "💉 Inject into Selected Village")
 	_inject_btn.visible = (_active_tab != "decision")
 	_inject_btn.disabled = (_selected_deme_id == "" or _world_state == null or not _world_state.demes.has(_selected_deme_id))
 
 	if _editing_id == "":
-		_form_header_lbl.text = EvoStardewStyle.tr_text(_lang, "✨ Nuevo Elemento Experimental", "✨ New Experimental Item")
+		_form_header_lbl.text = EvoUiStyle.tr_text(_lang, "✨ Nuevo Elemento Experimental", "✨ New Experimental Item")
 	else:
-		_form_header_lbl.text = EvoStardewStyle.tr_text(_lang, "🛠️ Editando: %s" % _editing_id, "🛠️ Editing: %s" % _editing_id)
+		_form_header_lbl.text = EvoUiStyle.tr_text(_lang, "🛠️ Editando: %s" % _editing_id, "🛠️ Editing: %s" % _editing_id)
 
 
 func _rebuild_catalog_list() -> void:
@@ -449,7 +449,7 @@ func _rebuild_catalog_list() -> void:
 			btn.text = "%s [%s]" % [dec.name, dec.archetype]
 			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			EvoStardewStyle.apply_button_active(btn, _editing_id == dec.id)
+			EvoUiStyle.apply_button_active(btn, _editing_id == dec.id)
 			btn.pressed.connect(_on_catalog_decision_clicked.bind(dec.id))
 			_items_list_vbox.add_child(btn)
 	else:
@@ -461,7 +461,7 @@ func _rebuild_catalog_list() -> void:
 			btn.text = t.name
 			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			EvoStardewStyle.apply_button_active(btn, _editing_id == t.id)
+			EvoUiStyle.apply_button_active(btn, _editing_id == t.id)
 			btn.pressed.connect(_on_catalog_trait_clicked.bind(t.id))
 			_items_list_vbox.add_child(btn)
 
@@ -470,17 +470,17 @@ func _reset_form_for_new() -> void:
 	_editing_id = ""
 	_feedback_lbl.text = ""
 	if _active_tab == "biological":
-		_name_input.text = EvoStardewStyle.tr_text(_lang, "Adaptación Metabólica", "Metabolic Adaptation")
-		_desc_input.text = EvoStardewStyle.tr_text(_lang, "Rasgo biológico experimental diseñado en el laboratorio.", "Experimental biological trait crafted in the lab.")
+		_name_input.text = EvoUiStyle.tr_text(_lang, "Adaptación Metabólica", "Metabolic Adaptation")
+		_desc_input.text = EvoUiStyle.tr_text(_lang, "Rasgo biológico experimental diseñado en el laboratorio.", "Experimental biological trait crafted in the lab.")
 		_culture_check.button_pressed = false
 		_set_vector_to_sliders(EvoTypes.BiophysicalVector.new(0.15, 0.30, 0.05, 0.20, 0.10, 0.20))
 	elif _active_tab == "cultural":
-		_name_input.text = EvoStardewStyle.tr_text(_lang, "Tradición Artesanal", "Artisanal Tradition")
-		_desc_input.text = EvoStardewStyle.tr_text(_lang, "Práctica cultural transmitida socialmente entre generaciones.", "Socially transmitted cultural practice across generations.")
+		_name_input.text = EvoUiStyle.tr_text(_lang, "Tradición Artesanal", "Artisanal Tradition")
+		_desc_input.text = EvoUiStyle.tr_text(_lang, "Práctica cultural transmitida socialmente entre generaciones.", "Socially transmitted cultural practice across generations.")
 		_set_vector_to_sliders(EvoTypes.BiophysicalVector.new(0.20, 0.35, 0.15, 0.10, 0.35, 0.45))
 	else:
-		_name_input.text = EvoStardewStyle.tr_text(_lang, "Estrategia Adaptativa", "Adaptive Strategy")
-		_desc_input.text = EvoStardewStyle.tr_text(_lang, "Patrón conductual colectivo evaluado por las aldeas.", "Collective behavioral pattern evaluated by villages.")
+		_name_input.text = EvoUiStyle.tr_text(_lang, "Estrategia Adaptativa", "Adaptive Strategy")
+		_desc_input.text = EvoUiStyle.tr_text(_lang, "Patrón conductual colectivo evaluado por las aldeas.", "Collective behavioral pattern evaluated by villages.")
 		_select_archetype("custom")
 		_set_vector_to_sliders(EvoTypes.BiophysicalVector.new(0.20, 0.35, 0.10, 0.15, 0.20, 0.25))
 	_update_labels()
@@ -524,33 +524,33 @@ func _update_thermodynamics_preview() -> void:
 	_refresh_slider_value_labels()
 	var vec := _read_vector_from_sliders()
 	var free_mode := _world_state.free_sandbox_mode if _world_state != null else false
-	var eval_res := EvoStardewStyle.evaluate_thermodynamics(vec, free_mode)
+	var eval_res := EvoUiStyle.evaluate_thermodynamics(vec, free_mode)
 	var a_plus: float = float(eval_res["a_plus"])
 	var c_actual: float = float(eval_res["c_actual"])
 	var c_req: float = float(eval_res["c_req"])
 	var is_bal: bool = bool(eval_res["is_balanced"])
 	var bal_vec: EvoTypes.BiophysicalVector = eval_res["balanced_vector"]
 
-	_thermo_metrics_lbl.text = EvoStardewStyle.tr_text(
+	_thermo_metrics_lbl.text = EvoUiStyle.tr_text(
 		_lang,
 		"Ventajas Positivas (A+): %.2f   |   Coste Actual (C_actual): %.2f   |   Coste Requerido (C_req): %.2f" % [a_plus, c_actual, c_req],
 		"Positive Advantages (A+): %.2f   |   Actual Cost (C_actual): %.2f   |   Required Cost (C_req): %.2f" % [a_plus, c_actual, c_req]
 	)
 
 	if is_bal:
-		_thermo_status_lbl.text = EvoStardewStyle.tr_text(
+		_thermo_status_lbl.text = EvoUiStyle.tr_text(
 			_lang,
 			"✓ Cumple la Ley de Conservación Termodinámica (C_actual >= C_req).",
 			"✓ Complies with the Law of Thermodynamic Conservation (C_actual >= C_req)."
 		)
-		_thermo_status_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GREEN_OK)
+		_thermo_status_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
 	else:
-		_thermo_status_lbl.text = EvoStardewStyle.tr_text(
+		_thermo_status_lbl.text = EvoUiStyle.tr_text(
 			_lang,
 			"⚠ Exceso de ventaja sin coste: al guardar se auto-equilibrará a Coste Metabólico = %+.2f, Impacto Eco = %+.2f." % [bal_vec.metabolic_cost, bal_vec.ecological_impact],
 			"⚠ Uncompensated advantage: saving will auto-balance to Metabolic Cost = %+.2f, Eco Impact = %+.2f." % [bal_vec.metabolic_cost, bal_vec.ecological_impact]
 		)
-		_thermo_status_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_AMBER_WARN)
+		_thermo_status_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_AMBER_WARN)
 
 
 func _select_archetype(archetype: String) -> void:
@@ -570,7 +570,7 @@ func _get_selected_archetype() -> String:
 func _save_current_item_to_catalog() -> String:
 	var raw_vec := _read_vector_from_sliders()
 	var free_mode := _world_state.free_sandbox_mode if _world_state != null else false
-	var final_vec := raw_vec if free_mode else EvoStardewStyle.balance_vector(raw_vec)
+	var final_vec := raw_vec if free_mode else EvoUiStyle.balance_vector(raw_vec)
 	_set_vector_to_sliders(final_vec)
 	_update_thermodynamics_preview()
 
@@ -665,14 +665,14 @@ func _on_slider_value_changed(_val: float, _key: String) -> void:
 
 func _on_auto_balance_pressed() -> void:
 	var vec := _read_vector_from_sliders()
-	var balanced := EvoStardewStyle.balance_vector(vec)
+	var balanced := EvoUiStyle.balance_vector(vec)
 	_set_vector_to_sliders(balanced)
 	_update_thermodynamics_preview()
 
 
 func _on_save_pressed() -> void:
 	var saved_id := _save_current_item_to_catalog()
-	_feedback_lbl.text = EvoStardewStyle.tr_text(
+	_feedback_lbl.text = EvoUiStyle.tr_text(
 		_lang,
 		"✓ Guardado en el catálogo (%s)" % saved_id,
 		"✓ Saved to catalog (%s)" % saved_id
@@ -684,7 +684,7 @@ func _on_inject_pressed() -> void:
 		return
 	var saved_id := _save_current_item_to_catalog()
 	inject_trait_requested.emit(_selected_deme_id, saved_id)
-	_feedback_lbl.text = EvoStardewStyle.tr_text(
+	_feedback_lbl.text = EvoUiStyle.tr_text(
 		_lang,
 		"💉 Rasgo '%s' inyectado en la aldea seleccionada." % _name_input.text,
 		"💉 Trait '%s' injected into selected village." % _name_input.text

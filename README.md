@@ -1,14 +1,14 @@
-# Evolution: Stardew Valley Edition
+# Evolution
 
 [![CI](https://github.com/arrase/Evolution/actions/workflows/ci.yml/badge.svg)](https://github.com/arrase/Evolution/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/arrase/Evolution/actions/workflows/codeql.yml/badge.svg)](https://github.com/arrase/Evolution/actions/workflows/codeql.yml)
 [![Security Audit](https://github.com/arrase/Evolution/actions/workflows/security.yml/badge.svg)](https://github.com/arrase/Evolution/actions/workflows/security.yml)
 
-**Evolution: Stardew Valley Edition** is an interactive bio-cultural and evolutionary population simulator built with **Godot 4.7**, featuring a handcrafted cozy pixel-art aesthetic inspired by *Stardew Valley* on an isometric hexagonal ecosystem.
+**Evolution** is an interactive bio-cultural and evolutionary population simulator built with **Godot 4.7**, featuring a handcrafted cozy pixel-art aesthetic on an isometric hexagonal ecosystem.
 
 Rather than commanding individual units directly, you act as the **Selective Pressure** and **Evolutionary Architect**—shaping climates, terrain altitude, sea levels, habitat carrying capacity ($K$), and genetic or cultural traits—while local subpopulations (*demes*) autonomously evaluate their surroundings, adapt, migrate, cooperate, innovate, or diverge into new species.
 
-![The Rift Valley — Isometric Hexagonal Ecosystem & Stardew HUD](docs/images/screenshot_rift_savanna.png)
+![The Rift Valley — Isometric Hexagonal Ecosystem & HUD](docs/images/screenshot_rift_savanna.png)
 
 ---
 
@@ -86,7 +86,7 @@ An open catalog editor to inspect, tweak, or craft new biological traits, cultur
 | **Right Click + Drag** / **Middle Click + Drag** | Pan camera across the hexagonal valley |
 | **Mouse Wheel** | Zoom camera in / out |
 | **Space** | Toggle Play / Pause generational simulation |
-| **Keys `1` – `0`** | Equip slot from the 10-slot bottom Stardew Hotbar (`1`: Observe, `2–6`: Biome Brushes, `7–8`: Raise/Lower Altitude, `9`: Enrich Food $K$, `0`: Sea Level) |
+| **Keys `1` – `0`** | Equip slot from the 10-slot bottom Hotbar (`1`: Observe, `2–6`: Biome Brushes, `7–8`: Raise/Lower Altitude, `9`: Enrich Food $K$, `0`: Sea Level) |
 | **Escape** | Close active modal or return to the `Observe` tool |
 
 ---
@@ -127,7 +127,7 @@ godot --path . --script res://tests/test_visual_capture.gd
 │   ├── main.gd             # Main controller, turn loop timer, and signal orchestration
 │   ├── core/               # Data structures (EvoTypes), 6-axis thermodynamics, hex math, catalog, presets, i18n
 │   ├── engine/             # Generational turn engine, biophysical phases, and dual-model cognitive engine
-│   ├── ui/                 # Stardew-styled HUD, scroll inspector, hotbar dock, and modals (Journal, Lineages, Forge)
+│   ├── ui/                 # Pixel-art HUD, scroll inspector, hotbar dock, and modals (Journal, Lineages, Forge)
 │   └── world/              # 2.5D isometric hexagonal renderer, procedural pixel-art sprites, road networks, camera
 └── tests/                  # Headless simulation/UI test runner and visual capture script
 ```

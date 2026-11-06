@@ -15,7 +15,7 @@ const HOTBAR_SLOTS_DEF: Array[Dictionary] = [
 ]
 
 
-static func build_bottom_stardew_hotbar(hud: Control) -> void:
+static func build_bottom_hotbar(hud: Control) -> void:
 	# 1. Floating Sub-Options Bar (appears right above the hotbar when Sea Level / extra biomes active)
 	hud._sub_options_panel = PanelContainer.new()
 	hud._sub_options_panel.visible = false
@@ -28,7 +28,7 @@ static func build_bottom_stardew_hotbar(hud: Control) -> void:
 	hud._sub_options_panel.offset_top = -112
 	hud._sub_options_panel.offset_bottom = -76
 	hud._sub_options_panel.z_index = 16
-	hud._sub_options_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(5))
+	hud._sub_options_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(5))
 	hud.add_child(hud._sub_options_panel)
 
 	hud._sub_options_flow = HFlowContainer.new()
@@ -49,7 +49,7 @@ static func build_bottom_stardew_hotbar(hud: Control) -> void:
 	hud._equipped_tool_banner.offset_top = -100
 	hud._equipped_tool_banner.offset_bottom = -74
 	hud._equipped_tool_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var eq_style := EvoStardewStyle.make_parchment_card(Color("#fef3c7"), EvoStardewStyle.COLOR_GOLD_BRIGHT, 4)
+	var eq_style := EvoUiStyle.make_parchment_card(Color("#fef3c7"), EvoUiStyle.COLOR_GOLD_BRIGHT, 4)
 	hud._equipped_tool_banner.add_theme_stylebox_override("panel", eq_style)
 	hud.add_child(hud._equipped_tool_banner)
 
@@ -57,10 +57,10 @@ static func build_bottom_stardew_hotbar(hud: Control) -> void:
 	hud._equipped_tool_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud._equipped_tool_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	hud._equipped_tool_lbl.add_theme_font_size_override("font_size", 12)
-	hud._equipped_tool_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	hud._equipped_tool_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._equipped_tool_banner.add_child(hud._equipped_tool_lbl)
 
-	# 3. Iconic 10-Slot Stardew Valley Inventory Hotbar + Brush Radius Switcher
+	# 3. 10-Slot Inventory Hotbar + Brush Radius Switcher
 	var hotbar_frame := PanelContainer.new()
 	hotbar_frame.anchor_left = 0.5
 	hotbar_frame.anchor_right = 0.5
@@ -71,7 +71,7 @@ static func build_bottom_stardew_hotbar(hud: Control) -> void:
 	hotbar_frame.offset_top = -70
 	hotbar_frame.offset_bottom = -6
 	hotbar_frame.z_index = 15
-	hotbar_frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_hotbar_frame_box(8, 5))
+	hotbar_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_hotbar_frame_box(8, 5))
 	hud.add_child(hotbar_frame)
 
 	var hb_row := HBoxContainer.new()
@@ -106,12 +106,12 @@ static func build_bottom_stardew_hotbar(hud: Control) -> void:
 		key_lbl.text = key_str
 		key_lbl.position = Vector2(4, 1)
 		key_lbl.add_theme_font_size_override("font_size", 10)
-		key_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+		key_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 		key_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot_overlay.add_child(key_lbl)
 
 		var icon_rect := TextureRect.new()
-		icon_rect.texture = EvoStardewStyle.get_pixel_icon(icon_key)
+		icon_rect.texture = EvoUiStyle.get_pixel_icon(icon_key)
 		icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -127,7 +127,7 @@ static func build_bottom_stardew_hotbar(hud: Control) -> void:
 			cost_lbl.size = Vector2(29, 14)
 			cost_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			cost_lbl.add_theme_font_size_override("font_size", 9)
-			cost_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+			cost_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 			cost_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			slot_overlay.add_child(cost_lbl)
 
@@ -165,11 +165,11 @@ static func build_legend_panel(hud: Control) -> void:
 	hud._legend_panel.offset_top = 10
 	hud._legend_panel.offset_bottom = 290
 	hud._legend_panel.z_index = 22
-	hud._legend_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(7))
+	hud._legend_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
 	hud.add_child(hud._legend_panel)
 
 	var inner := PanelContainer.new()
-	inner.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(8, false))
+	inner.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(8, false))
 	hud._legend_panel.add_child(inner)
 
 	var scroll := ScrollContainer.new()
@@ -249,12 +249,12 @@ static func update_hotbar_visuals(hud: Control) -> void:
 		var btn: Button = hud._hotbar_slot_buttons[i]
 		var info := get_slot_title_and_desc(hud._lang, i)
 		btn.tooltip_text = "[%s] %s\n%s" % [str(HOTBAR_SLOTS_DEF[i]["key"]), info["title"], info["desc"]]
-		EvoStardewStyle.apply_hotbar_slot_style(btn, i == active_idx)
+		EvoUiStyle.apply_hotbar_slot_style(btn, i == active_idx)
 
 	var cur_info := get_slot_title_and_desc(hud._lang, active_idx)
 	if hud._active_tool == "set_biome" and hud._active_sub_mode in ["coastal_shallows", "ocean", "high_mountain"]:
-		var b_lbl := EvoStardewStyle.get_biome_label(hud._active_sub_mode, hud._lang)
-		hud._equipped_tool_lbl.text = "🐚 %s — %s (⚡10)" % [b_lbl, EvoStardewStyle.tr_text(hud._lang, "Moldear bioma costero/cumbre", "Shape coastal/peak biome")]
+		var b_lbl := EvoUiStyle.get_biome_label(hud._active_sub_mode, hud._lang)
+		hud._equipped_tool_lbl.text = "🐚 %s — %s (⚡10)" % [b_lbl, EvoUiStyle.tr_text(hud._lang, "Moldear bioma costero/cumbre", "Shape coastal/peak biome")]
 	else:
 		hud._equipped_tool_lbl.text = "%s — %s" % [cur_info["title"], cur_info["desc"]]
 
@@ -273,20 +273,20 @@ static func rebuild_sub_tool_options(hud: Control) -> void:
 	hud._sub_options_panel.visible = true
 
 	var plus_sea := Button.new()
-	plus_sea.text = EvoStardewStyle.tr_text(hud._lang, "🌊 +5% Mar (⚡25)", "🌊 +5% Sea (⚡25)")
+	plus_sea.text = EvoUiStyle.tr_text(hud._lang, "🌊 +5% Mar (⚡25)", "🌊 +5% Sea (⚡25)")
 	plus_sea.pressed.connect(hud._on_sea_level_btn_pressed.bind(0.05))
 	hud._sub_options_flow.add_child(plus_sea)
 
 	var minus_sea := Button.new()
-	minus_sea.text = EvoStardewStyle.tr_text(hud._lang, "🌊 -5% Mar (⚡25)", "🌊 -5% Sea (⚡25)")
+	minus_sea.text = EvoUiStyle.tr_text(hud._lang, "🌊 -5% Mar (⚡25)", "🌊 -5% Sea (⚡25)")
 	minus_sea.pressed.connect(hud._on_sea_level_btn_pressed.bind(-0.05))
 	hud._sub_options_flow.add_child(minus_sea)
 
 	for extra_b in ["coastal_shallows", "ocean", "high_mountain"]:
 		var b_btn := Button.new()
-		b_btn.text = EvoStardewStyle.get_biome_label(extra_b, hud._lang)
-		b_btn.icon = EvoStardewStyle.get_pixel_icon(extra_b)
-		EvoStardewStyle.apply_button_active(b_btn, hud._active_tool == "set_biome" and hud._active_sub_mode == extra_b)
+		b_btn.text = EvoUiStyle.get_biome_label(extra_b, hud._lang)
+		b_btn.icon = EvoUiStyle.get_pixel_icon(extra_b)
+		EvoUiStyle.apply_button_active(b_btn, hud._active_tool == "set_biome" and hud._active_sub_mode == extra_b)
 		b_btn.pressed.connect(func() -> void:
 			hud._active_tool = "set_biome"
 			hud._on_sub_mode_selected(extra_b)
@@ -302,9 +302,9 @@ static func rebuild_legend_content(hud: Control) -> void:
 		child.queue_free()
 
 	var title := Label.new()
-	title.text = EvoStardewStyle.tr_text(hud._lang, "🗺️ Leyenda del Valle", "🗺️ Valley Legend")
+	title.text = EvoUiStyle.tr_text(hud._lang, "🗺️ Leyenda del Valle", "🗺️ Valley Legend")
 	title.add_theme_font_size_override("font_size", 13)
-	title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._legend_vbox.add_child(title)
 
 	for b_id in EvoTypes.BIOMES:
@@ -314,21 +314,21 @@ static func rebuild_legend_content(hud: Control) -> void:
 
 		var sw := ColorRect.new()
 		sw.custom_minimum_size = Vector2(12, 12)
-		sw.color = EvoStardewStyle.get_biome_color(b_id)
+		sw.color = EvoUiStyle.get_biome_color(b_id)
 		row.add_child(sw)
 
 		var lbl := Label.new()
-		lbl.text = EvoStardewStyle.get_biome_label(b_id, hud._lang)
+		lbl.text = EvoUiStyle.get_biome_label(b_id, hud._lang)
 		lbl.add_theme_font_size_override("font_size", 11)
 		row.add_child(lbl)
 
 	var tier_lbl := Label.new()
-	tier_lbl.text = EvoStardewStyle.tr_text(
+	tier_lbl.text = EvoUiStyle.tr_text(
 		hud._lang,
 		"Aldeas: I Campamento · II Caserío · III Aldea · IV Poblado\nCaminos: 🛣️ Cooperación · ⚔️ Disputa · 🧭 Migración",
 		"Villages: I Camp · II Hamlet · III Village · IV Settlement\nPaths: 🛣️ Cooperation · ⚔️ Dispute · 🧭 Migration"
 	)
 	tier_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tier_lbl.add_theme_font_size_override("font_size", 10)
-	tier_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+	tier_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	hud._legend_vbox.add_child(tier_lbl)

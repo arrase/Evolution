@@ -12,7 +12,7 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 	hud._inspector_frame.offset_right = -10
 	hud._inspector_frame.offset_top = 132
 	hud._inspector_frame.offset_bottom = 865
-	hud._inspector_frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(7))
+	hud._inspector_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
 	hud.add_child(hud._inspector_frame)
 
 	var outer_vbox := VBoxContainer.new()
@@ -21,7 +21,7 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 
 	# Wooden Scroll Roller Header (Always visible even when minimized)
 	var header_box := PanelContainer.new()
-	header_box.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_header_box(8, 5))
+	header_box.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_header_box(8, 5))
 	outer_vbox.add_child(header_box)
 
 	var header_vbox := VBoxContainer.new()
@@ -75,7 +75,7 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 
 	var model_badge_panel := PanelContainer.new()
 	model_badge_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	model_badge_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_badge_style(Color("#271306"), EvoStardewStyle.COLOR_GOLD_BEVEL))
+	model_badge_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_badge_style(Color("#271306"), EvoUiStyle.COLOR_GOLD_BEVEL))
 	h_top.add_child(model_badge_panel)
 
 	hud._inspector_model_badge_lbl = Label.new()
@@ -83,7 +83,7 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 	hud._inspector_model_badge_lbl.clip_text = true
 	hud._inspector_model_badge_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	hud._inspector_model_badge_lbl.add_theme_font_size_override("font_size", 11)
-	hud._inspector_model_badge_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_CREAM_TEXT)
+	hud._inspector_model_badge_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_CREAM_TEXT)
 	model_badge_panel.add_child(hud._inspector_model_badge_lbl)
 
 	hud._inspector_header_title = Label.new()
@@ -126,7 +126,7 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 	var parchment_body := PanelContainer.new()
 	parchment_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parchment_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	parchment_body.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(8, false))
+	parchment_body.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(8, false))
 	hud._inspector_body_vbox.add_child(parchment_body)
 
 	hud._inspector_scroll = ScrollContainer.new()
@@ -165,7 +165,7 @@ static func rebuild_villages_list(hud: Control) -> void:
 	hud._village_selector_opt.clear()
 
 	if hud._world_state == null or hud._world_state.demes.is_empty():
-		hud._village_selector_opt.add_item(EvoStardewStyle.tr_text(hud._lang, "🏘️ 0 Aldeas Vivas", "🏘️ 0 Living Villages"), 0)
+		hud._village_selector_opt.add_item(EvoUiStyle.tr_text(hud._lang, "🏘️ 0 Aldeas Vivas", "🏘️ 0 Living Villages"), 0)
 		hud._village_selector_opt.set_item_metadata(0, "")
 		hud._village_selector_opt.disabled = true
 		if hud._village_prev_btn != null:
@@ -192,7 +192,7 @@ static func rebuild_villages_list(hud: Control) -> void:
 	for i in range(total_count):
 		var d := deme_list[i]
 		var status_key := d.get_vital_status()
-		var heart := EvoStardewStyle.get_vital_status_heart(status_key)
+		var heart := EvoUiStyle.get_vital_status_heart(status_key)
 		var item_lbl := "%s [%d/%d] %s" % [heart, i + 1, total_count, _format_deme_with_hex(d)]
 		hud._village_selector_opt.add_item(item_lbl, i)
 		hud._village_selector_opt.set_item_metadata(i, d.id)
@@ -213,18 +213,18 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 			child.queue_free()
 
 	if hud._world_state == null or hud._selected_deme_id == "" or not hud._world_state.demes.has(hud._selected_deme_id):
-		hud._inspector_header_title.text = EvoStardewStyle.tr_text(hud._lang, "Hex (%s)" % hud._selected_hex_id, "Hex (%s)" % hud._selected_hex_id)
-		hud._inspector_model_badge_lbl.text = EvoStardewStyle.tr_text(hud._lang, "🌿 Sin aldea seleccionada", "🌿 No village selected")
+		hud._inspector_header_title.text = EvoUiStyle.tr_text(hud._lang, "Hex (%s)" % hud._selected_hex_id, "Hex (%s)" % hud._selected_hex_id)
+		hud._inspector_model_badge_lbl.text = EvoUiStyle.tr_text(hud._lang, "🌿 Sin aldea seleccionada", "🌿 No village selected")
 		hud._inspector_header_hl_btn.visible = false
 		var empty_lbl := Label.new()
-		empty_lbl.text = EvoStardewStyle.tr_text(
+		empty_lbl.text = EvoUiStyle.tr_text(
 			hud._lang,
 			"Selecciona una aldea en el selector superior o en el mapa para abrir su pergamino.",
 			"Select a village in the top selector or on the map to open its scroll."
 		)
 		empty_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		empty_lbl.add_theme_font_size_override("font_size", 11)
-		empty_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+		empty_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 		var target_box: VBoxContainer = hud._traits_sheet_vbox if hud._inspector_tab == "traits" else hud._deme_sheet_vbox
 		target_box.add_child(empty_lbl)
 		return
@@ -239,11 +239,11 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	hud._inspector_header_title.text = "%s (%s)" % [d.name, d.hex_id]
 	hud._inspector_header_hl_btn.visible = true
 	var is_hl: bool = (hud._highlighted_lineage_id == d.lineage_id and hud._highlighted_lineage_id != "")
-	hud._inspector_header_hl_btn.text = EvoStardewStyle.tr_text(hud._lang, "✨ Linaje", "✨ Lineage")
-	EvoStardewStyle.apply_button_active(hud._inspector_header_hl_btn, is_hl)
+	hud._inspector_header_hl_btn.text = EvoUiStyle.tr_text(hud._lang, "✨ Linaje", "✨ Lineage")
+	EvoUiStyle.apply_button_active(hud._inspector_header_hl_btn, is_hl)
 
 	var conf_pct := int(round(d.last_confidence * 100.0))
-	hud._inspector_model_badge_lbl.text = EvoStardewStyle.tr_text(
+	hud._inspector_model_badge_lbl.text = EvoUiStyle.tr_text(
 		hud._lang,
 		"🧠 Modelo: %s · %d%% · 📍 (%s)" % [d.decision_model_tag, conf_pct, d.hex_id],
 		"🧠 Model: %s · %d%% · 📍 (%s)" % [d.decision_model_tag, conf_pct, d.hex_id]
@@ -251,9 +251,9 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 
 	if hud._inspector_tab == "traits":
 		var mile_title := Label.new()
-		mile_title.text = EvoStardewStyle.tr_text(hud._lang, "⏳ Medidores de Hitos Evolutivos", "⏳ Evolutionary Milestone Meters")
+		mile_title.text = EvoUiStyle.tr_text(hud._lang, "⏳ Medidores de Hitos Evolutivos", "⏳ Evolutionary Milestone Meters")
 		mile_title.add_theme_font_size_override("font_size", 12)
-		mile_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+		mile_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 		hud._traits_sheet_vbox.add_child(mile_title)
 
 		var max_baldwin := 0
@@ -263,7 +263,7 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 				max_baldwin = cnt
 		_add_milestone_bar(
 			hud._traits_sheet_vbox,
-			EvoStardewStyle.tr_text(hud._lang, "Asimilación Genética (Baldwin)", "Genetic Assimilation (Baldwin)"),
+			EvoUiStyle.tr_text(hud._lang, "Asimilación Genética (Baldwin)", "Genetic Assimilation (Baldwin)"),
 			"%d / 8 gen" % max_baldwin,
 			clampf(float(max_baldwin) / 8.0 * 100.0, 0.0, 100.0),
 			Color("#0d9488")
@@ -272,24 +272,24 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		var innov_pct := clampf(d.innovation_counter * 100.0, 0.0, 100.0)
 		_add_milestone_bar(
 			hud._traits_sheet_vbox,
-			EvoStardewStyle.tr_text(hud._lang, "Innovación Cultural", "Cultural Innovation"),
+			EvoUiStyle.tr_text(hud._lang, "Innovación Cultural", "Cultural Innovation"),
 			"%d%%" % int(round(innov_pct)),
 			innov_pct,
-			EvoStardewStyle.COLOR_PURPLE_CULTURE
+			EvoUiStyle.COLOR_PURPLE_CULTURE
 		)
 
 		_add_milestone_bar(
 			hud._traits_sheet_vbox,
-			EvoStardewStyle.tr_text(hud._lang, "Aislamiento Alopátrico", "Allopatric Isolation"),
+			EvoUiStyle.tr_text(hud._lang, "Aislamiento Alopátrico", "Allopatric Isolation"),
 			"%d / 10 gen" % d.isolation_turns,
 			clampf(float(d.isolation_turns) / 10.0 * 100.0, 0.0, 100.0),
-			EvoStardewStyle.COLOR_BLUE_INFO
+			EvoUiStyle.COLOR_BLUE_INFO
 		)
 
 		var traits_title := Label.new()
-		traits_title.text = EvoStardewStyle.tr_text(hud._lang, "🧬 Medallones de Rasgos y Tradiciones", "🧬 Trait & Tradition Medallions")
+		traits_title.text = EvoUiStyle.tr_text(hud._lang, "🧬 Medallones de Rasgos y Tradiciones", "🧬 Trait & Tradition Medallions")
 		traits_title.add_theme_font_size_override("font_size", 12)
-		traits_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+		traits_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 		hud._traits_sheet_vbox.add_child(traits_title)
 
 		var traits_flow := HFlowContainer.new()
@@ -304,53 +304,53 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 
 		var open_forge_btn := Button.new()
 		open_forge_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		open_forge_btn.text = EvoStardewStyle.tr_text(hud._lang, "⚗️ Abrir Forja / Inyectar Rasgo", "⚗️ Open Forge / Inject Trait")
+		open_forge_btn.text = EvoUiStyle.tr_text(hud._lang, "⚗️ Abrir Forja / Inyectar Rasgo", "⚗️ Open Forge / Inject Trait")
 		open_forge_btn.pressed.connect(hud.open_lab_modal)
 		hud._traits_sheet_vbox.add_child(open_forge_btn)
 		return
 
 	# TAB 1: 🧠 ALDEA Y DECISIONES
 	var meters_card := PanelContainer.new()
-	meters_card.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(Color("#fbf2de"), EvoStardewStyle.COLOR_PARCHMENT_BORDER, 6))
+	meters_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 6))
 	hud._deme_sheet_vbox.add_child(meters_card)
 
 	var m_vbox := VBoxContainer.new()
 	m_vbox.add_theme_constant_override("separation", 4)
 	meters_card.add_child(m_vbox)
 
-	_add_sheet_kv(m_vbox, EvoStardewStyle.tr_text(hud._lang, "🛡️ Linaje:", "🛡️ Lineage:"), lin_name)
+	_add_sheet_kv(m_vbox, EvoUiStyle.tr_text(hud._lang, "🛡️ Linaje:", "🛡️ Lineage:"), lin_name)
 	_add_sheet_kv(
 		m_vbox,
-		EvoStardewStyle.tr_text(hud._lang, "👥 Población:", "👥 Population:"),
-		"%d hab. (%s)" % [d.population, EvoStardewStyle.get_village_tier_label(d.population, hud._lang)]
+		EvoUiStyle.tr_text(hud._lang, "👥 Población:", "👥 Population:"),
+		"%d hab. (%s)" % [d.population, EvoUiStyle.get_village_tier_label(d.population, hud._lang)]
 	)
 
 	_add_milestone_bar(
 		m_vbox,
-		EvoStardewStyle.tr_text(hud._lang, "🍯 Reserva Calórica", "🍯 Caloric Reserve"),
+		EvoUiStyle.tr_text(hud._lang, "🍯 Reserva Calórica", "🍯 Caloric Reserve"),
 		"%.1f" % d.energy_reserves,
 		clampf(d.energy_reserves / 220.0 * 100.0, 0.0, 100.0),
-		EvoStardewStyle.COLOR_GOLD_BRIGHT
+		EvoUiStyle.COLOR_GOLD_BRIGHT
 	)
 
 	var v_status := d.get_vital_status()
-	var heart_icon := EvoStardewStyle.get_vital_status_heart(v_status)
-	var v_label := EvoStardewStyle.get_vital_status_label(v_status, hud._lang)
+	var heart_icon := EvoUiStyle.get_vital_status_heart(v_status)
+	var v_label := EvoUiStyle.get_vital_status_label(v_status, hud._lang)
 	_add_sheet_kv(
 		m_vbox,
-		EvoStardewStyle.tr_text(hud._lang, "⚡ Balance Turno:", "⚡ Turn Balance:"),
+		EvoUiStyle.tr_text(hud._lang, "⚡ Balance Turno:", "⚡ Turn Balance:"),
 		"%+.1f · %s %s" % [d.last_energy_delta, heart_icon, v_label]
 	)
 
 	# Decision Model Intention Section (Top 3 probabilities, dominant marked with ★)
 	var dec_title := Label.new()
-	dec_title.text = EvoStardewStyle.tr_text(
+	dec_title.text = EvoUiStyle.tr_text(
 		hud._lang,
 		"🧠 Intención Dominante:",
 		"🧠 Dominant Intention:"
 	)
 	dec_title.add_theme_font_size_override("font_size", 12)
-	dec_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	dec_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._deme_sheet_vbox.add_child(dec_title)
 
 	var prob_keys := d.last_decision_probabilities.keys()
@@ -372,12 +372,12 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 			dec_lbl_str,
 			"%d%%" % int(round(prob * 100.0)),
 			prob * 100.0,
-			EvoStardewStyle.COLOR_GOLD_BEVEL if is_dom else EvoStardewStyle.COLOR_SEPIA
+			EvoUiStyle.COLOR_GOLD_BEVEL if is_dom else EvoUiStyle.COLOR_SEPIA
 		)
 
 	# Village Relations & Roads Summary
 	var rel_card := PanelContainer.new()
-	rel_card.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(Color("#f4e2b8"), EvoStardewStyle.COLOR_PARCHMENT_BORDER, 6))
+	rel_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#f4e2b8"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 6))
 	hud._deme_sheet_vbox.add_child(rel_card)
 
 	var rel_vbox := VBoxContainer.new()
@@ -385,9 +385,9 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	rel_card.add_child(rel_vbox)
 
 	var rel_title := Label.new()
-	rel_title.text = EvoStardewStyle.tr_text(hud._lang, "🛣️ Relaciones y Caminos:", "🛣️ Relations & Paths:")
+	rel_title.text = EvoUiStyle.tr_text(hud._lang, "🛣️ Relaciones y Caminos:", "🛣️ Relations & Paths:")
 	rel_title.add_theme_font_size_override("font_size", 11)
-	rel_title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	rel_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	rel_vbox.add_child(rel_title)
 
 	var rel_lines := build_deme_relations_lines(hud._world_state, hud._lang, d)
@@ -396,20 +396,20 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		rl.text = r_line
 		rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rl.add_theme_font_size_override("font_size", 11)
-		rl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
+		rl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 		rel_vbox.add_child(rl)
 
 	# Naturalist's Note (`last_justification`)
 	var just_card := PanelContainer.new()
-	just_card.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(Color("#fbf2de"), EvoStardewStyle.COLOR_PARCHMENT_BORDER, 6))
+	just_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 6))
 	hud._deme_sheet_vbox.add_child(just_card)
 
 	var just_lbl := Label.new()
-	var just_txt := d.last_justification if d.last_justification != "" else EvoStardewStyle.tr_text(hud._lang, "Evaluación inicial de hábitat.", "Initial habitat evaluation.")
+	var just_txt := d.last_justification if d.last_justification != "" else EvoUiStyle.tr_text(hud._lang, "Evaluación inicial de hábitat.", "Initial habitat evaluation.")
 	just_lbl.text = "💬 " + just_txt
 	just_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	just_lbl.add_theme_font_size_override("font_size", 10)
-	just_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+	just_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	just_card.add_child(just_lbl)
 
 
@@ -424,9 +424,9 @@ static func rebuild_hex_sheet(hud: Control) -> void:
 
 	var cell: EvoTypes.HexCell = hud._world_state.cells[hud._selected_hex_id]
 	if hud._selected_deme_id == "" or not hud._world_state.demes.has(hud._selected_deme_id):
-		hud._inspector_header_swatch.color = EvoStardewStyle.get_biome_color(cell.biome)
-		hud._inspector_header_title.text = "%s (%d, %d)" % [EvoStardewStyle.get_biome_label(cell.biome, hud._lang), cell.q, cell.r]
-		hud._inspector_model_badge_lbl.text = EvoStardewStyle.tr_text(hud._lang, "🌿 Parcela sin aldeas · 📍 (%s)" % hud._selected_hex_id, "🌿 Uninhabited parcel · 📍 (%s)" % hud._selected_hex_id)
+		hud._inspector_header_swatch.color = EvoUiStyle.get_biome_color(cell.biome)
+		hud._inspector_header_title.text = "%s (%d, %d)" % [EvoUiStyle.get_biome_label(cell.biome, hud._lang), cell.q, cell.r]
+		hud._inspector_model_badge_lbl.text = EvoUiStyle.tr_text(hud._lang, "🌿 Parcela sin aldeas · 📍 (%s)" % hud._selected_hex_id, "🌿 Uninhabited parcel · 📍 (%s)" % hud._selected_hex_id)
 		hud._inspector_header_hl_btn.visible = false
 
 	var bio_row := HBoxContainer.new()
@@ -438,39 +438,39 @@ static func rebuild_hex_sheet(hud: Control) -> void:
 	bio_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bio_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	bio_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	bio_icon.texture = EvoStardewStyle.get_pixel_icon(cell.biome)
+	bio_icon.texture = EvoUiStyle.get_pixel_icon(cell.biome)
 	bio_row.add_child(bio_icon)
 
 	var title := Label.new()
-	title.text = "%s (%d, %d)" % [EvoStardewStyle.get_biome_label(cell.biome, hud._lang), cell.q, cell.r]
+	title.text = "%s (%d, %d)" % [EvoUiStyle.get_biome_label(cell.biome, hud._lang), cell.q, cell.r]
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.add_theme_font_size_override("font_size", 13)
-	title.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	bio_row.add_child(title)
 
-	_add_sheet_kv(hud._hex_sheet_vbox, EvoStardewStyle.tr_text(hud._lang, "🌡️ Temperatura:", "🌡️ Temperature:"), "%+.2f" % cell.temperature)
-	_add_sheet_kv(hud._hex_sheet_vbox, EvoStardewStyle.tr_text(hud._lang, "💧 Humedad:", "💧 Humidity:"), "%d%%" % int(round(cell.humidity * 100.0)))
-	_add_sheet_kv(hud._hex_sheet_vbox, EvoStardewStyle.tr_text(hud._lang, "⛰️ Altitud:", "⛰️ Altitude:"), "%.2f" % cell.altitude)
+	_add_sheet_kv(hud._hex_sheet_vbox, EvoUiStyle.tr_text(hud._lang, "🌡️ Temperatura:", "🌡️ Temperature:"), "%+.2f" % cell.temperature)
+	_add_sheet_kv(hud._hex_sheet_vbox, EvoUiStyle.tr_text(hud._lang, "💧 Humedad:", "💧 Humidity:"), "%d%%" % int(round(cell.humidity * 100.0)))
+	_add_sheet_kv(hud._hex_sheet_vbox, EvoUiStyle.tr_text(hud._lang, "⛰️ Altitud:", "⛰️ Altitude:"), "%.2f" % cell.altitude)
 
 	var r_ratio := clampf(cell.current_resources / maxf(1.0, cell.carrying_capacity), 0.0, 1.0)
 	_add_milestone_bar(
 		hud._hex_sheet_vbox,
-		EvoStardewStyle.tr_text(hud._lang, "🌾 Biomasa Disponible (R)", "🌾 Available Biomass (R)"),
+		EvoUiStyle.tr_text(hud._lang, "🌾 Biomasa Disponible (R)", "🌾 Available Biomass (R)"),
 		"%.0f / %.0f" % [cell.current_resources, cell.carrying_capacity],
 		r_ratio * 100.0,
-		EvoStardewStyle.COLOR_GOLD_BEVEL
+		EvoUiStyle.COLOR_GOLD_BEVEL
 	)
 
 	var k_ratio := clampf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
-	var h_col := EvoStardewStyle.COLOR_GREEN_OK
+	var h_col := EvoUiStyle.COLOR_GREEN_OK
 	if k_ratio < 0.60:
-		h_col = EvoStardewStyle.COLOR_RED_DANGER
+		h_col = EvoUiStyle.COLOR_RED_DANGER
 	elif k_ratio < 0.85:
-		h_col = EvoStardewStyle.COLOR_AMBER_WARN
+		h_col = EvoUiStyle.COLOR_AMBER_WARN
 
 	_add_milestone_bar(
 		hud._hex_sheet_vbox,
-		EvoStardewStyle.tr_text(hud._lang, "💚 Salud Ecológica (K / Kmax)", "💚 Ecological Health (K / Kmax)"),
+		EvoUiStyle.tr_text(hud._lang, "💚 Salud Ecológica (K / Kmax)", "💚 Ecological Health (K / Kmax)"),
 		"%.0f / %.0f (%d%%)" % [cell.carrying_capacity, cell.carrying_capacity_max, int(round(k_ratio * 100.0))],
 		k_ratio * 100.0,
 		h_col
@@ -576,7 +576,7 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 				coord_s = "(%s)" % od_dis.hex_id
 			var age_val := int(dis.get("age", 0))
 			if age_val > 0:
-				full_s = EvoStardewStyle.tr_text(lang, "%s (hace %d gen.)" % [full_s, age_val], "%s (%d gen. ago)" % [full_s, age_val])
+				full_s = EvoUiStyle.tr_text(lang, "%s (hace %d gen.)" % [full_s, age_val], "%s (%d gen. ago)" % [full_s, age_val])
 			if not sev_full.has(full_s):
 				sev_full.append(full_s)
 				sev_short.append(short_s)
@@ -637,7 +637,7 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 			lines.append(neigh_line)
 
 	if lines.is_empty():
-		lines.append(EvoStardewStyle.tr_text(lang, "🏞️ Sin caminos exteriores activos (aldea aislada)", "🏞️ No active outer roads (isolated village)"))
+		lines.append(EvoUiStyle.tr_text(lang, "🏞️ Sin caminos exteriores activos (aldea aislada)", "🏞️ No active outer roads (isolated village)"))
 	return lines
 
 
@@ -672,17 +672,17 @@ static func _format_relation_category(
 	if n == 0:
 		return ""
 	if n == 1:
-		return EvoStardewStyle.tr_text(lang, single_es % full_list[0], single_en % full_list[0])
+		return EvoUiStyle.tr_text(lang, single_es % full_list[0], single_en % full_list[0])
 	if n == 2:
 		var joined_two := ", ".join(short_list)
-		return EvoStardewStyle.tr_text(lang, multi_es % [n, joined_two], multi_en % [n, joined_two])
+		return EvoUiStyle.tr_text(lang, multi_es % [n, joined_two], multi_en % [n, joined_two])
 	var shown: Array[String] = []
 	for i in range(mini(4, n)):
 		shown.append(coord_list[i])
 	if n > 4:
-		shown.append(EvoStardewStyle.tr_text(lang, "+%d más" % (n - 4), "+%d more" % (n - 4)))
+		shown.append(EvoUiStyle.tr_text(lang, "+%d más" % (n - 4), "+%d more" % (n - 4)))
 	var joined_many := ", ".join(shown)
-	return EvoStardewStyle.tr_text(lang, multi_es % [n, joined_many], multi_en % [n, joined_many])
+	return EvoUiStyle.tr_text(lang, multi_es % [n, joined_many], multi_en % [n, joined_many])
 
 
 static func _make_trait_tag(world_state: EvoTypes.WorldState, trait_id: String, is_cultural: bool) -> Control:
@@ -698,8 +698,8 @@ static func _make_trait_tag(world_state: EvoTypes.WorldState, trait_id: String, 
 			v.spatial_mobility, v.social_cohesion, v.transmission_threshold
 		]
 	var badge := PanelContainer.new()
-	var col := EvoStardewStyle.COLOR_PURPLE_CULTURE if is_cultural else Color("#0d9488")
-	badge.add_theme_stylebox_override("panel", EvoStardewStyle.make_badge_style(col))
+	var col := EvoUiStyle.COLOR_PURPLE_CULTURE if is_cultural else Color("#0d9488")
+	badge.add_theme_stylebox_override("panel", EvoUiStyle.make_badge_style(col))
 	badge.tooltip_text = tip
 
 	var lbl := Label.new()
@@ -739,7 +739,7 @@ static func _add_milestone_bar(parent: VBoxContainer, label_str: String, right_s
 	bar.value = pct
 	bar.show_percentage = false
 	bar.custom_minimum_size = Vector2(0, 9)
-	EvoStardewStyle.style_progress_bar(bar, fill_col)
+	EvoUiStyle.style_progress_bar(bar, fill_col)
 	vb.add_child(bar)
 
 
@@ -751,7 +751,7 @@ static func _add_sheet_kv(parent: VBoxContainer, k_str: String, v_str: String) -
 	var kl := Label.new()
 	kl.text = k_str
 	kl.add_theme_font_size_override("font_size", 11)
-	kl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+	kl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	hb.add_child(kl)
 
 	var vl := Label.new()
@@ -760,5 +760,5 @@ static func _add_sheet_kv(parent: VBoxContainer, k_str: String, v_str: String) -
 	vl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	vl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	vl.add_theme_font_size_override("font_size", 11)
-	vl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
+	vl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 	hb.add_child(vl)

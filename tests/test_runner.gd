@@ -242,7 +242,7 @@ func _test_25_generations_all_presets() -> void:
 
 
 func _test_main_scene_and_ui_integration() -> void:
-	print("-- Testing Main Scene, WorldRenderer & Stardew UI Integration --")
+	print("-- Testing Main Scene, WorldRenderer & UI Integration --")
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	_assert(packed != null, "res://scenes/main.tscn loads as PackedScene")
 	var main: EvoMainController = packed.instantiate() as EvoMainController

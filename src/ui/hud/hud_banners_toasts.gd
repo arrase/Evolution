@@ -15,7 +15,7 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	hud._milestone_banner.offset_top = 12
 	hud._milestone_banner.offset_bottom = 92
 	hud._milestone_banner.z_index = 25
-	var banner_style := EvoStardewStyle.make_parchment_card(Color("#fef3c7"), EvoStardewStyle.COLOR_GOLD_BRIGHT, 8)
+	var banner_style := EvoUiStyle.make_parchment_card(Color("#fef3c7"), EvoUiStyle.COLOR_GOLD_BRIGHT, 8)
 	banner_style.border_width_left = 4
 	banner_style.border_width_right = 4
 	banner_style.border_width_top = 3
@@ -34,13 +34,13 @@ static func build_banners_and_toasts(hud: Control) -> void:
 
 	hud._banner_title_lbl = Label.new()
 	hud._banner_title_lbl.add_theme_font_size_override("font_size", 14)
-	hud._banner_title_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	hud._banner_title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._banner_title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	b_vbox.add_child(hud._banner_title_lbl)
 
 	hud._banner_summary_lbl = Label.new()
 	hud._banner_summary_lbl.add_theme_font_size_override("font_size", 11)
-	hud._banner_summary_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+	hud._banner_summary_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	hud._banner_summary_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	b_vbox.add_child(hud._banner_summary_lbl)
 
@@ -49,7 +49,7 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	close_banner_btn.pressed.connect(func() -> void: hud._milestone_banner.visible = false)
 	b_hbox.add_child(close_banner_btn)
 
-	# Bottom-Left Chronicle Toast Stack (Stardew item pickup notification style)
+	# Bottom-Left Chronicle Toast Stack
 	hud._toast_vbox = VBoxContainer.new()
 	hud._toast_vbox.anchor_left = 0.0
 	hud._toast_vbox.anchor_right = 0.0
@@ -75,7 +75,7 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	hud._first_steps_panel.offset_right = 278
 	hud._first_steps_panel.offset_top = -88
 	hud._first_steps_panel.offset_bottom = -8
-	hud._first_steps_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(5))
+	hud._first_steps_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(5))
 	hud.add_child(hud._first_steps_panel)
 
 	var fs_hbox := HBoxContainer.new()
@@ -117,11 +117,11 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	hud._missing_models_modal.offset_top = -115
 	hud._missing_models_modal.offset_bottom = 115
 	hud._missing_models_modal.z_index = 60
-	hud._missing_models_modal.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(8))
+	hud._missing_models_modal.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(8))
 	hud.add_child(hud._missing_models_modal)
 
 	var mm_inner := PanelContainer.new()
-	mm_inner.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(10, false))
+	mm_inner.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(10, false))
 	hud._missing_models_modal.add_child(mm_inner)
 
 	var mm_vbox := VBoxContainer.new()
@@ -130,13 +130,13 @@ static func build_banners_and_toasts(hud: Control) -> void:
 
 	hud._missing_models_title_lbl = Label.new()
 	hud._missing_models_title_lbl.add_theme_font_size_override("font_size", 14)
-	hud._missing_models_title_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	hud._missing_models_title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._missing_models_title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	mm_vbox.add_child(hud._missing_models_title_lbl)
 
 	hud._missing_models_desc_lbl = Label.new()
 	hud._missing_models_desc_lbl.add_theme_font_size_override("font_size", 11)
-	hud._missing_models_desc_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
+	hud._missing_models_desc_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 	hud._missing_models_desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	mm_vbox.add_child(hud._missing_models_desc_lbl)
 
@@ -147,13 +147,13 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	hud._missing_models_progress_bar.value = 0.0
 	hud._missing_models_progress_bar.show_percentage = true
 	hud._missing_models_progress_bar.custom_minimum_size = Vector2(0, 16)
-	EvoStardewStyle.style_progress_bar(hud._missing_models_progress_bar, EvoStardewStyle.COLOR_GREEN_OK)
+	EvoUiStyle.style_progress_bar(hud._missing_models_progress_bar, EvoUiStyle.COLOR_GREEN_OK)
 	mm_vbox.add_child(hud._missing_models_progress_bar)
 
 	hud._missing_models_status_lbl = Label.new()
 	hud._missing_models_status_lbl.visible = false
 	hud._missing_models_status_lbl.add_theme_font_size_override("font_size", 11)
-	hud._missing_models_status_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+	hud._missing_models_status_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	hud._missing_models_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	mm_vbox.add_child(hud._missing_models_status_lbl)
 
@@ -175,12 +175,12 @@ static func show_missing_models_popup(hud: Control, missing_models: Array) -> vo
 	if hud._missing_models_modal == null or missing_models.is_empty():
 		return
 	var models_str := ", ".join(PackedStringArray(missing_models))
-	hud._missing_models_title_lbl.text = EvoStardewStyle.tr_text(
+	hud._missing_models_title_lbl.text = EvoUiStyle.tr_text(
 		hud._lang,
 		"⬇️ Modelos de Decisión No Descargados",
 		"⬇️ Missing Decision Models"
 	)
-	hud._missing_models_desc_lbl.text = EvoStardewStyle.tr_text(
+	hud._missing_models_desc_lbl.text = EvoUiStyle.tr_text(
 		hud._lang,
 		"Los siguientes modelos de decisión configurados no están descargados en Ollama:\n• %s\n\n¿Deseas descargarlos automáticamente antes de continuar?" % models_str,
 		"The following configured decision models are not downloaded in Ollama:\n• %s\n\nWould you like to download them automatically before continuing?" % models_str
@@ -189,12 +189,12 @@ static func show_missing_models_popup(hud: Control, missing_models: Array) -> vo
 	hud._missing_models_progress_bar.value = 0.0
 	hud._missing_models_status_lbl.visible = false
 	hud._missing_models_download_btn.disabled = false
-	hud._missing_models_download_btn.text = EvoStardewStyle.tr_text(
+	hud._missing_models_download_btn.text = EvoUiStyle.tr_text(
 		hud._lang,
 		"⬇️ Descargar automáticamente",
 		"⬇️ Download automatically"
 	)
-	hud._missing_models_skip_btn.text = EvoStardewStyle.tr_text(
+	hud._missing_models_skip_btn.text = EvoUiStyle.tr_text(
 		hud._lang,
 		"Continuar sin descargar",
 		"Continue without downloading"
@@ -239,7 +239,7 @@ static func push_chronicle_toast(hud: Control, entry: EvoTypes.ChronicleEntry) -
 
 	var header_text := "G%d · %s · 📍(%s)" % [
 		entry.generation,
-		EvoStardewStyle.get_event_type_label(entry.event_type, hud._lang),
+		EvoUiStyle.get_event_type_label(entry.event_type, hud._lang),
 		entry.hex_id
 	]
 	var body_text := _clean_toast_title(entry.title)
@@ -260,13 +260,13 @@ static func push_chronicle_toast(hud: Control, entry: EvoTypes.ChronicleEntry) -
 		hud._toast_vbox.remove_child(oldest)
 		oldest.queue_free()
 
-	var ev_color := EvoStardewStyle.get_event_type_color(entry.event_type)
+	var ev_color := EvoUiStyle.get_event_type_color(entry.event_type)
 	var toast := PanelContainer.new()
 	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	toast.set_meta("ttl", 3.8)
 	toast.set_meta("generation", entry.generation)
 	toast.set_meta("event_type", entry.event_type)
-	var style := EvoStardewStyle.make_parchment_card(Color("#fbf2de"), ev_color, 5)
+	var style := EvoUiStyle.make_parchment_card(Color("#fbf2de"), ev_color, 5)
 	style.border_width_left = 4
 	toast.add_theme_stylebox_override("panel", style)
 
@@ -286,7 +286,7 @@ static func push_chronicle_toast(hud: Control, entry: EvoTypes.ChronicleEntry) -
 	title_lbl.max_lines_visible = 2
 	title_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	title_lbl.add_theme_font_size_override("font_size", 11)
-	title_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
+	title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 	vbox.add_child(title_lbl)
 
 	toast.set_meta("top_lbl", top_lbl)
@@ -301,10 +301,10 @@ static func update_first_steps_labels(hud: Control) -> void:
 	var c2 := "☑" if hud._step_2_done else "☐"
 	var c3 := "☑" if hud._step_3_done else "☐"
 
-	hud._step1_lbl.text = EvoStardewStyle.tr_text(hud._lang, "%s 1. Seleccionar aldea" % c1, "%s 1. Select village" % c1)
-	hud._step2_lbl.text = EvoStardewStyle.tr_text(hud._lang, "%s 2. Usar herramienta (1-0)" % c2, "%s 2. Use tool (1-0)" % c2)
-	hud._step3_lbl.text = EvoStardewStyle.tr_text(hud._lang, "%s 3. Avanzar generación" % c3, "%s 3. Advance generation" % c3)
+	hud._step1_lbl.text = EvoUiStyle.tr_text(hud._lang, "%s 1. Seleccionar aldea" % c1, "%s 1. Select village" % c1)
+	hud._step2_lbl.text = EvoUiStyle.tr_text(hud._lang, "%s 2. Usar herramienta (1-0)" % c2, "%s 2. Use tool (1-0)" % c2)
+	hud._step3_lbl.text = EvoUiStyle.tr_text(hud._lang, "%s 3. Avanzar generación" % c3, "%s 3. Advance generation" % c3)
 
-	hud._step1_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT if hud._step_1_done else EvoStardewStyle.COLOR_CREAM_TEXT)
-	hud._step2_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT if hud._step_2_done else EvoStardewStyle.COLOR_CREAM_TEXT)
-	hud._step3_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT if hud._step_3_done else EvoStardewStyle.COLOR_CREAM_TEXT)
+	hud._step1_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT if hud._step_1_done else EvoUiStyle.COLOR_CREAM_TEXT)
+	hud._step2_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT if hud._step_2_done else EvoUiStyle.COLOR_CREAM_TEXT)
+	hud._step3_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT if hud._step_3_done else EvoUiStyle.COLOR_CREAM_TEXT)

@@ -30,7 +30,7 @@ func _ready() -> void:
 	if _title_label != null:
 		return
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	theme = EvoStardewStyle.get_theme()
+	theme = EvoUiStyle.get_theme()
 	_build_ui()
 
 
@@ -54,7 +54,7 @@ func _build_ui() -> void:
 
 	var book_frame := PanelContainer.new()
 	book_frame.custom_minimum_size = Vector2(920, 620)
-	book_frame.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(14))
+	book_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(14))
 	center.add_child(book_frame)
 
 	var main_vbox := VBoxContainer.new()
@@ -63,7 +63,7 @@ func _build_ui() -> void:
 
 	# Header bar
 	var header_panel := PanelContainer.new()
-	header_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_header_box(12, 8))
+	header_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_header_box(12, 8))
 	main_vbox.add_child(header_panel)
 
 	var header_hbox := HBoxContainer.new()
@@ -71,13 +71,13 @@ func _build_ui() -> void:
 	header_panel.add_child(header_hbox)
 
 	_title_label = Label.new()
-	_title_label.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT)
+	_title_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
 	_title_label.add_theme_font_size_override("font_size", 18)
 	_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header_hbox.add_child(_title_label)
 
 	_count_label = Label.new()
-	_count_label.add_theme_color_override("font_color", EvoStardewStyle.COLOR_CREAM_TEXT)
+	_count_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_CREAM_TEXT)
 	_count_label.add_theme_font_size_override("font_size", 13)
 	header_hbox.add_child(_count_label)
 
@@ -87,7 +87,7 @@ func _build_ui() -> void:
 
 	# Filter strip
 	var filter_panel := PanelContainer.new()
-	filter_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(8, true))
+	filter_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(8, true))
 	main_vbox.add_child(filter_panel)
 
 	var filter_flow := HFlowContainer.new()
@@ -104,7 +104,7 @@ func _build_ui() -> void:
 	# Parchment page body
 	var page_panel := PanelContainer.new()
 	page_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	page_panel.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(12, false))
+	page_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(12, false))
 	main_vbox.add_child(page_panel)
 
 	var scroll := ScrollContainer.new()
@@ -157,12 +157,12 @@ func close_modal() -> void:
 func _update_labels() -> void:
 	if _title_label == null:
 		return
-	_title_label.text = EvoStardewStyle.tr_text(
+	_title_label.text = EvoUiStyle.tr_text(
 		_lang,
 		"📖 Cuaderno del Naturalista — Crónica Evolutiva",
 		"📖 Naturalist's Notebook — Evolutionary Chronicle"
 	)
-	_close_btn.text = EvoStardewStyle.tr_text(_lang, "✕ Cerrar", "✕ Close")
+	_close_btn.text = EvoUiStyle.tr_text(_lang, "✕ Cerrar", "✕ Close")
 	_update_filter_buttons()
 
 
@@ -170,8 +170,8 @@ func _update_filter_buttons() -> void:
 	for f_key in FILTER_KEYS:
 		if _filter_buttons.has(f_key):
 			var btn: Button = _filter_buttons[f_key]
-			btn.text = EvoStardewStyle.get_event_type_label(f_key, _lang)
-			EvoStardewStyle.apply_button_active(btn, _active_filter == f_key)
+			btn.text = EvoUiStyle.get_event_type_label(f_key, _lang)
+			EvoUiStyle.apply_button_active(btn, _active_filter == f_key)
 
 
 func _rebuild_entries() -> void:
@@ -190,7 +190,7 @@ func _rebuild_entries() -> void:
 		if _active_filter == "all" or entry.event_type == _active_filter:
 			filtered.append(entry)
 
-	_count_label.text = EvoStardewStyle.tr_text(
+	_count_label.text = EvoUiStyle.tr_text(
 		_lang,
 		"%d entradas" % filtered.size(),
 		"%d entries" % filtered.size()
@@ -198,12 +198,12 @@ func _rebuild_entries() -> void:
 
 	if filtered.is_empty():
 		var empty_lbl := Label.new()
-		empty_lbl.text = EvoStardewStyle.tr_text(
+		empty_lbl.text = EvoUiStyle.tr_text(
 			_lang,
 			"No hay registros en el cuaderno para el filtro seleccionado.",
 			"No chronicle entries found for the selected filter."
 		)
-		empty_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+		empty_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 		empty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty_lbl.custom_minimum_size = Vector2(0, 80)
 		empty_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -216,9 +216,9 @@ func _rebuild_entries() -> void:
 
 
 func _create_entry_card(entry: EvoTypes.ChronicleEntry) -> Control:
-	var ev_color := EvoStardewStyle.get_event_type_color(entry.event_type)
+	var ev_color := EvoUiStyle.get_event_type_color(entry.event_type)
 	var card := PanelContainer.new()
-	var card_style := EvoStardewStyle.make_parchment_card(Color("#fbf2de"), ev_color.lerp(EvoStardewStyle.COLOR_PARCHMENT_BORDER, 0.45), 10)
+	var card_style := EvoUiStyle.make_parchment_card(Color("#fbf2de"), ev_color.lerp(EvoUiStyle.COLOR_PARCHMENT_BORDER, 0.45), 10)
 	card_style.border_width_left = 6
 	card.add_theme_stylebox_override("panel", card_style)
 
@@ -231,28 +231,28 @@ func _create_entry_card(entry: EvoTypes.ChronicleEntry) -> Control:
 	vbox.add_child(top_hbox)
 
 	var badge := PanelContainer.new()
-	badge.add_theme_stylebox_override("panel", EvoStardewStyle.make_badge_style(ev_color))
+	badge.add_theme_stylebox_override("panel", EvoUiStyle.make_badge_style(ev_color))
 	top_hbox.add_child(badge)
 
 	var badge_lbl := Label.new()
-	badge_lbl.text = EvoStardewStyle.get_event_type_label(entry.event_type, _lang)
+	badge_lbl.text = EvoUiStyle.get_event_type_label(entry.event_type, _lang)
 	badge_lbl.add_theme_color_override("font_color", Color.WHITE)
 	badge_lbl.add_theme_font_size_override("font_size", 11)
 	badge.add_child(badge_lbl)
 
 	var gen_badge := PanelContainer.new()
-	gen_badge.add_theme_stylebox_override("panel", EvoStardewStyle.make_badge_style(EvoStardewStyle.COLOR_WOOD_BG, EvoStardewStyle.COLOR_GOLD_BEVEL))
+	gen_badge.add_theme_stylebox_override("panel", EvoUiStyle.make_badge_style(EvoUiStyle.COLOR_WOOD_BG, EvoUiStyle.COLOR_GOLD_BEVEL))
 	top_hbox.add_child(gen_badge)
 
 	var gen_lbl := Label.new()
 	gen_lbl.text = "G%d" % entry.generation
-	gen_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_GOLD_TEXT)
+	gen_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
 	gen_lbl.add_theme_font_size_override("font_size", 11)
 	gen_badge.add_child(gen_lbl)
 
 	var hex_lbl := Label.new()
 	hex_lbl.text = "Hex (%s)" % entry.hex_id
-	hex_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+	hex_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	hex_lbl.add_theme_font_size_override("font_size", 12)
 	top_hbox.add_child(hex_lbl)
 
@@ -261,21 +261,21 @@ func _create_entry_card(entry: EvoTypes.ChronicleEntry) -> Control:
 	top_hbox.add_child(spacer)
 
 	var jump_btn := Button.new()
-	jump_btn.text = EvoStardewStyle.tr_text(_lang, "📍 Ver en el mapa", "📍 View on map")
+	jump_btn.text = EvoUiStyle.tr_text(_lang, "📍 Ver en el mapa", "📍 View on map")
 	jump_btn.pressed.connect(_on_jump_pressed.bind(entry.hex_id, entry.deme_id))
 	top_hbox.add_child(jump_btn)
 
 	var title_lbl := Label.new()
 	title_lbl.text = entry.title
 	title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
+	title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 	title_lbl.add_theme_font_size_override("font_size", 15)
 	vbox.add_child(title_lbl)
 
 	var desc_lbl := Label.new()
 	desc_lbl.text = entry.causal_explanation
 	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+	desc_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	desc_lbl.add_theme_font_size_override("font_size", 13)
 	vbox.add_child(desc_lbl)
 

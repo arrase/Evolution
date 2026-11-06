@@ -1,4 +1,4 @@
-class_name EvoStardewStyle
+class_name EvoUiStyle
 extends RefCounted
 
 const COLOR_WOOD_BG := Color("#5c3218")
@@ -623,7 +623,7 @@ static func _draw_custom_ui_pixel_icon(icon_key: String) -> Image:
 				img.set_pixel(px, py, Color("#cbd5e1"))
 				img.set_pixel(px, min(19, py + 1), Color("#64748b"))
 		"slot_enrich":
-			# Golden Stardew watering can + water drops
+			# Golden watering can + water drops
 			for y in range(8, 16):
 				for x in range(6, 15):
 					img.set_pixel(x, y, Color("#fbbf24") if y < 12 else Color("#d97706"))
