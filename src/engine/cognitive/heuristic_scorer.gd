@@ -1,23 +1,25 @@
 class_name EvoHeuristicScorer
 extends RefCounted
 
-const DEFAULT_SYSTEM_ONE_MODEL: String = "d3:4b"
-const SECONDARY_SYSTEM_ONE_MODEL: String = "tev1:4b"
+const DEFAULT_SYSTEM_ONE_MODEL: String = EvoUserSettings.DEFAULT_PRIMARY_MODEL
+const SECONDARY_SYSTEM_ONE_MODEL: String = EvoUserSettings.DEFAULT_SECONDARY_MODEL
 
 
 static func resolve_deme_decision_model_tag(
 	deme_id: String,
-	primary_tag: String = DEFAULT_SYSTEM_ONE_MODEL,
-	secondary_tag: String = SECONDARY_SYSTEM_ONE_MODEL
+	primary_tag: String = "",
+	secondary_tag: String = ""
 ) -> String:
+	var p_tag := primary_tag if primary_tag != "" else EvoUserSettings.primary_model
+	var s_tag := secondary_tag if secondary_tag != "" else EvoUserSettings.secondary_model
 	if deme_id in ["deme-rift-west", "deme-island-1", "deme-island-3", "deme-darwin-founder"]:
-		return primary_tag
+		return p_tag
 	if deme_id in ["deme-rift-east", "deme-island-2"]:
-		return secondary_tag
+		return s_tag
 	var h: int = 0
 	for i in range(deme_id.length()):
 		h = (h * 31 + deme_id.unicode_at(i)) & 0x7FFFFFFF
-	return primary_tag if (h % 2 == 0) else secondary_tag
+	return p_tag if (h % 2 == 0) else s_tag
 
 
 static func is_decision_eligible(deme: EvoTypes.Deme, dec: EvoTypes.DecisionDef) -> bool:
@@ -379,7 +381,7 @@ static func evaluate_deme_heuristic(
 	state: EvoTypes.WorldState,
 	lang: String = "es"
 ) -> Dictionary:
-	if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == DEFAULT_SYSTEM_ONE_MODEL):
+	if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == EvoUserSettings.primary_model):
 		deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
 
 	if not state.cells.has(deme.hex_id):
@@ -442,7 +444,7 @@ static func evaluate_deme_heuristic(
 		or current_cell.humidity <= 0.50
 	)
 
-	var is_secondary_model := deme.decision_model_tag == SECONDARY_SYSTEM_ONE_MODEL
+	var is_secondary_model := deme.decision_model_tag == EvoUserSettings.secondary_model
 	var base_weights: Dictionary = {}
 	var active_branch: String = "stable_forest"
 

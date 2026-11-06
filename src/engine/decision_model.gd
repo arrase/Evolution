@@ -9,10 +9,18 @@ const SECONDARY_SYSTEM_ONE_MODEL: String = EvoHeuristicScorer.SECONDARY_SYSTEM_O
 
 static func resolve_deme_decision_model_tag(
 	deme_id: String,
-	primary_tag: String = DEFAULT_SYSTEM_ONE_MODEL,
-	secondary_tag: String = SECONDARY_SYSTEM_ONE_MODEL
+	primary_tag: String = "",
+	secondary_tag: String = ""
 ) -> String:
 	return EvoHeuristicScorer.resolve_deme_decision_model_tag(deme_id, primary_tag, secondary_tag)
+
+
+static func reassign_world_models(state: EvoTypes.WorldState) -> void:
+	if state == null:
+		return
+	for deme_id in state.demes.keys():
+		var deme: EvoTypes.Deme = state.demes[deme_id]
+		deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
 
 
 static func check_ollama_status(force_refresh: bool = false) -> Dictionary:
@@ -85,7 +93,7 @@ static func evaluate_deme(
 	state: EvoTypes.WorldState,
 	lang: String = "es"
 ) -> Dictionary:
-	if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == DEFAULT_SYSTEM_ONE_MODEL):
+	if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == EvoUserSettings.primary_model):
 		deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
 
 	if not state.cells.has(deme.hex_id):
@@ -130,7 +138,7 @@ static func evaluate_all_demes(state: EvoTypes.WorldState, lang: String = "es") 
 	var buckets: Dictionary = {}
 	for deme_id in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[deme_id]
-		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == DEFAULT_SYSTEM_ONE_MODEL):
+		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == EvoUserSettings.primary_model):
 			deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
 		var sig := compute_deme_evaluation_signature(deme, state)
 		deme.set_meta("eval_sig", sig)
@@ -205,7 +213,7 @@ static func prefetch_for_state(state: EvoTypes.WorldState) -> void:
 	var reps_by_sig: Dictionary = {}
 	for deme_id in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[deme_id]
-		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == DEFAULT_SYSTEM_ONE_MODEL):
+		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == EvoUserSettings.primary_model):
 			deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
 		var sig := compute_deme_evaluation_signature(deme, state)
 		deme.set_meta("eval_sig", sig)

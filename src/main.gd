@@ -21,6 +21,9 @@ var _last_model_revision: int = 0
 func _ready() -> void:
 	if camera != null:
 		return
+	EvoUserSettings.load_settings()
+	EvoDecisionModel.check_ollama_status(true)
+
 	camera = EvoCameraController.new()
 	camera.name = "CameraController"
 	add_child(camera)
@@ -83,7 +86,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		hud.set_playing_state(is_playing)
 		get_viewport().set_input_as_handled()
 	elif ke.keycode == KEY_ESCAPE:
-		if hud.notebook_modal != null and hud.notebook_modal.visible:
+		if hud._missing_models_modal != null and hud._missing_models_modal.visible:
+			hud._on_missing_models_skip_pressed()
+		elif hud._settings_popup != null and hud._settings_popup.visible:
+			hud._settings_popup.visible = false
+		elif hud.notebook_modal != null and hud.notebook_modal.visible:
 			hud.notebook_modal.visible = false
 		elif hud.tree_modal != null and hud.tree_modal.visible:
 			hud.tree_modal.visible = false
@@ -106,6 +113,7 @@ func _connect_signals() -> void:
 	hud.speed_changed.connect(_on_speed_changed)
 	hud.language_changed.connect(_on_language_changed)
 	hud.settings_changed.connect(_on_settings_changed)
+	hud.decision_models_changed.connect(_on_decision_models_changed)
 	hud.camera_preset_requested.connect(_on_camera_preset_requested)
 	hud.tool_changed.connect(_on_tool_changed)
 	hud.sea_level_change_requested.connect(_on_sea_level_change_requested)
@@ -259,6 +267,12 @@ func _on_settings_changed(auto_pause: bool, unlimited_pressure: bool, free_sandb
 		world_state.unlimited_pressure_mode = unlimited_pressure
 		world_state.free_sandbox_mode = free_sandbox
 		hud.refresh(world_state)
+
+
+func _on_decision_models_changed() -> void:
+	if world_renderer != null:
+		world_renderer.refresh_village_decisions()
+		world_renderer.refresh()
 
 
 func _on_camera_preset_requested(action: String, value: float) -> void:

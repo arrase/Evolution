@@ -92,6 +92,12 @@ static func build_theme() -> Theme:
 	theme.set_color("font_color", "Label", COLOR_INK)
 	theme.set_font_size("font_size", "Label", 12)
 
+	var tooltip_box := make_parchment_card(Color("#fff9eb"), COLOR_GOLD_BEVEL, 8)
+	tooltip_box.set_border_width_all(2)
+	theme.set_stylebox("panel", "TooltipPanel", tooltip_box)
+	theme.set_color("font_color", "TooltipLabel", COLOR_WOOD_DARK)
+	theme.set_font_size("font_size", "TooltipLabel", 12)
+
 	theme.set_stylebox("panel", "PanelContainer", make_parchment_panel())
 	theme.set_stylebox("panel", "PopupMenu", make_wood_frame_box())
 	theme.set_color("font_color", "PopupMenu", COLOR_CREAM_TEXT)
@@ -638,6 +644,28 @@ static func _draw_custom_ui_pixel_icon(icon_key: String) -> Image:
 			for y in range(11, 17):
 				img.set_pixel(8, y, Color("#78350f"))
 				img.set_pixel(9, y, Color("#92400e"))
+		"settings_gear":
+			var c := Vector2(9.5, 9.5)
+			var dark_edge := Color("#2b1608")
+			var metal_dark := Color("#57534e")
+			var metal_mid := Color("#78716c")
+			var metal_light := Color("#d6d3d1")
+			for y in range(1, 19):
+				for x in range(1, 19):
+					var p := Vector2(float(x), float(y)) - c
+					var r := p.length()
+					var ang := atan2(p.y, p.x)
+					var tooth := cos(ang * 8.0)
+					var outer_r := 6.6 + (1.7 if tooth > 0.35 else 0.0)
+					if r >= 2.6 and r <= outer_r:
+						if r <= 3.6 or r >= outer_r - 0.95:
+							img.set_pixel(x, y, dark_edge)
+						elif p.x + p.y < -1.0:
+							img.set_pixel(x, y, metal_light)
+						elif p.x + p.y > 2.0:
+							img.set_pixel(x, y, metal_dark)
+						else:
+							img.set_pixel(x, y, metal_mid)
 		_:
 			var primary := Color("#3b82f6") if icon_key == "ocean" else COLOR_GOLD_BEVEL
 			var accent := Color("#1e3a8a") if icon_key == "ocean" else COLOR_PARCHMENT

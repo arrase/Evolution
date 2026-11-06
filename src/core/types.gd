@@ -271,7 +271,7 @@ class Deme extends RefCounted:
 	var baldwin_counters: Dictionary = {} # String -> int
 	var innovation_counter: float = 0.0
 	var isolation_turns: int = 0
-	var decision_model_tag: String = "d3:4b"
+	var decision_model_tag: String = EvoUserSettings.primary_model
 	var last_confidence: float = 0.85
 	var last_decision_probabilities: Dictionary = {} # String -> float
 	var last_dominant_decision_id: String = "dec-conservative-forage"
@@ -368,7 +368,7 @@ class Deme extends RefCounted:
 		d.baldwin_counters = dict_data["baldwinCounters"].duplicate()
 		d.innovation_counter = float(dict_data["innovationCounter"])
 		d.isolation_turns = int(dict_data["isolationTurns"])
-		d.decision_model_tag = str(dict_data["decisionModelTag"]) if dict_data.has("decisionModelTag") else "d3:4b"
+		d.decision_model_tag = str(dict_data["decisionModelTag"]) if dict_data.has("decisionModelTag") else EvoUserSettings.primary_model
 		d.last_confidence = float(dict_data["lastConfidence"]) if dict_data.has("lastConfidence") else 0.85
 		d.last_decision_probabilities = dict_data["lastDecisionProbabilities"].duplicate()
 		d.last_dominant_decision_id = str(dict_data["lastDominantDecisionId"])

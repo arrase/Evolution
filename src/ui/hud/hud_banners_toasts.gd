@@ -105,6 +105,102 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	hide_fs_btn.pressed.connect(func() -> void: hud._first_steps_panel.visible = false)
 	fs_hbox.add_child(hide_fs_btn)
 
+	# Startup Missing Decision Models Download Popup
+	hud._missing_models_modal = PanelContainer.new()
+	hud._missing_models_modal.visible = false
+	hud._missing_models_modal.anchor_left = 0.5
+	hud._missing_models_modal.anchor_right = 0.5
+	hud._missing_models_modal.anchor_top = 0.5
+	hud._missing_models_modal.anchor_bottom = 0.5
+	hud._missing_models_modal.offset_left = -230
+	hud._missing_models_modal.offset_right = 230
+	hud._missing_models_modal.offset_top = -115
+	hud._missing_models_modal.offset_bottom = 115
+	hud._missing_models_modal.z_index = 60
+	hud._missing_models_modal.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(8))
+	hud.add_child(hud._missing_models_modal)
+
+	var mm_inner := PanelContainer.new()
+	mm_inner.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_panel(10, false))
+	hud._missing_models_modal.add_child(mm_inner)
+
+	var mm_vbox := VBoxContainer.new()
+	mm_vbox.add_theme_constant_override("separation", 8)
+	mm_inner.add_child(mm_vbox)
+
+	hud._missing_models_title_lbl = Label.new()
+	hud._missing_models_title_lbl.add_theme_font_size_override("font_size", 14)
+	hud._missing_models_title_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	hud._missing_models_title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mm_vbox.add_child(hud._missing_models_title_lbl)
+
+	hud._missing_models_desc_lbl = Label.new()
+	hud._missing_models_desc_lbl.add_theme_font_size_override("font_size", 11)
+	hud._missing_models_desc_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_INK)
+	hud._missing_models_desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mm_vbox.add_child(hud._missing_models_desc_lbl)
+
+	hud._missing_models_progress_bar = ProgressBar.new()
+	hud._missing_models_progress_bar.visible = false
+	hud._missing_models_progress_bar.min_value = 0.0
+	hud._missing_models_progress_bar.max_value = 100.0
+	hud._missing_models_progress_bar.value = 0.0
+	hud._missing_models_progress_bar.show_percentage = true
+	hud._missing_models_progress_bar.custom_minimum_size = Vector2(0, 16)
+	EvoStardewStyle.style_progress_bar(hud._missing_models_progress_bar, EvoStardewStyle.COLOR_GREEN_OK)
+	mm_vbox.add_child(hud._missing_models_progress_bar)
+
+	hud._missing_models_status_lbl = Label.new()
+	hud._missing_models_status_lbl.visible = false
+	hud._missing_models_status_lbl.add_theme_font_size_override("font_size", 11)
+	hud._missing_models_status_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_SEPIA)
+	hud._missing_models_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	mm_vbox.add_child(hud._missing_models_status_lbl)
+
+	var mm_btns := HBoxContainer.new()
+	mm_btns.alignment = BoxContainer.ALIGNMENT_END
+	mm_btns.add_theme_constant_override("separation", 8)
+	mm_vbox.add_child(mm_btns)
+
+	hud._missing_models_skip_btn = Button.new()
+	hud._missing_models_skip_btn.pressed.connect(hud._on_missing_models_skip_pressed)
+	mm_btns.add_child(hud._missing_models_skip_btn)
+
+	hud._missing_models_download_btn = Button.new()
+	hud._missing_models_download_btn.pressed.connect(hud._on_missing_models_download_pressed)
+	mm_btns.add_child(hud._missing_models_download_btn)
+
+
+static func show_missing_models_popup(hud: Control, missing_models: Array) -> void:
+	if hud._missing_models_modal == null or missing_models.is_empty():
+		return
+	var models_str := ", ".join(PackedStringArray(missing_models))
+	hud._missing_models_title_lbl.text = EvoStardewStyle.tr_text(
+		hud._lang,
+		"⬇️ Modelos de Decisión No Descargados",
+		"⬇️ Missing Decision Models"
+	)
+	hud._missing_models_desc_lbl.text = EvoStardewStyle.tr_text(
+		hud._lang,
+		"Los siguientes modelos de decisión configurados no están descargados en Ollama:\n• %s\n\n¿Deseas descargarlos automáticamente antes de continuar?" % models_str,
+		"The following configured decision models are not downloaded in Ollama:\n• %s\n\nWould you like to download them automatically before continuing?" % models_str
+	)
+	hud._missing_models_progress_bar.visible = false
+	hud._missing_models_progress_bar.value = 0.0
+	hud._missing_models_status_lbl.visible = false
+	hud._missing_models_download_btn.disabled = false
+	hud._missing_models_download_btn.text = EvoStardewStyle.tr_text(
+		hud._lang,
+		"⬇️ Descargar automáticamente",
+		"⬇️ Download automatically"
+	)
+	hud._missing_models_skip_btn.text = EvoStardewStyle.tr_text(
+		hud._lang,
+		"Continuar sin descargar",
+		"Continue without downloading"
+	)
+	hud._missing_models_modal.visible = true
+
 
 static func process_toasts(toast_vbox: VBoxContainer, delta: float) -> void:
 	if toast_vbox == null:

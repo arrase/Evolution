@@ -273,9 +273,9 @@ static func build_top_right_stardew_clock(hud: Control) -> void:
 	time_row.add_child(hud._speed_btn)
 
 	hud._settings_btn = Button.new()
-	hud._settings_btn.text = "⚙️"
+	hud._settings_btn.icon = EvoStardewStyle.get_pixel_icon("settings_gear")
+	hud._settings_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud._settings_btn.custom_minimum_size = Vector2(30, 0)
-	hud._settings_btn.add_theme_font_size_override("font_size", 11)
 	hud._settings_btn.pressed.connect(hud._on_settings_btn_pressed)
 	time_row.add_child(hud._settings_btn)
 
@@ -312,10 +312,10 @@ static func build_settings_popup(hud: Control) -> void:
 	hud._settings_popup.anchor_right = 1.0
 	hud._settings_popup.anchor_top = 0.0
 	hud._settings_popup.anchor_bottom = 0.0
-	hud._settings_popup.offset_left = -718
+	hud._settings_popup.offset_left = -736
 	hud._settings_popup.offset_right = -364
 	hud._settings_popup.offset_top = 10
-	hud._settings_popup.offset_bottom = 330
+	hud._settings_popup.offset_bottom = 450
 	hud._settings_popup.z_index = 30
 	hud._settings_popup.add_theme_stylebox_override("panel", EvoStardewStyle.make_wood_frame_box(8))
 	hud.add_child(hud._settings_popup)
@@ -328,13 +328,13 @@ static func build_settings_popup(hud: Control) -> void:
 	vbox.add_theme_constant_override("separation", 6)
 	inner.add_child(vbox)
 
-	# System 1 Ollama Models Diagnostic Card
+	# System 1 Ollama Models Diagnostic & Selection Card
 	var diag_card := PanelContainer.new()
 	diag_card.add_theme_stylebox_override("panel", EvoStardewStyle.make_parchment_card(Color("#fbf2de"), EvoStardewStyle.COLOR_GOLD_BEVEL, 6))
 	vbox.add_child(diag_card)
 
 	var diag_vbox := VBoxContainer.new()
-	diag_vbox.add_theme_constant_override("separation", 4)
+	diag_vbox.add_theme_constant_override("separation", 5)
 	diag_card.add_child(diag_vbox)
 
 	hud._models_diag_lbl = Label.new()
@@ -343,10 +343,70 @@ static func build_settings_popup(hud: Control) -> void:
 	hud._models_diag_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
 	diag_vbox.add_child(hud._models_diag_lbl)
 
-	hud._live_models_check = CheckBox.new()
-	hud._live_models_check.button_pressed = true
-	hud._live_models_check.toggled.connect(hud._on_live_models_toggled)
-	diag_vbox.add_child(hud._live_models_check)
+	# Primary Decision Model Row
+	var p_row := HBoxContainer.new()
+	p_row.add_theme_constant_override("separation", 6)
+	diag_vbox.add_child(p_row)
+
+	hud._primary_model_lbl = Label.new()
+	hud._primary_model_lbl.custom_minimum_size = Vector2(140, 0)
+	hud._primary_model_lbl.add_theme_font_size_override("font_size", 11)
+	hud._primary_model_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	p_row.add_child(hud._primary_model_lbl)
+
+	hud._primary_model_opt = OptionButton.new()
+	hud._primary_model_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._primary_model_opt.fit_to_longest_item = false
+	hud._primary_model_opt.clip_text = true
+	hud._primary_model_opt.add_theme_font_size_override("font_size", 11)
+	hud._primary_model_opt.item_selected.connect(hud._on_primary_model_selected)
+	p_row.add_child(hud._primary_model_opt)
+
+	# Secondary Decision Model Row
+	var s_row := HBoxContainer.new()
+	s_row.add_theme_constant_override("separation", 6)
+	diag_vbox.add_child(s_row)
+
+	hud._secondary_model_lbl = Label.new()
+	hud._secondary_model_lbl.custom_minimum_size = Vector2(140, 0)
+	hud._secondary_model_lbl.add_theme_font_size_override("font_size", 11)
+	hud._secondary_model_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	s_row.add_child(hud._secondary_model_lbl)
+
+	hud._secondary_model_opt = OptionButton.new()
+	hud._secondary_model_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._secondary_model_opt.fit_to_longest_item = false
+	hud._secondary_model_opt.clip_text = true
+	hud._secondary_model_opt.add_theme_font_size_override("font_size", 11)
+	hud._secondary_model_opt.item_selected.connect(hud._on_secondary_model_selected)
+	s_row.add_child(hud._secondary_model_opt)
+
+	# Context Window Size (Free Input Field)
+	var ctx_row := HBoxContainer.new()
+	ctx_row.add_theme_constant_override("separation", 6)
+	diag_vbox.add_child(ctx_row)
+
+	hud._context_window_lbl = Label.new()
+	hud._context_window_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._context_window_lbl.add_theme_font_size_override("font_size", 11)
+	hud._context_window_lbl.add_theme_color_override("font_color", EvoStardewStyle.COLOR_WOOD_DARK)
+	ctx_row.add_child(hud._context_window_lbl)
+
+	hud._context_window_input = LineEdit.new()
+	hud._context_window_input.custom_minimum_size = Vector2(96, 24)
+	hud._context_window_input.text = str(EvoUserSettings.context_length)
+	hud._context_window_input.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hud._context_window_input.add_theme_font_size_override("font_size", 11)
+	hud._context_window_input.text_submitted.connect(hud._on_context_window_submitted)
+	hud._context_window_input.focus_exited.connect(hud._on_context_window_focus_exited)
+	ctx_row.add_child(hud._context_window_input)
+
+	# Dedicated Full-Width Refresh Models Button
+	hud._refresh_models_btn = Button.new()
+	hud._refresh_models_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._refresh_models_btn.add_theme_font_size_override("font_size", 11)
+	hud._refresh_models_btn.pressed.connect(hud._on_refresh_models_pressed)
+	diag_vbox.add_child(hud._refresh_models_btn)
 
 	# Language Row
 	var lang_row := HBoxContainer.new()
@@ -462,11 +522,18 @@ static func update_static_labels(hud: Control) -> void:
 	EvoStardewStyle.apply_button_active(hud._lang_es_btn, hud._lang == "es")
 	EvoStardewStyle.apply_button_active(hud._lang_en_btn, hud._lang == "en")
 
-	hud._live_models_check.text = EvoStardewStyle.tr_text(
+	hud._primary_model_lbl.text = EvoStardewStyle.tr_text(hud._lang, "Primario (Táctico):", "Primary (Tactical):")
+	hud._secondary_model_lbl.text = EvoStardewStyle.tr_text(hud._lang, "Secundario (Ecológico):", "Secondary (Ecological):")
+	hud._refresh_models_btn.text = EvoStardewStyle.tr_text(hud._lang, "🔄 Actualizar modelos de decisión", "🔄 Refresh decision models")
+	hud._refresh_models_btn.tooltip_text = EvoStardewStyle.tr_text(
 		hud._lang,
-		"Modelos Ollama en Vivo (d3:4b / tev1:4b)",
-		"Live Ollama Models (d3:4b / tev1:4b)"
+		"Volver a consultar en Ollama los modelos de decisión descargados en la máquina",
+		"Re-query Ollama for downloaded decision models on this machine"
 	)
+	hud._context_window_lbl.text = EvoStardewStyle.tr_text(hud._lang, "Ventana de contexto (num_ctx):", "Context window (num_ctx):")
+	if not hud._context_window_input.has_focus():
+		hud._context_window_input.text = str(EvoUserSettings.context_length)
+	refresh_decision_model_selectors(hud)
 	hud._auto_pause_check.text = EvoStardewStyle.tr_text(hud._lang, "Auto-pausa en hitos", "Auto-pause on milestones")
 	hud._unlimited_pressure_check.text = EvoStardewStyle.tr_text(hud._lang, "Energía Ilimitada", "Unlimited Energy")
 	hud._free_sandbox_check.text = EvoStardewStyle.tr_text(hud._lang, "Sandbox Libre", "Free Sandbox")
@@ -529,30 +596,80 @@ static func update_top_bar_state(hud: Control) -> void:
 		hud._pressure_label.text = "⚡ %d pts · +%d/gen" % [hud._world_state.selective_pressure_points, hud._world_state.selective_pressure_regen_per_turn]
 		hud._pressure_bar.value = clampf(float(hud._world_state.selective_pressure_points), 0.0, 100.0)
 
-	# Compute System 1 Models summary (d3:4b vs tev1:4b)
-	var d3_count := 0
-	var tev1_count := 0
+	# Compute System 1 Models summary dynamically using active primary and secondary models
+	var p_model := EvoUserSettings.primary_model
+	var s_model := EvoUserSettings.secondary_model
+	var ctx_len := EvoUserSettings.context_length
+	var primary_count := 0
+	var secondary_count := 0
 	var avg_conf := 0.0
 	for d_key in hud._world_state.demes.keys():
 		var d: EvoTypes.Deme = hud._world_state.demes[d_key]
-		if "tev1" in d.decision_model_tag:
-			tev1_count += 1
+		if d.decision_model_tag == s_model and s_model != p_model:
+			secondary_count += 1
+		elif d.decision_model_tag == p_model:
+			primary_count += 1
+		elif EvoDecisionModel.resolve_deme_decision_model_tag(d.id) == s_model:
+			secondary_count += 1
 		else:
-			d3_count += 1
+			primary_count += 1
 		avg_conf += d.last_confidence
 	if not hud._world_state.demes.is_empty():
 		avg_conf /= float(hud._world_state.demes.size())
 
 	var mode_tag := "ON" if hud._world_state.use_live_decision_models else "HEUR"
-	hud._settings_btn.text = "⚙️"
-	hud._settings_btn.tooltip_text = "🧠 d3:4b (%d) · tev1:4b (%d) [%s]" % [d3_count, tev1_count, mode_tag]
+	hud._settings_btn.text = ""
+	hud._settings_btn.icon = EvoStardewStyle.get_pixel_icon("settings_gear")
+	hud._settings_btn.tooltip_text = "🧠 %s (%d) · %s (%d) · ctx %d [%s]" % [p_model, primary_count, s_model, secondary_count, ctx_len, mode_tag]
 	hud._models_diag_lbl.text = EvoStardewStyle.tr_text(
 		hud._lang,
-		"🧠 Motores Cognitivos Sistema 1:\n• d3:4b (Táctico/Instinto): %d aldeas\n• tev1:4b (Ecológico/Estratégico): %d aldeas\n• Confianza media: %d%%" % [d3_count, tev1_count, int(round(avg_conf * 100.0))],
-		"🧠 System 1 Cognitive Engines:\n• d3:4b (Tactical/Instinct): %d villages\n• tev1:4b (Ecological/Strategic): %d villages\n• Avg confidence: %d%%" % [d3_count, tev1_count, int(round(avg_conf * 100.0))]
+		"🧠 Motores Cognitivos:\n• %s (Táctico/Instinto): %d aldeas\n• %s (Ecológico/Estratégico): %d aldeas\n• Ventana de contexto: %d · Confianza media: %d%%" % [p_model, primary_count, s_model, secondary_count, ctx_len, int(round(avg_conf * 100.0))],
+		"🧠 Cognitive Engines:\n• %s (Tactical/Instinct): %d villages\n• %s (Ecological/Strategic): %d villages\n• Context window: %d · Avg confidence: %d%%" % [p_model, primary_count, s_model, secondary_count, ctx_len, int(round(avg_conf * 100.0))]
 	)
+	refresh_decision_model_selectors(hud)
 
-	hud._live_models_check.set_pressed_no_signal(hud._world_state.use_live_decision_models)
 	hud._auto_pause_check.set_pressed_no_signal(hud._world_state.auto_pause_on_milestone)
 	hud._unlimited_pressure_check.set_pressed_no_signal(hud._world_state.unlimited_pressure_mode)
 	hud._free_sandbox_check.set_pressed_no_signal(hud._world_state.free_sandbox_mode)
+
+
+static func refresh_decision_model_selectors(hud: Control) -> void:
+	if hud._primary_model_opt == null or hud._secondary_model_opt == null:
+		return
+	var status := EvoDecisionModel.check_ollama_status(false)
+	var decision_models: Array = status["decision_models"] if status.has("decision_models") else []
+	var p_model := EvoUserSettings.primary_model
+	var s_model := EvoUserSettings.secondary_model
+
+	hud._primary_model_opt.clear()
+	hud._secondary_model_opt.clear()
+
+	if decision_models.is_empty():
+		var empty_lbl := EvoStardewStyle.tr_text(hud._lang, "Sin modelos de decisión descargados", "No decision models downloaded")
+		hud._primary_model_opt.add_item("%s (%s)" % [p_model, empty_lbl], 0)
+		hud._primary_model_opt.set_item_metadata(0, p_model)
+		hud._primary_model_opt.disabled = true
+		hud._secondary_model_opt.add_item("%s (%s)" % [s_model, empty_lbl], 0)
+		hud._secondary_model_opt.set_item_metadata(0, s_model)
+		hud._secondary_model_opt.disabled = true
+		return
+
+	hud._primary_model_opt.disabled = false
+	hud._secondary_model_opt.disabled = false
+
+	var p_idx := 0
+	var s_idx := 0
+	for i in range(decision_models.size()):
+		var m_tag := str(decision_models[i])
+		hud._primary_model_opt.add_item(m_tag, i)
+		hud._primary_model_opt.set_item_metadata(i, m_tag)
+		if m_tag == p_model:
+			p_idx = i
+
+		hud._secondary_model_opt.add_item(m_tag, i)
+		hud._secondary_model_opt.set_item_metadata(i, m_tag)
+		if m_tag == s_model:
+			s_idx = i
+
+	hud._primary_model_opt.select(p_idx)
+	hud._secondary_model_opt.select(s_idx)

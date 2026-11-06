@@ -10,6 +10,7 @@ signal step_generation_requested()
 signal speed_changed(is_fast: bool)
 signal language_changed(lang: String)
 signal settings_changed(auto_pause: bool, unlimited_pressure: bool, free_sandbox: bool)
+signal decision_models_changed()
 signal camera_preset_requested(action: String, value: float)
 signal tool_changed(tool_id: String, sub_mode: String, brush_radius: int)
 signal sea_level_change_requested(delta: float)
@@ -78,7 +79,13 @@ var _settings_btn: Button
 # Settings, Camera & Ollama Models Diagnostic Popup
 var _settings_popup: PanelContainer
 var _models_diag_lbl: Label
-var _live_models_check: CheckBox
+var _primary_model_lbl: Label
+var _primary_model_opt: OptionButton
+var _refresh_models_btn: Button
+var _secondary_model_lbl: Label
+var _secondary_model_opt: OptionButton
+var _context_window_lbl: Label
+var _context_window_input: LineEdit
 var _lang_es_btn: Button
 var _lang_en_btn: Button
 var _auto_pause_check: CheckBox
@@ -126,6 +133,16 @@ var _first_steps_panel: PanelContainer
 var _step1_lbl: Label
 var _step2_lbl: Label
 var _step3_lbl: Label
+var _missing_models_modal: PanelContainer
+var _missing_models_title_lbl: Label
+var _missing_models_desc_lbl: Label
+var _missing_models_progress_bar: ProgressBar
+var _missing_models_status_lbl: Label
+var _missing_models_download_btn: Button
+var _missing_models_skip_btn: Button
+var _startup_models_checked: bool = false
+var _pull_in_progress: bool = false
+var _pending_missing_models: Array[String] = []
 
 # Modals
 var notebook_modal: EvoNotebookModal
@@ -146,6 +163,39 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	EvoHudBannersToasts.process_toasts(_toast_vbox, delta)
+	_poll_ollama_startup_and_download()
+
+
+func _poll_ollama_startup_and_download() -> void:
+	if not _startup_models_checked:
+		var status := EvoDecisionModel.check_ollama_status(false)
+		if bool(status["probed"]):
+			_startup_models_checked = true
+			EvoHudTopBar.refresh_decision_model_selectors(self)
+			var missing: Array = status["missing_models"]
+			if not missing.is_empty():
+				_pending_missing_models.clear()
+				for m in missing:
+					_pending_missing_models.append(str(m))
+				EvoHudBannersToasts.show_missing_models_popup(self, _pending_missing_models)
+
+	if _pull_in_progress and _missing_models_modal != null and _missing_models_modal.visible:
+		var pull_st := EvoOllamaClient.get_pull_state()
+		if bool(pull_st["running"]):
+			_missing_models_progress_bar.value = float(pull_st["percent"])
+			_missing_models_status_lbl.text = str(pull_st["status_text"])
+		elif bool(pull_st["done"]):
+			_pull_in_progress = false
+			_missing_models_modal.visible = false
+			_apply_decision_models_update()
+		elif bool(pull_st["failed"]):
+			_pull_in_progress = false
+			_missing_models_download_btn.disabled = false
+			_missing_models_status_lbl.text = EvoStardewStyle.tr_text(
+				_lang,
+				"⚠️ Error al descargar los modelos desde Ollama.",
+				"⚠️ Failed to download models from Ollama."
+			)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -510,12 +560,6 @@ func _on_lens_cycle_btn_pressed() -> void:
 	_on_lens_pressed(str(order[next_idx]))
 
 
-func _on_live_models_toggled(pressed: bool) -> void:
-	if _world_state != null:
-		_world_state.use_live_decision_models = pressed
-		_update_top_bar_state()
-
-
 func _on_preset_selected(index: int) -> void:
 	var preset_id := str(_preset_option.get_item_metadata(index))
 	preset_selected.emit(preset_id)
@@ -576,6 +620,99 @@ func _on_tree_btn_pressed() -> void:
 
 func _on_settings_btn_pressed() -> void:
 	_settings_popup.visible = not _settings_popup.visible
+	if _settings_popup.visible:
+		EvoDecisionModel.check_ollama_status(true)
+		EvoHudTopBar.refresh_decision_model_selectors(self)
+
+
+func _on_primary_model_selected(index: int) -> void:
+	if _primary_model_opt == null or index < 0 or index >= _primary_model_opt.item_count:
+		return
+	var selected_tag := str(_primary_model_opt.get_item_metadata(index))
+	if selected_tag == "" or selected_tag == EvoUserSettings.primary_model:
+		return
+	EvoUserSettings.primary_model = selected_tag
+	EvoUserSettings.save_settings()
+	_apply_decision_models_update()
+
+
+func _on_secondary_model_selected(index: int) -> void:
+	if _secondary_model_opt == null or index < 0 or index >= _secondary_model_opt.item_count:
+		return
+	var selected_tag := str(_secondary_model_opt.get_item_metadata(index))
+	if selected_tag == "" or selected_tag == EvoUserSettings.secondary_model:
+		return
+	EvoUserSettings.secondary_model = selected_tag
+	EvoUserSettings.save_settings()
+	_apply_decision_models_update()
+
+
+func _on_refresh_models_pressed() -> void:
+	EvoOllamaClient._probe_ollama_status_sync()
+	EvoHudTopBar.refresh_decision_model_selectors(self)
+	_update_top_bar_state()
+
+
+func _on_context_window_submitted(new_text: String) -> void:
+	_commit_context_window_text(new_text)
+	if _context_window_input != null:
+		_context_window_input.release_focus()
+
+
+func _on_context_window_focus_exited() -> void:
+	if _context_window_input != null:
+		_commit_context_window_text(_context_window_input.text)
+
+
+func _commit_context_window_text(raw_text: String) -> void:
+	var trimmed := raw_text.strip_edges()
+	if trimmed.is_valid_int():
+		var val := int(trimmed)
+		if val > 0 and val != EvoUserSettings.context_length:
+			EvoUserSettings.context_length = val
+			EvoUserSettings.save_settings()
+			EvoOllamaClient.clear_cache()
+			if _world_state != null:
+				EvoDecisionModel.evaluate_all_demes(_world_state, _lang)
+			_update_top_bar_state()
+	if _context_window_input != null:
+		_context_window_input.text = str(EvoUserSettings.context_length)
+
+
+func _apply_decision_models_update() -> void:
+	EvoOllamaClient.clear_cache()
+	EvoDecisionModel.check_ollama_status(true)
+	if _world_state != null:
+		EvoDecisionModel.reassign_world_models(_world_state)
+		EvoDecisionModel.evaluate_all_demes(_world_state, _lang)
+	_update_static_labels()
+	refresh(_world_state)
+	decision_models_changed.emit()
+
+
+func _on_missing_models_download_pressed() -> void:
+	if _pending_missing_models.is_empty():
+		_missing_models_modal.visible = false
+		return
+	_pull_in_progress = true
+	_missing_models_download_btn.disabled = true
+	_missing_models_progress_bar.visible = true
+	_missing_models_progress_bar.value = 0.0
+	_missing_models_status_lbl.visible = true
+	_missing_models_status_lbl.text = EvoStardewStyle.tr_text(
+		_lang,
+		"Iniciando descarga desde Ollama...",
+		"Starting download from Ollama..."
+	)
+	EvoOllamaClient.start_pull_models(_pending_missing_models)
+
+
+func _on_missing_models_skip_pressed() -> void:
+	if _pull_in_progress:
+		EvoOllamaClient.cancel_pull()
+		_pull_in_progress = false
+	if _missing_models_modal != null:
+		_missing_models_modal.visible = false
 
 
 func _on_lang_selected(lang: String) -> void:

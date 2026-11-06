@@ -279,7 +279,9 @@ func _test_main_scene_and_ui_integration() -> void:
 	var expected_sprites := EvoPixelArtGen.TERRAIN_SPRITES.size() + EvoPixelArtGen.VILLAGE_SPRITES.size() + EvoPixelArtGen.UI_SPRITES.size()
 	_assert(total_sprites == expected_sprites and total_sprites >= 60, "All %d pixel-art sprites verified" % total_sprites)
 
-	# Verify Dual System 1 Decision Models (d3:4b + tev1:4b)
+	# Verify Dual System 1 Decision Models (d3:4b + tev1:4b), Settings Persistence & Dynamic UI Text
+	_assert(EvoUserSettings.get_config_dir().ends_with("/.config/Evolution"), "Default config dir points to ~/.config/Evolution")
+	_assert(EvoUserSettings.DEFAULT_CONTEXT_LENGTH == 8192, "Default context window size is 8192")
 	_assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-rift-west") == "d3:4b", "deme-rift-west assigned to d3:4b")
 	_assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-rift-east") == "tev1:4b", "deme-rift-east assigned to tev1:4b")
 	_assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-island-1") == "d3:4b", "deme-island-1 assigned to d3:4b")
@@ -287,6 +289,40 @@ func _test_main_scene_and_ui_integration() -> void:
 	var ollama_status := EvoDecisionModel.check_ollama_status()
 	_assert(ollama_status.has("primary_tag") and ollama_status["primary_tag"] == "d3:4b", "Ollama status reports primary System 1 model d3:4b")
 	_assert(ollama_status.has("secondary_tag") and ollama_status["secondary_tag"] == "tev1:4b", "Ollama status reports secondary System 1 model tev1:4b")
+
+	var mock_tags := [
+		{"name": "gemma4:e2b", "capabilities": ["completion", "vision"]},
+		{"name": "d3:4b", "capabilities": ["decision", "vision"]},
+		{"name": "tev1:4b", "capabilities": ["decision"]},
+		{"name": "embeddinggemma:latest", "capabilities": ["embedding"]}
+	]
+	var filtered_dec := EvoOllamaClient.filter_decision_models_from_tags(mock_tags)
+	_assert(filtered_dec.size() == 2 and filtered_dec.has("d3:4b") and filtered_dec.has("tev1:4b"), "filter_decision_models_from_tags returns only models with 'decision' capability")
+
+	var test_cfg_path := ProjectSettings.globalize_path("user://test_evolution_settings.json")
+	EvoUserSettings.config_path_override = test_cfg_path
+	EvoUserSettings.primary_model = "custom-dec-a:4b"
+	EvoUserSettings.secondary_model = "custom-dec-b:4b"
+	main.hud._commit_context_window_text("16384")
+	_assert(FileAccess.file_exists(test_cfg_path), "Settings file saved on change")
+	EvoUserSettings.primary_model = "d3:4b"
+	EvoUserSettings.secondary_model = "tev1:4b"
+	EvoUserSettings.context_length = 8192
+	EvoUserSettings.load_settings()
+	_assert(EvoUserSettings.primary_model == "custom-dec-a:4b" and EvoUserSettings.secondary_model == "custom-dec-b:4b" and EvoUserSettings.context_length == 16384, "Settings round-trip loads custom models and free-text context window 16384")
+	main.hud._apply_decision_models_update()
+	_assert("custom-dec-a:4b" in main.hud._models_diag_lbl.text and "custom-dec-b:4b" in main.hud._models_diag_lbl.text and "16384" in main.hud._models_diag_lbl.text, "HUD diagnostic card updates dynamically with active models and context window")
+	_assert("custom-dec-a:4b" in main.hud._settings_btn.tooltip_text and "custom-dec-b:4b" in main.hud._settings_btn.tooltip_text, "Settings button tooltip updates dynamically when models change")
+	EvoHudBannersToasts.show_missing_models_popup(main.hud, ["missing-dec:4b"])
+	_assert(main.hud._missing_models_modal.visible and "missing-dec:4b" in main.hud._missing_models_desc_lbl.text, "Missing models popup displays missing model tags at startup")
+	main.hud._on_missing_models_skip_pressed()
+	_assert(not main.hud._missing_models_modal.visible, "Missing models popup closes when skipped")
+	DirAccess.remove_absolute(test_cfg_path)
+	EvoUserSettings.config_path_override = ""
+	EvoUserSettings.primary_model = EvoUserSettings.DEFAULT_PRIMARY_MODEL
+	EvoUserSettings.secondary_model = EvoUserSettings.DEFAULT_SECONDARY_MODEL
+	EvoUserSettings.context_length = EvoUserSettings.DEFAULT_CONTEXT_LENGTH
+	main.hud._apply_decision_models_update()
 
 	# Advance generations via main.step_generation()
 	var gen_before := main.world_state.generation
