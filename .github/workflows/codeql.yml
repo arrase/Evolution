@@ -15,7 +15,6 @@ jobs:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     permissions:
-      actions: read
       contents: read
       security-events: write
     strategy:
@@ -36,5 +35,3 @@ jobs:
       - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: /language:${{ matrix.language }}
-          upload: ${{ github.event.repository.private && 'never' || 'always' }}
-          upload-database: ${{ !github.event.repository.private }}
