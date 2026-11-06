@@ -532,7 +532,6 @@ class WorldState extends RefCounted:
 	var unlimited_pressure_mode: bool = false
 	var free_sandbox_mode: bool = false
 	var auto_pause_on_milestone: bool = false
-	var use_live_decision_models: bool = true
 	var cells: Dictionary = {} # String (hex_id) -> HexCell
 	var demes: Dictionary = {} # String (deme_id) -> Deme
 	var traits_catalog: Dictionary = {} # String (trait_id) -> TraitDef

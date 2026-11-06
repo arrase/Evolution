@@ -617,10 +617,9 @@ static func update_top_bar_state(hud: Control) -> void:
 	if not hud._world_state.demes.is_empty():
 		avg_conf /= float(hud._world_state.demes.size())
 
-	var mode_tag := "ON" if hud._world_state.use_live_decision_models else "HEUR"
 	hud._settings_btn.text = ""
 	hud._settings_btn.icon = EvoUiStyle.get_pixel_icon("settings_gear")
-	hud._settings_btn.tooltip_text = "🧠 %s (%d) · %s (%d) · ctx %d [%s]" % [p_model, primary_count, s_model, secondary_count, ctx_len, mode_tag]
+	hud._settings_btn.tooltip_text = "🧠 %s (%d) · %s (%d) · ctx %d" % [p_model, primary_count, s_model, secondary_count, ctx_len]
 	hud._models_diag_lbl.text = EvoUiStyle.tr_text(
 		hud._lang,
 		"🧠 Motores Cognitivos:\n• %s (Táctico/Instinto): %d aldeas\n• %s (Ecológico/Estratégico): %d aldeas\n• Ventana de contexto: %d · Confianza media: %d%%" % [p_model, primary_count, s_model, secondary_count, ctx_len, int(round(avg_conf * 100.0))],

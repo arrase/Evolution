@@ -96,12 +96,32 @@ func _test_decision_model_and_normalization() -> void:
 	_assert(is_equal_approx(sum_p, 1.0), "Normalized probabilities sum to 1.0000")
 	_assert(str(norm["dominant_decision_id"]) == "d1", "Dominant decision is d1")
 
+	# Verify deterministic heuristic decision scorer has been completely removed
+	var dm_inst := EvoDecisionModel.new()
+	var hs_inst := EvoHeuristicScorer.new()
+	_assert(not dm_inst.has_method("evaluate_deme_heuristic"), "EvoDecisionModel has no evaluate_deme_heuristic fallback")
+	_assert(not hs_inst.has_method("evaluate_deme_heuristic"), "EvoHeuristicScorer has no evaluate_deme_heuristic fallback")
+
+	# Verify pure Ollama System 1 model evaluation via signature cache
 	var rift := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
 	var west: EvoTypes.Deme = rift.demes["deme-rift-west"]
 	var east: EvoTypes.Deme = rift.demes["deme-rift-east"]
-	_assert(west.last_dominant_decision_id == "dec-conservative-forage", "West forest deme favors conservative foraging")
-	_assert(east.last_dominant_decision_id == "dec-cooperate-store", "East savanna deme favors cooperation & storage")
-	_assert(west.last_justification.length() > 20, "Justification string is populated")
+	var west_sig := EvoDecisionModel.compute_deme_evaluation_signature(west, rift)
+	var east_sig := EvoDecisionModel.compute_deme_evaluation_signature(east, rift)
+	EvoOllamaClient.seed_signature_cache(west_sig, {
+		"probabilities": {"dec-conservative-forage": 0.65, "dec-cooperate-store": 0.35},
+		"dominant_decision_id": "dec-conservative-forage",
+		"confidence": 0.88
+	})
+	EvoOllamaClient.seed_signature_cache(east_sig, {
+		"probabilities": {"dec-cooperate-store": 0.70, "dec-selective-migration": 0.30},
+		"dominant_decision_id": "dec-cooperate-store",
+		"confidence": 0.91
+	})
+	EvoDecisionModel.evaluate_all_demes(rift, "es")
+	_assert(west.last_dominant_decision_id == "dec-conservative-forage", "West forest deme applies Ollama System 1 decision")
+	_assert(east.last_dominant_decision_id == "dec-cooperate-store", "East savanna deme applies Ollama System 1 decision")
+	_assert("Ollama System 1" in west.last_justification, "Justification reflects live neural Ollama System 1 evaluation")
 
 
 func _test_hawk_dove_and_symbiosis() -> void:
@@ -139,7 +159,10 @@ func _test_hawk_dove_and_symbiosis() -> void:
 func _test_tragedy_of_the_commons() -> void:
 	print("-- Testing Tragedy of the Commons --")
 	var island := EvoCatalog.create_preset_world("preset-finite-island", "es")
-	island.use_live_decision_models = false
+	for did in island.demes.keys():
+		var d: EvoTypes.Deme = island.demes[did]
+		d.last_decision_probabilities = {"dec-intensive-overexploit": 0.65, "dec-territorial-dispute": 0.20, "dec-conservative-forage": 0.15}
+		d.last_dominant_decision_id = "dec-intensive-overexploit"
 	var tragedy_occurred := false
 	for _g in range(12):
 		EvoTurnEngine.advance_generation(island, "es")
@@ -227,10 +250,24 @@ func _test_serialization_roundtrip() -> void:
 
 func _test_25_generations_all_presets() -> void:
 	print("-- Testing 25 Generations Across All 3 Presets --")
+	var mock_model_entry := {
+		"probabilities": {
+			"dec-conservative-forage": 0.50,
+			"dec-cooperate-store": 0.30,
+			"dec-selective-migration": 0.20
+		},
+		"dominant_decision_id": "dec-conservative-forage",
+		"confidence": 0.85
+	}
 	for preset_id in EvoCatalog.PRESET_IDS:
 		var state := EvoCatalog.create_preset_world(preset_id, "es")
-		state.use_live_decision_models = false
 		for _g in range(25):
+			for did in state.demes.keys():
+				var d: EvoTypes.Deme = state.demes[did]
+				var sig := EvoDecisionModel.compute_deme_evaluation_signature(d, state)
+				EvoOllamaClient.seed_signature_cache(sig, mock_model_entry)
+				d.last_decision_probabilities = (mock_model_entry["probabilities"] as Dictionary).duplicate()
+				d.last_dominant_decision_id = str(mock_model_entry["dominant_decision_id"])
 			EvoTurnEngine.advance_generation(state, "es")
 		_assert(state.generation == 25, "%s reached generation 25 cleanly" % preset_id)
 		for did in state.demes.keys():
@@ -246,6 +283,7 @@ func _test_main_scene_and_ui_integration() -> void:
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	_assert(packed != null, "res://scenes/main.tscn loads as PackedScene")
 	var main: EvoMainController = packed.instantiate() as EvoMainController
+	main.quit_on_close_enabled = false
 	root.add_child(main)
 	if main.camera == null:
 		main._ready()
@@ -312,10 +350,30 @@ func _test_main_scene_and_ui_integration() -> void:
 	main.hud._apply_decision_models_update()
 	_assert("custom-dec-a:4b" in main.hud._models_diag_lbl.text and "custom-dec-b:4b" in main.hud._models_diag_lbl.text and "16384" in main.hud._models_diag_lbl.text, "HUD diagnostic card updates dynamically with active models and context window")
 	_assert("custom-dec-a:4b" in main.hud._settings_btn.tooltip_text and "custom-dec-b:4b" in main.hud._settings_btn.tooltip_text, "Settings button tooltip updates dynamically when models change")
+	var quit_signals: Array[int] = [0]
+	main.hud.quit_requested.connect(func() -> void: quit_signals[0] += 1)
+
+	# Verify Ollama Offline blocking popup prevents starting the game and closes app when dismissed
+	EvoHudBannersToasts.show_ollama_offline_popup(main.hud)
+	_assert(main.hud._missing_models_modal.visible and main.hud._ollama_startup_blocked, "Ollama offline popup is visible and blocks startup")
+	_assert(main.hud._play_btn.disabled and main.hud._step_btn.disabled, "Play and Step buttons are disabled when Ollama is offline")
+	_assert(not main.hud._missing_models_download_btn.visible, "Download button is hidden when Ollama is offline")
+	var blocked_gen := main.world_state.generation
+	main.hud._on_play_pressed()
+	main.step_generation()
+	_assert(not main.is_playing and main.world_state.generation == blocked_gen, "Game cannot start or advance generation while Ollama is offline")
+	main.hud._on_missing_models_skip_pressed()
+	_assert(not main.hud._missing_models_modal.visible and quit_signals[0] == 1, "Closing Ollama offline popup emits quit_requested to close the application")
+
+	# Verify Missing Models popup also blocks startup and closes app if dismissed without downloading
 	EvoHudBannersToasts.show_missing_models_popup(main.hud, ["missing-dec:4b"])
 	_assert(main.hud._missing_models_modal.visible and "missing-dec:4b" in main.hud._missing_models_desc_lbl.text, "Missing models popup displays missing model tags at startup")
+	_assert(main.hud._ollama_startup_blocked and main.hud._play_btn.disabled and main.hud._step_btn.disabled, "Missing models popup blocks game startup until downloaded")
 	main.hud._on_missing_models_skip_pressed()
-	_assert(not main.hud._missing_models_modal.visible, "Missing models popup closes when skipped")
+	_assert(not main.hud._missing_models_modal.visible and quit_signals[0] == 2, "Closing missing models popup emits quit_requested")
+
+	# Unblock startup for subsequent UI interaction tests
+	main.hud._set_startup_blocked(false)
 	DirAccess.remove_absolute(test_cfg_path)
 	EvoUserSettings.config_path_override = ""
 	EvoUserSettings.primary_model = EvoUserSettings.DEFAULT_PRIMARY_MODEL
@@ -449,13 +507,14 @@ func _test_nonblocking_async_decision_and_smooth_panning() -> void:
 	# Build a late-game world with 16 diverse demes across different hexes and live models enabled
 	var packed: PackedScene = load("res://scenes/main.tscn")
 	var main: EvoMainController = packed.instantiate() as EvoMainController
+	main.quit_on_close_enabled = false
 	root.add_child(main)
 	if main.camera == null:
 		main._ready()
 
 	main.load_preset("preset-rift-savanna")
+	main.hud._set_startup_blocked(false)
 	var state := main.world_state
-	state.use_live_decision_models = true
 
 	var land_hexes: Array[String] = []
 	for hid in state.cells.keys():

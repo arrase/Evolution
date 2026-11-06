@@ -255,12 +255,9 @@ static func build_compact_system_one_state(deme: EvoTypes.Deme, state: EvoTypes.
 	var passable_neighbors := _get_sorted_passable_neighbors(deme, current_cell, state)
 	var top_neighbors := passable_neighbors.slice(0, 3)
 	var neighbor_parts: Array[String] = []
-	var has_open_bridge := current_cell.biome == "coastal_shallows"
 	for n in top_neighbors:
 		var n_biome := str(n["biome"])
 		var n_count := int(n["demes_count"])
-		if n_biome == "coastal_shallows" and n_count == 0:
-			has_open_bridge = true
 		neighbor_parts.append("%s(%s, res=%d, pop=%d, %s)" % [
 			str(n["id"]),
 			n_biome,
@@ -281,20 +278,7 @@ static func build_compact_system_one_state(deme: EvoTypes.Deme, state: EvoTypes.
 		neighbors_text
 	]
 
-	var has_extraction_tools := deme.cultural_trait_ids.has("cul-extraction-tools")
-	var line5 := ""
-	if has_open_bridge:
-		line5 = "Cue: Open coastal_shallows land bridge favors migration."
-	elif has_extraction_tools:
-		line5 = "Cue: Specialized Extraction Tools and rival competition drive Intensive Overexploitation and Territorial Dispute to maximize immediate extraction."
-	elif resource_adequacy_ratio < 0.85 or vitality == "starving":
-		line5 = "Cue: Resource scarcity favors cooperation or migration."
-	elif current_cell.biome == "savanna" or current_cell.biome == "arid_steppe" or current_cell.humidity <= 0.50:
-		line5 = "Cue: Seasonal savanna aridity favors cooperation and migration."
-	else:
-		line5 = "Cue: Abundant stable %s favors conservative foraging." % current_cell.biome
-
-	return "\n".join([line1, line2, line3, line4, line5])
+	return "\n".join([line1, line2, line3, line4])
 
 
 static func build_compact_decision_criteria(eligible_decisions: Array[EvoTypes.DecisionDef]) -> Dictionary:
@@ -376,195 +360,12 @@ static func compute_deme_evaluation_signature(deme: EvoTypes.Deme, state: EvoTyp
 	]
 
 
-static func evaluate_deme_heuristic(
-	deme: EvoTypes.Deme,
-	state: EvoTypes.WorldState,
-	lang: String = "es"
-) -> Dictionary:
-	if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == EvoUserSettings.primary_model):
-		deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
-
-	if not state.cells.has(deme.hex_id):
-		return {
-			"probabilities": deme.last_decision_probabilities,
-			"dominant_decision_id": deme.last_dominant_decision_id,
-			"confidence": deme.last_confidence,
-			"justification": deme.last_justification
-		}
-
-	var current_cell: EvoTypes.HexCell = state.cells[deme.hex_id]
-	var eligible_decisions := get_eligible_decisions(deme, state.decisions_catalog)
-
-	var base_mobility := compute_baseline_mobility(deme, state)
-	var max_migrate_mob: float = 0.0
-	for dec in eligible_decisions:
-		if dec.archetype == "migrate":
-			max_migrate_mob = maxf(max_migrate_mob, dec.vector.spatial_mobility)
-	var effective_mig_mobility := minf(1.5, base_mobility + max_migrate_mob)
-
-	var neighbor_ids := HexMath.get_neighbor_ids(current_cell.q, current_cell.r, state.cells)
-	var has_ocean_neighbor: bool = false
-	var has_passable_empty_shallows: bool = false
-
-	for nid in neighbor_ids:
-		var ncell: EvoTypes.HexCell = state.cells[nid]
-		if ncell.biome == "ocean":
-			has_ocean_neighbor = true
-		var is_passable := ncell.biome != "ocean" and (ncell.altitude - 0.50) <= effective_mig_mobility
-		if is_passable and ncell.biome == "coastal_shallows" and ncell.deme_ids.is_empty():
-			has_passable_empty_shallows = true
-
-	var total_cell_pop: int = 0
-	var rival_demes_count: int = 0
-	for other_id in current_cell.deme_ids:
-		if state.demes.has(other_id):
-			var other: EvoTypes.Deme = state.demes[other_id]
-			total_cell_pop += other.population
-			if other.id != deme.id and other.lineage_id != deme.lineage_id:
-				rival_demes_count += 1
-	if total_cell_pop <= 0:
-		total_cell_pop = deme.population
-
-	var resource_adequacy_ratio: float = current_cell.current_resources / maxf(10.0, float(total_cell_pop) * 0.48)
-	var has_extraction_tools := deme.cultural_trait_ids.has("cul-extraction-tools")
-	var has_communal_conservation := deme.cultural_trait_ids.has("cul-communal-conservation")
-
-	var has_open_land_bridge := (
-		current_cell.biome == "coastal_shallows"
-		or (current_cell.id == "0,0" and state.generation <= 7 and has_passable_empty_shallows)
-	)
-	var is_insular_or_alpine := (
-		has_ocean_neighbor
-		or current_cell.biome == "tundra"
-		or current_cell.biome == "high_mountain"
-	)
-	var is_arid_or_savanna := (
-		current_cell.biome == "savanna"
-		or current_cell.biome == "arid_steppe"
-		or current_cell.humidity <= 0.50
-	)
-
-	var is_secondary_model := deme.decision_model_tag == EvoUserSettings.secondary_model
-	var base_weights: Dictionary = {}
-	var active_branch: String = "stable_forest"
-
-	if has_extraction_tools and not has_communal_conservation:
-		active_branch = "tech_overexploit"
-		base_weights = {
-			"dec-intensive-overexploit": (0.54 if is_secondary_model else 0.58) if rival_demes_count > 0 else 0.54,
-			"dec-territorial-dispute": (0.18 if is_secondary_model else 0.14) if rival_demes_count > 0 else 0.12,
-			"dec-conservative-forage": 0.10,
-			"dec-cooperate-store": 0.06,
-			"dec-selective-migration": 0.04 if rival_demes_count > 0 else 0.10,
-			"dec-exchange-symbiosis": 0.04,
-			"dec-explore-innovate": 0.04
-		}
-	elif has_open_land_bridge:
-		if deme.population >= 40:
-			active_branch = "land_bridge_colonize"
-			base_weights = {
-				"dec-selective-migration": 0.48 if is_secondary_model else 0.52,
-				"dec-cooperate-store": 0.22 if is_secondary_model else 0.20,
-				"dec-conservative-forage": 0.10,
-				"dec-explore-innovate": 0.10 if is_secondary_model else 0.08,
-				"dec-exchange-symbiosis": 0.04,
-				"dec-intensive-overexploit": 0.03,
-				"dec-territorial-dispute": 0.03
-			}
-		else:
-			active_branch = "land_bridge_recover"
-			base_weights = {
-				"dec-cooperate-store": 0.40,
-				"dec-conservative-forage": 0.24,
-				"dec-selective-migration": 0.18,
-				"dec-explore-innovate": 0.08,
-				"dec-exchange-symbiosis": 0.04,
-				"dec-intensive-overexploit": 0.03,
-				"dec-territorial-dispute": 0.03
-			}
-	elif is_insular_or_alpine:
-		active_branch = "insular_alpine"
-		base_weights = {
-			"dec-cooperate-store": 0.44 if is_secondary_model else 0.46,
-			"dec-explore-innovate": 0.20 if is_secondary_model else 0.18,
-			"dec-conservative-forage": 0.16,
-			"dec-exchange-symbiosis": 0.08,
-			"dec-selective-migration": 0.04,
-			"dec-intensive-overexploit": 0.04,
-			"dec-territorial-dispute": 0.04
-		}
-	elif is_arid_or_savanna:
-		active_branch = "arid_savanna"
-		base_weights = {
-			"dec-cooperate-store": 0.40 if is_secondary_model else 0.42,
-			"dec-selective-migration": 0.18 if is_secondary_model else 0.16,
-			"dec-explore-innovate": 0.14,
-			"dec-conservative-forage": 0.12,
-			"dec-exchange-symbiosis": 0.08,
-			"dec-intensive-overexploit": 0.04,
-			"dec-territorial-dispute": 0.04
-		}
-	elif resource_adequacy_ratio < 0.70 and rival_demes_count > 0:
-		active_branch = "scarcity_competition"
-		base_weights = {
-			"dec-cooperate-store": 0.36,
-			"dec-conservative-forage": 0.28,
-			"dec-selective-migration": 0.16,
-			"dec-exchange-symbiosis": 0.08,
-			"dec-explore-innovate": 0.04,
-			"dec-intensive-overexploit": 0.04,
-			"dec-territorial-dispute": 0.04
-		}
-	else:
-		active_branch = "stable_forest"
-		base_weights = {
-			"dec-conservative-forage": 0.50 if is_secondary_model else 0.52,
-			"dec-cooperate-store": 0.16 if is_secondary_model else 0.14,
-			"dec-exchange-symbiosis": 0.10,
-			"dec-selective-migration": 0.08,
-			"dec-explore-innovate": 0.08,
-			"dec-intensive-overexploit": 0.04,
-			"dec-territorial-dispute": 0.04
-		}
-
-	var raw_scores: Dictionary = {}
-	var eligible_ids: Array[String] = []
-	for dec in eligible_decisions:
-		eligible_ids.append(dec.id)
-		raw_scores[dec.id] = float(base_weights[dec.id]) if base_weights.has(dec.id) else 0.08
-
-	var normalized := normalize_decision_probabilities(raw_scores, eligible_ids)
-	var probs: Dictionary = normalized["probabilities"]
-	var dominant_id: String = str(normalized["dominant_decision_id"])
-	var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
-	var confidence: float = 0.85
-	var justification := build_contextual_justification(
-		deme,
-		current_cell,
-		state,
-		dominant_id,
-		dominant_prob,
-		active_branch,
-		lang,
-		confidence
-	)
-
-	return {
-		"probabilities": probs,
-		"dominant_decision_id": dominant_id,
-		"confidence": confidence,
-		"active_branch": active_branch,
-		"justification": justification
-	}
-
-
 static func build_contextual_justification(
 	deme: EvoTypes.Deme,
 	_cell: EvoTypes.HexCell,
 	state: EvoTypes.WorldState,
 	dominant_id: String,
 	dominant_prob: float,
-	active_branch: String,
 	lang: String,
 	_confidence: float = 0.85
 ) -> String:
@@ -574,45 +375,12 @@ static func build_contextual_justification(
 	if state.decisions_catalog.has(dominant_id):
 		dec_name = EvoI18n.decision_name(lang, state.decisions_catalog[dominant_id])
 	var pct_str := "%.1f%%" % (dominant_prob * 100.0)
-
-	var branch_reason := ""
-	if is_en:
-		match active_branch:
-			"live_system_one":
-				branch_reason = "Live neural decision evaluation via Ollama System 1 (%s)." % model_tag
-			"tech_overexploit":
-				branch_reason = "Specialized extraction tools without communal conservation drive intensive harvesting and territorial pressure."
-			"land_bridge_colonize":
-				branch_reason = "Exposed coastal land bridges and viable population size favor rapid spatial dispersal."
-			"land_bridge_recover":
-				branch_reason = "Small population on coastal corridor prioritizes cooperative storage before migrating."
-			"insular_alpine":
-				branch_reason = "Bounded insular or harsh alpine/tundra conditions select for communal storage and innovation."
-			"arid_savanna":
-				branch_reason = "Seasonal aridity in savanna/steppe habitats selects for cooperative storage and mobility."
-			"scarcity_competition":
-				branch_reason = "Resource scarcity under inter-lineage competition favors collective rationing and dispersal."
-			_:
-				branch_reason = "Predictable habitat biomass supports low-risk conservative foraging within carrying capacity."
-	else:
-		match active_branch:
-			"live_system_one":
-				branch_reason = "Evaluación neuronal de decisión en vivo mediante Ollama System 1 (%s)." % model_tag
-			"tech_overexploit":
-				branch_reason = "Las herramientas de extracción sin normas de conservación impulsan la sobreexplotación intensiva y la presión territorial."
-			"land_bridge_colonize":
-				branch_reason = "Los puentes terrestres costeros abiertos y la población viable favorecen la colonización espacial."
-			"land_bridge_recover":
-				branch_reason = "La baja población en el corredor costero prioriza cooperar y almacenar antes de migrar."
-			"insular_alpine":
-				branch_reason = "El confinamiento insular o el rigor alpino/tundra seleccionan almacenamiento cooperativo e innovación."
-			"arid_savanna":
-				branch_reason = "La aridez estacional de sabana/estepa selecciona almacenamiento cooperativo y movilidad."
-			"scarcity_competition":
-				branch_reason = "La escasez de recursos bajo competencia rival favorece la cooperación y la migración."
-			_:
-				branch_reason = "La biomasa predecible del hábitat sostiene el forrajeo conservador dentro de la capacidad de carga."
-	return "%s (%s): %s" % [dec_name, pct_str, branch_reason]
+	var model_reason := (
+		"Live neural decision evaluation via Ollama System 1 (%s)." % model_tag
+		if is_en
+		else "Evaluación neuronal de decisión en vivo mediante Ollama System 1 (%s)." % model_tag
+	)
+	return "%s (%s): %s" % [dec_name, pct_str, model_reason]
 
 
 static func _slugify(text: String) -> String:

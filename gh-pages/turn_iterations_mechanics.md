@@ -20,7 +20,7 @@ sequenceDiagram
     Turn->>Env: run_environmental_phase(state, lang)
     Note over Env: Increment gen, flip season,<br/>glacial sea cycle, flood/emerge,<br/>regenerate K & R, +15 mana
     Turn->>Cog: evaluate_all_demes(state, lang)
-    Note over Cog: Compute 10-part signatures,<br/>sync Ollama cache / Heuristic fallback,<br/>assign normalized P(d)
+    Note over Cog: Compute 10-part signatures,<br/>sync Ollama System 1 cache,<br/>assign normalized P(d)
     Turn->>Bio: run_biophysical_phase(state, lang)
     Note over Bio: 3A. Ecology & Game Theory:<br/>Hawk-Dove, Extraction, Symbiosis, K Degrade<br/>3B. Demography & Migration:<br/>Metabolism, Growth, Fission, Bottlenecks, Merging
     Turn->>Mile: run_milestone_phase(state, lang)

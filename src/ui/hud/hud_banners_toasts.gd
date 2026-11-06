@@ -105,24 +105,30 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	hide_fs_btn.pressed.connect(func() -> void: hud._first_steps_panel.visible = false)
 	fs_hbox.add_child(hide_fs_btn)
 
-	# Startup Missing Decision Models Download Popup
-	hud._missing_models_modal = PanelContainer.new()
+	# Startup Ollama Offline / Missing Decision Models Modal (Full-Screen Blocking Backdrop)
+	hud._missing_models_modal = ColorRect.new()
 	hud._missing_models_modal.visible = false
-	hud._missing_models_modal.anchor_left = 0.5
-	hud._missing_models_modal.anchor_right = 0.5
-	hud._missing_models_modal.anchor_top = 0.5
-	hud._missing_models_modal.anchor_bottom = 0.5
-	hud._missing_models_modal.offset_left = -230
-	hud._missing_models_modal.offset_right = 230
-	hud._missing_models_modal.offset_top = -115
-	hud._missing_models_modal.offset_bottom = 115
+	hud._missing_models_modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	hud._missing_models_modal.color = Color(0.06, 0.04, 0.03, 0.72)
+	hud._missing_models_modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	hud._missing_models_modal.z_index = 60
-	hud._missing_models_modal.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(8))
 	hud.add_child(hud._missing_models_modal)
+
+	var mm_card := PanelContainer.new()
+	mm_card.anchor_left = 0.5
+	mm_card.anchor_right = 0.5
+	mm_card.anchor_top = 0.5
+	mm_card.anchor_bottom = 0.5
+	mm_card.offset_left = -230
+	mm_card.offset_right = 230
+	mm_card.offset_top = -120
+	mm_card.offset_bottom = 120
+	mm_card.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(8))
+	hud._missing_models_modal.add_child(mm_card)
 
 	var mm_inner := PanelContainer.new()
 	mm_inner.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(10, false))
-	hud._missing_models_modal.add_child(mm_inner)
+	mm_card.add_child(mm_inner)
 
 	var mm_vbox := VBoxContainer.new()
 	mm_vbox.add_theme_constant_override("separation", 8)
@@ -171,9 +177,36 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	mm_btns.add_child(hud._missing_models_download_btn)
 
 
+static func show_ollama_offline_popup(hud: Control) -> void:
+	if hud._missing_models_modal == null:
+		return
+	hud._set_startup_blocked(true)
+	hud._missing_models_title_lbl.text = EvoUiStyle.tr_text(
+		hud._lang,
+		"⚠️ Ollama Está Offline",
+		"⚠️ Ollama Is Offline"
+	)
+	hud._missing_models_desc_lbl.text = EvoUiStyle.tr_text(
+		hud._lang,
+		"No se ha podido conectar con el servidor local de Ollama (http://127.0.0.1:11434).\n\nEvolution requiere que Ollama esté activo para que los modelos de decisión dirijan las poblaciones. El juego no puede iniciarse con Ollama offline.",
+		"Could not connect to the local Ollama server (http://127.0.0.1:11434).\n\nEvolution requires Ollama to be running so decision models can govern populations. The game cannot start while Ollama is offline."
+	)
+	hud._missing_models_progress_bar.visible = false
+	hud._missing_models_progress_bar.value = 0.0
+	hud._missing_models_status_lbl.visible = false
+	hud._missing_models_download_btn.visible = false
+	hud._missing_models_skip_btn.text = EvoUiStyle.tr_text(
+		hud._lang,
+		"Cerrar aplicación",
+		"Close application"
+	)
+	hud._missing_models_modal.visible = true
+
+
 static func show_missing_models_popup(hud: Control, missing_models: Array) -> void:
 	if hud._missing_models_modal == null or missing_models.is_empty():
 		return
+	hud._set_startup_blocked(true)
 	var models_str := ", ".join(PackedStringArray(missing_models))
 	hud._missing_models_title_lbl.text = EvoUiStyle.tr_text(
 		hud._lang,
@@ -182,12 +215,13 @@ static func show_missing_models_popup(hud: Control, missing_models: Array) -> vo
 	)
 	hud._missing_models_desc_lbl.text = EvoUiStyle.tr_text(
 		hud._lang,
-		"Los siguientes modelos de decisión configurados no están descargados en Ollama:\n• %s\n\n¿Deseas descargarlos automáticamente antes de continuar?" % models_str,
-		"The following configured decision models are not downloaded in Ollama:\n• %s\n\nWould you like to download them automatically before continuing?" % models_str
+		"Los siguientes modelos de decisión configurados no están descargados en Ollama:\n• %s\n\nEvolution requiere modelos de decisión activos para iniciar la simulación." % models_str,
+		"The following configured decision models are not downloaded in Ollama:\n• %s\n\nEvolution requires active decision models to start the simulation." % models_str
 	)
 	hud._missing_models_progress_bar.visible = false
 	hud._missing_models_progress_bar.value = 0.0
 	hud._missing_models_status_lbl.visible = false
+	hud._missing_models_download_btn.visible = true
 	hud._missing_models_download_btn.disabled = false
 	hud._missing_models_download_btn.text = EvoUiStyle.tr_text(
 		hud._lang,
@@ -196,8 +230,8 @@ static func show_missing_models_popup(hud: Control, missing_models: Array) -> vo
 	)
 	hud._missing_models_skip_btn.text = EvoUiStyle.tr_text(
 		hud._lang,
-		"Continuar sin descargar",
-		"Continue without downloading"
+		"Cerrar aplicación",
+		"Close application"
 	)
 	hud._missing_models_modal.visible = true
 

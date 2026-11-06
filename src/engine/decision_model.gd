@@ -58,21 +58,12 @@ static func compute_deme_evaluation_signature(deme: EvoTypes.Deme, state: EvoTyp
 	return EvoHeuristicScorer.compute_deme_evaluation_signature(deme, state)
 
 
-static func evaluate_deme_heuristic(
-	deme: EvoTypes.Deme,
-	state: EvoTypes.WorldState,
-	lang: String = "es"
-) -> Dictionary:
-	return EvoHeuristicScorer.evaluate_deme_heuristic(deme, state, lang)
-
-
 static func build_contextual_justification(
 	deme: EvoTypes.Deme,
 	cell: EvoTypes.HexCell,
 	state: EvoTypes.WorldState,
 	dominant_id: String,
 	dominant_prob: float,
-	active_branch: String,
 	lang: String,
 	confidence: float = 0.85
 ) -> String:
@@ -82,7 +73,6 @@ static func build_contextual_justification(
 		state,
 		dominant_id,
 		dominant_prob,
-		active_branch,
 		lang,
 		confidence
 	)
@@ -104,34 +94,37 @@ static func evaluate_deme(
 			"justification": deme.last_justification
 		}
 
-	if state.use_live_decision_models:
-		var sig := compute_deme_evaluation_signature(deme, state)
-		var cached_entry := EvoOllamaClient.lookup_or_enqueue_single_deme(sig, deme, state)
-		if not cached_entry.is_empty():
-			var probs: Dictionary = cached_entry["probabilities"]
-			var dominant_id: String = str(cached_entry["dominant_decision_id"])
-			var confidence: float = float(cached_entry["confidence"])
-			var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
-			var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
-			var justification := build_contextual_justification(
-				deme,
-				cell,
-				state,
-				dominant_id,
-				dominant_prob,
-				"live_system_one",
-				lang,
-				confidence
-			)
-			deme.last_confidence = confidence
-			return {
-				"probabilities": probs,
-				"dominant_decision_id": dominant_id,
-				"confidence": confidence,
-				"justification": justification
-			}
+	var sig := compute_deme_evaluation_signature(deme, state)
+	var cached_entry := EvoOllamaClient.lookup_or_enqueue_single_deme(sig, deme, state)
+	if not cached_entry.is_empty():
+		var probs: Dictionary = cached_entry["probabilities"]
+		var dominant_id: String = str(cached_entry["dominant_decision_id"])
+		var confidence: float = float(cached_entry["confidence"])
+		var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
+		var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
+		var justification := build_contextual_justification(
+			deme,
+			cell,
+			state,
+			dominant_id,
+			dominant_prob,
+			lang,
+			confidence
+		)
+		deme.last_confidence = confidence
+		return {
+			"probabilities": probs,
+			"dominant_decision_id": dominant_id,
+			"confidence": confidence,
+			"justification": justification
+		}
 
-	return evaluate_deme_heuristic(deme, state, lang)
+	return {
+		"probabilities": deme.last_decision_probabilities,
+		"dominant_decision_id": deme.last_dominant_decision_id,
+		"confidence": deme.last_confidence,
+		"justification": deme.last_justification
+	}
 
 
 static func evaluate_all_demes(state: EvoTypes.WorldState, lang: String = "es") -> void:
@@ -153,62 +146,35 @@ static func evaluate_all_demes(state: EvoTypes.WorldState, lang: String = "es") 
 	var live_results := EvoOllamaClient.sync_and_enqueue_batch(buckets, state)
 
 	for sig in buckets.keys():
+		if not live_results.has(sig):
+			continue
 		var bucket: Dictionary = buckets[sig]
 		var group: Array = bucket["demes"]
-		if live_results.has(sig):
-			var entry: Dictionary = live_results[sig]
-			var probs: Dictionary = entry["probabilities"]
-			var dominant_id: String = str(entry["dominant_decision_id"])
-			var confidence: float = float(entry["confidence"])
-			var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
-			for d in group:
-				var deme: EvoTypes.Deme = d
-				deme.last_decision_probabilities = probs.duplicate()
-				deme.last_dominant_decision_id = dominant_id
-				deme.last_confidence = confidence
-				if state.cells.has(deme.hex_id):
-					var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
-					deme.last_justification = build_contextual_justification(
-						deme,
-						cell,
-						state,
-						dominant_id,
-						dominant_prob,
-						"live_system_one",
-						lang,
-						confidence
-					)
-		else:
-			var rep: EvoTypes.Deme = bucket["representative"]
-			var heur := evaluate_deme_heuristic(rep, state, lang)
-			var probs: Dictionary = heur["probabilities"]
-			var dominant_id: String = str(heur["dominant_decision_id"])
-			var confidence: float = float(heur.get("confidence", 0.85))
-			var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
-			var active_branch: String = str(heur.get("active_branch", "stable_forest"))
-			var rep_just: String = str(heur["justification"])
-			for d in group:
-				var deme: EvoTypes.Deme = d
-				deme.last_decision_probabilities = probs.duplicate()
-				deme.last_dominant_decision_id = dominant_id
-				deme.last_confidence = confidence
-				if deme.hex_id == rep.hex_id or not state.cells.has(deme.hex_id):
-					deme.last_justification = rep_just
-				else:
-					deme.last_justification = build_contextual_justification(
-						deme,
-						state.cells[deme.hex_id],
-						state,
-						dominant_id,
-						dominant_prob,
-						active_branch,
-						lang,
-						confidence
-					)
+		var entry: Dictionary = live_results[sig]
+		var probs: Dictionary = entry["probabilities"]
+		var dominant_id: String = str(entry["dominant_decision_id"])
+		var confidence: float = float(entry["confidence"])
+		var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
+		for d in group:
+			var deme: EvoTypes.Deme = d
+			deme.last_decision_probabilities = probs.duplicate()
+			deme.last_dominant_decision_id = dominant_id
+			deme.last_confidence = confidence
+			if state.cells.has(deme.hex_id):
+				var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
+				deme.last_justification = build_contextual_justification(
+					deme,
+					cell,
+					state,
+					dominant_id,
+					dominant_prob,
+					lang,
+					confidence
+				)
 
 
 static func prefetch_for_state(state: EvoTypes.WorldState) -> void:
-	if state == null or not state.use_live_decision_models or state.demes.is_empty():
+	if state == null or state.demes.is_empty():
 		return
 	var reps_by_sig: Dictionary = {}
 	for deme_id in state.demes.keys():
@@ -226,7 +192,7 @@ static func prefetch_for_state(state: EvoTypes.WorldState) -> void:
 static func apply_completed_live_results(state: EvoTypes.WorldState, lang: String, last_seen_rev: int) -> Dictionary:
 	var popped := EvoOllamaClient.pop_newly_completed(
 		last_seen_rev,
-		state != null and state.use_live_decision_models
+		state != null
 	)
 	var current_rev: int = int(popped["revision"])
 	var newly_completed: Dictionary = popped["newly_completed"]
@@ -256,7 +222,6 @@ static func apply_completed_live_results(state: EvoTypes.WorldState, lang: Strin
 					state,
 					dominant_id,
 					dominant_prob,
-					"live_system_one",
 					lang,
 					confidence
 				)

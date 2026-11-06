@@ -413,10 +413,16 @@ static func lookup_or_enqueue_single_deme(
 	return {}
 
 
+static func seed_signature_cache(sig: String, entry: Dictionary) -> void:
+	_mutex.lock()
+	_live_signature_cache[sig] = entry.duplicate(true)
+	_mutex.unlock()
+
+
 static func sync_and_enqueue_batch(buckets: Dictionary, state: EvoTypes.WorldState) -> Dictionary:
 	var live_results: Dictionary = {}
 	var missing_sigs: Array[String] = []
-	if state.use_live_decision_models and not buckets.is_empty():
+	if not buckets.is_empty():
 		_mutex.lock()
 		for pending_sig in _pending_jobs_by_sig.keys():
 			if not buckets.has(pending_sig):

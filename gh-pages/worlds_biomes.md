@@ -150,7 +150,7 @@ $$R_{t+1} = \min\Big(K_{t+1},\ R_t + K_{t+1} \cdot r_{\text{regen}} \cdot \gamma
   * **Lineage**: `lineage-darwin-ancestral` (*Archipelago Ancestors*, color `#3D85C6`, founder hex `0,0`).
   * **`deme-darwin-founder` (*Archipelago Founders*)**: Spawned at `(0, 0)` with `population = 220`, `energy_reserves = 300.0`, `model = d3:4b`, and biological traits `["bio-r-strategy", "bio-thermal-tolerance", "bio-social-instinct"]`.
 * **Evolutionary Dynamics**:
-  * During **Generations 1–7** (low tide, `sea_level = 0.12`), the `land_bridge_colonize` heuristic branch and high fecundity (`bio-r-strategy`) propel budding daughter demes across `(0,-1)`, `(0,1)`, and `(1,0)` onto the outer Tundra, Tropical Forest, and Arid Steppe islands.
+  * During **Generations 1–7** (low tide, `sea_level = 0.12`), open coastal land bridges and high fecundity (`bio-r-strategy`) propel budding daughter demes across `(0,-1)`, `(0,1)`, and `(1,0)` onto the outer Tundra, Tropical Forest, and Arid Steppe islands.
   * At **Generation 8**, `sea_level` rises to `0.25`, submerging the 3 land bridges (`altitude = 0.18 < 0.25`) into `ocean`. Any deme still standing on a bridge flees onto an adjacent island or drowns, and the outer island colonies accumulate `isolation_turns` until reaching $\ge 10$ turns and diverging via **Allopatric Speciation** into distinct species with new colors from `SPECIATION_PALETTE`.
 
 ---

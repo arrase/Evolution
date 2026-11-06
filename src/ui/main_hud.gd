@@ -20,6 +20,7 @@ signal hex_jump_requested(hex_id: String, deme_id: String)
 signal lineage_highlight_requested(lineage_id: String)
 signal inject_trait_requested(deme_id: String, trait_id: String)
 signal catalog_item_saved(item_type: String, item_data: Dictionary)
+signal quit_requested()
 
 const PRESET_LIST: Array[String] = EvoHudTopBar.PRESET_LIST
 const DEFAULT_EXPORT_PATH: String = "user://evolution_world_state.json"
@@ -133,7 +134,7 @@ var _first_steps_panel: PanelContainer
 var _step1_lbl: Label
 var _step2_lbl: Label
 var _step3_lbl: Label
-var _missing_models_modal: PanelContainer
+var _missing_models_modal: Control
 var _missing_models_title_lbl: Label
 var _missing_models_desc_lbl: Label
 var _missing_models_progress_bar: ProgressBar
@@ -141,6 +142,7 @@ var _missing_models_status_lbl: Label
 var _missing_models_download_btn: Button
 var _missing_models_skip_btn: Button
 var _startup_models_checked: bool = false
+var _ollama_startup_blocked: bool = false
 var _pull_in_progress: bool = false
 var _pending_missing_models: Array[String] = []
 
@@ -166,18 +168,35 @@ func _process(delta: float) -> void:
 	_poll_ollama_startup_and_download()
 
 
+func _set_startup_blocked(blocked: bool) -> void:
+	_ollama_startup_blocked = blocked
+	if _play_btn != null:
+		_play_btn.disabled = blocked
+	if _step_btn != null:
+		_step_btn.disabled = blocked
+	if blocked and _is_playing:
+		_is_playing = false
+		_update_static_labels()
+		play_pause_toggled.emit(false)
+
+
 func _poll_ollama_startup_and_download() -> void:
 	if not _startup_models_checked:
 		var status := EvoDecisionModel.check_ollama_status(false)
 		if bool(status["probed"]):
 			_startup_models_checked = true
 			EvoHudTopBar.refresh_decision_model_selectors(self)
-			var missing: Array = status["missing_models"]
-			if not missing.is_empty():
-				_pending_missing_models.clear()
-				for m in missing:
-					_pending_missing_models.append(str(m))
-				EvoHudBannersToasts.show_missing_models_popup(self, _pending_missing_models)
+			if not bool(status["connected"]):
+				EvoHudBannersToasts.show_ollama_offline_popup(self)
+			else:
+				var missing: Array = status["missing_models"]
+				if not missing.is_empty():
+					_pending_missing_models.clear()
+					for m in missing:
+						_pending_missing_models.append(str(m))
+					EvoHudBannersToasts.show_missing_models_popup(self, _pending_missing_models)
+				else:
+					_set_startup_blocked(false)
 
 	if _pull_in_progress and _missing_models_modal != null and _missing_models_modal.visible:
 		var pull_st := EvoOllamaClient.get_pull_state()
@@ -186,6 +205,7 @@ func _poll_ollama_startup_and_download() -> void:
 			_missing_models_status_lbl.text = str(pull_st["status_text"])
 		elif bool(pull_st["done"]):
 			_pull_in_progress = false
+			_set_startup_blocked(false)
 			_missing_models_modal.visible = false
 			_apply_decision_models_update()
 		elif bool(pull_st["failed"]):
@@ -203,6 +223,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	var ke := event as InputEventKey
 	if not ke.pressed or ke.echo:
+		return
+	if _ollama_startup_blocked or (_missing_models_modal != null and _missing_models_modal.visible):
 		return
 	if (notebook_modal != null and notebook_modal.visible) or (tree_modal != null and tree_modal.visible) or (lab_modal != null and lab_modal.visible):
 		return
@@ -595,6 +617,8 @@ func _on_import_pressed() -> void:
 
 
 func _on_play_pressed() -> void:
+	if _ollama_startup_blocked or (_missing_models_modal != null and _missing_models_modal.visible):
+		return
 	_is_playing = not _is_playing
 	if _is_playing:
 		_step_3_done = true
@@ -603,6 +627,8 @@ func _on_play_pressed() -> void:
 
 
 func _on_step_pressed() -> void:
+	if _ollama_startup_blocked or (_missing_models_modal != null and _missing_models_modal.visible):
+		return
 	_step_3_done = true
 	_update_first_steps_labels()
 	step_generation_requested.emit()
@@ -713,6 +739,7 @@ func _on_missing_models_skip_pressed() -> void:
 		_pull_in_progress = false
 	if _missing_models_modal != null:
 		_missing_models_modal.visible = false
+	quit_requested.emit()
 
 
 func _on_lang_selected(lang: String) -> void:

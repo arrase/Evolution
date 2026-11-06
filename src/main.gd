@@ -13,8 +13,8 @@ var hud: EvoMainHud
 var lang: String = "es"
 var is_playing: bool = false
 var is_fast: bool = false
+var quit_on_close_enabled: bool = true
 var _play_timer: float = 0.0
-var _async_wait_elapsed: float = 0.0
 var _last_model_revision: int = 0
 
 
@@ -67,11 +67,9 @@ func _process(delta: float) -> void:
 	var interval: float = FAST_STEP_INTERVAL if is_fast else NORMAL_STEP_INTERVAL
 	_play_timer += delta
 	if _play_timer >= interval:
-		if world_state.use_live_decision_models and EvoDecisionModel.has_pending_jobs() and _async_wait_elapsed < 0.60:
-			_async_wait_elapsed += delta
+		if EvoDecisionModel.has_pending_jobs():
 			return
 		_play_timer = 0.0
-		_async_wait_elapsed = 0.0
 		step_generation()
 
 
@@ -82,6 +80,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not ke.pressed or ke.echo:
 		return
 	if ke.keycode == KEY_SPACE:
+		if hud != null and (hud._ollama_startup_blocked or (hud._missing_models_modal != null and hud._missing_models_modal.visible)):
+			get_viewport().set_input_as_handled()
+			return
 		_on_play_pause_toggled(not is_playing)
 		hud.set_playing_state(is_playing)
 		get_viewport().set_input_as_handled()
@@ -123,6 +124,7 @@ func _connect_signals() -> void:
 	hud.lineage_highlight_requested.connect(_on_lineage_highlight_requested)
 	hud.inject_trait_requested.connect(_on_inject_trait_requested)
 	hud.catalog_item_saved.connect(_on_catalog_item_saved)
+	hud.quit_requested.connect(_on_quit_requested)
 
 
 func load_preset(preset_id: String) -> void:
@@ -149,6 +151,8 @@ func load_preset(preset_id: String) -> void:
 
 func step_generation() -> void:
 	if world_state == null:
+		return
+	if hud != null and (hud._ollama_startup_blocked or (hud._missing_models_modal != null and hud._missing_models_modal.visible)):
 		return
 	var res := EvoTurnEngine.advance_generation(world_state, lang)
 	hud.mark_generation_advanced()
@@ -241,8 +245,19 @@ func _on_state_imported(new_state: EvoTypes.WorldState) -> void:
 
 
 func _on_play_pause_toggled(p_playing: bool) -> void:
+	if p_playing and hud != null and (hud._ollama_startup_blocked or (hud._missing_models_modal != null and hud._missing_models_modal.visible)):
+		is_playing = false
+		hud.set_playing_state(false)
+		return
 	is_playing = p_playing
 	_play_timer = 0.0
+
+
+func _on_quit_requested() -> void:
+	is_playing = false
+	EvoDecisionModel.wait_for_workers()
+	if quit_on_close_enabled and get_tree() != null:
+		get_tree().quit()
 
 
 func _on_speed_changed(p_fast: bool) -> void:

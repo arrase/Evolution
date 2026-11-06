@@ -38,7 +38,7 @@ hide:
     <div>
       <i class="fa-solid fa-brain feature-icon" aria-hidden="true"></i>
       <h3>Dual-Model Cognitive Engine</h3>
-      <p>Deterministically distributes subpopulations across primary (<code>d3:4b</code>) and secondary (<code>tev1:4b</code>) Ollama System 1 models via background worker threads, backed by a zero-latency 6-axis heuristic engine.</p>
+      <p>Deterministically distributes subpopulations across primary (<code>d3:4b</code>) and secondary (<code>tev1:4b</code>) Ollama System 1 decision models via background worker threads.</p>
     </div>
   </div>
   <div class="feature-card">
@@ -95,14 +95,14 @@ Unlike traditional strategy games where players issue unit-level movement orders
 
 ```mermaid
 flowchart LR
-    Env["1. Environmental Phase\n• Flip Season (wet_warm / dry_cold)\n• Glacial Sea-Level Cycle (8 gen)\n• Flood / Emerge Coastal Hexes\n• Regenerate K & Biomass R"] --> Cog["2. Cognitive Phase\n• 10-Part State Signature\n• System 1 Ollama (d3:4b / tev1:4b)\n• Calibrated 6-Axis Heuristic\n• Normalized P(d) over 7 Decisions"]
+    Env["1. Environmental Phase\n• Flip Season (wet_warm / dry_cold)\n• Glacial Sea-Level Cycle (8 gen)\n• Flood / Emerge Coastal Hexes\n• Regenerate K & Biomass R"] --> Cog["2. Cognitive Phase\n• 10-Part State Signature\n• System 1 Ollama (d3:4b / tev1:4b)\n• Neural Decision Evaluation\n• Normalized P(d) over 7 Decisions"]
     Cog --> Bio["3. Biophysical Phase\n• Aggregate Effective Vector v_eff\n• Hawk-Dove & Symbiosis (+20%)\n• Caloric Extraction & K Degrade\n• Growth, Fission & Cultural Loss"]
     Bio --> Mile["4. Milestone Phase\n• Allopatric Speciation (Prio 0)\n• Baldwin Assimilation (Prio 1)\n• Cultural Innovation (Prio 2)\n• Macro-Outcome Evaluation"]
     Mile --> Prefetch["5. Async Prefetch\n• Pre-warm Next Turn Signatures\n• Non-Blocking Worker Pool"]
 ```
 
 1. **Environmental Phase (`EvoEnvPhase`)**: Advances the generation counter, alternates seasonal climate between `wet_warm` ($\gamma = 1.20$) and `dry_cold` ($\gamma = 0.75$), oscillates sea level every 8 generations in glacial scenarios, relocates or drowns submerged demes, and regenerates hex carrying capacity $K$ and resources $R$.
-2. **Cognitive Decision Phase (`EvoDecisionModel`)**: Evaluates each deme and its 6-hex neighborhood across the **7 behavioral decisions**, routing demes deterministically between primary (`d3:4b`) and secondary (`tev1:4b`) Ollama System 1 models or the calibrated 6-axis heuristic engine.
+2. **Cognitive Decision Phase (`EvoDecisionModel`)**: Evaluates each deme and its 6-hex neighborhood across the **7 behavioral decisions**, routing demes deterministically between primary (`d3:4b`) and secondary (`tev1:4b`) Ollama System 1 decision models.
 3. **Biophysical Consequence Phase (`EvoBiophysPhase`)**: Computes each deme's effective 6-axis vector $\mathbf{v}_{\text{eff}}$, resolves *Hawk-Dove* territorial conflicts, reciprocal symbiosis ($+20\%$ caloric bonus and horizontal cultural transmission), habitat degradation (*Tragedy of the Commons* when $K < 0.60 \cdot K_{\max}$), metabolic expenditure, demographic growth/starvation, population fission (budding migration), compatible kin merging, and demographic bottleneck cultural loss.
 4. **Milestone & Macro-Outcome Phase (`EvoMilestonePhase`)**: Synthesizes thermodynamically balanced emergent traits for *Allopatric Speciation*, *The Baldwin Effect*, or *Cumulative Cultural Innovation*, logs entries to the *Naturalist's Notebook*, and checks global macro-outcomes (*Total Extinction*, *Evolutionary Hegemony*, or *Ecological Equilibrium*).
 
@@ -113,13 +113,13 @@ flowchart LR
 ### Prerequisites
 
 1. **Godot Engine 4.7+** (`4.7.2-stable` recommended).
-2. *(Optional)* **[Ollama](https://ollama.com/)** running locally at `http://127.0.0.1:11434` for live System 1 cognitive scoring:
+2. **[Ollama](https://ollama.com/)** *(Required)* running locally at `http://127.0.0.1:11434` for System 1 cognitive decision scoring:
    ```bash
    # Pull the default primary and secondary System 1 decision models
    ollama pull d3:4b
    ollama pull tev1:4b
    ```
-   *(If Ollama is offline or models are not installed, Evolution runs at full speed with zero latency using its built-in deterministic biophysical heuristic scorer, and you can also change model tags in the UI or `~/.config/Evolution/settings.json`).*
+   *(Ollama is mandatory because Evolution focuses exclusively on studying neural decision-model behavior. If Ollama is offline at startup, a blocking warning modal prevents the simulation from starting and closes the application when dismissed. If Ollama is online but the configured models are missing, the modal offers automatic model download or exits on close).*
 
 ### Running & Testing
 
@@ -215,7 +215,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>Cognitive Engine &amp; Ollama AI</h3>
-      <p>System 1 multi-model routing (<code>d3:4b</code> &amp; <code>tev1:4b</code>), 10-part state signatures, compact 5-line prompts, worker pools, and the 7-branch heuristic decision scorer.</p>
+      <p>System 1 multi-model routing (<code>d3:4b</code> &amp; <code>tev1:4b</code>), 10-part state signatures, compact 4-line state briefings, worker pools, and startup verification.</p>
     </div>
   </a>
   <a href="ui_tools_controls/" class="feature-card">

@@ -34,16 +34,15 @@ func _run_captures() -> void:
 		await process_frame
 
 	main.hud._startup_models_checked = true
+	main.hud._set_startup_blocked(false)
 	if main.hud._missing_models_modal != null:
 		main.hud._missing_models_modal.visible = false
 	main._on_language_changed("en")
 
 	# 1. screenshot_rift_savanna.png (6 generations, village selected)
 	main.load_preset("preset-rift-savanna")
-	main.world_state.use_live_decision_models = false
 	for _g in range(6):
 		main.step_generation()
-	main.world_state.use_live_decision_models = true
 	main.hud.refresh(main.world_state)
 	if main.world_state.demes.has("deme-rift-east"):
 		main.hud.select_deme("deme-rift-east")
@@ -56,19 +55,15 @@ func _run_captures() -> void:
 
 	# 2. screenshot_darwin_archipelago.png (5 generations)
 	main.load_preset("preset-darwin-archipelago")
-	main.world_state.use_live_decision_models = false
 	for _g in range(5):
 		main.step_generation()
-	main.world_state.use_live_decision_models = true
 	main.hud.refresh(main.world_state)
 	await _wait_and_save(main, "screenshot_darwin_archipelago.png")
 
 	# 3. screenshot_finite_island.png (4 generations, map legend open + ecological lens)
 	main.load_preset("preset-finite-island")
-	main.world_state.use_live_decision_models = false
 	for _g in range(4):
 		main.step_generation()
-	main.world_state.use_live_decision_models = true
 	main.hud.refresh(main.world_state)
 	main.hud._on_lens_pressed("health")
 	if not main.hud._legend_panel.visible:
@@ -81,10 +76,8 @@ func _run_captures() -> void:
 		main.hud._on_legend_toggle_pressed()
 
 	# Advance Finite Island a few more turns and trigger a Baldwin & Speciation event so Chronicle and Lineage Tree are rich
-	main.world_state.use_live_decision_models = false
 	for _g in range(4):
 		main.step_generation()
-	main.world_state.use_live_decision_models = true
 	if not main.world_state.demes.is_empty():
 		var first_d: EvoTypes.Deme = main.world_state.demes.values()[0]
 		first_d.baldwin_counters[first_d.last_dominant_decision_id] = 8
@@ -99,10 +92,8 @@ func _run_captures() -> void:
 
 	# 5. screenshot_tree_modal.png (ensure hierarchical child lineage node exists for visual clarity)
 	main.load_preset("preset-darwin-archipelago")
-	main.world_state.use_live_decision_models = false
 	for _g in range(4):
 		main.step_generation()
-	main.world_state.use_live_decision_models = true
 	if main.world_state.demes.has("deme-darwin-founder"):
 		var f_deme: EvoTypes.Deme = main.world_state.demes["deme-darwin-founder"]
 		f_deme.hex_id = "0,-2"
@@ -119,10 +110,8 @@ func _run_captures() -> void:
 
 	# 7. screenshot_late_simulation.png (56 generations in Rift Savanna to verify clean road lifecycle and late-game UI polish)
 	main.load_preset("preset-rift-savanna")
-	main.world_state.use_live_decision_models = false
 	for _g in range(56):
 		main.step_generation()
-	main.world_state.use_live_decision_models = true
 	main.hud._milestone_banner.visible = false
 	main.hud.refresh(main.world_state)
 	if main.world_state.demes.has("deme-rift-east"):

@@ -22,10 +22,9 @@ The simulation separates **behavioral intent** (probabilistic decision-making pe
 - **Evolutionary Game Theory:** Cohabiting and neighboring demes navigate *Hawk-Dove* territorial disputes, reciprocal symbiosis, or the *Tragedy of the Commons* when intensive overexploitation degrades $K$ below $60\%$ of $K_{\max}$.
 - **Allopatric Speciation:** Geographic isolation across mountain ridges or flooded glacial land bridges triggers phylogenetic divergence into new lineages.
 
-### 2. Dual-Model System 1 Cognitive Architecture (Ollama + Heuristic Engine)
-- **System 1 (High-Frequency Turn Scoring — `d3:4b` & `tev1:4b`):** Evaluates each deme and its 6-hex neighborhood every generation, deterministically assigning subpopulations across the primary (`d3:4b`) and secondary (`tev1:4b`) decision models to compute normalized probability distributions over behavioral archetypes.
+### 2. Dual-Model System 1 Cognitive Architecture (Ollama)
+- **System 1 (High-Frequency Turn Scoring — `d3:4b` & `tev1:4b`):** Evaluates each deme and its 6-hex neighborhood every generation, deterministically assigning subpopulations across the primary (`d3:4b`) and secondary (`tev1:4b`) Ollama decision models to compute normalized probability distributions over behavioral archetypes.
 - **Deterministic Milestone Synthesis (`EvoMilestonePhase`):** Synthesizes emergent traits, cultural innovations, allopatric speciation, and natural history chronicle entries within strict thermodynamic bounds.
-- **Zero-Latency Deterministic Fallback:** Runs seamlessly offline or while background Ollama worker threads complete via a calibrated 6-axis biophysical heuristic scorer.
 
 ### 3. Standardized 6-Axis Biophysical Vector & Thermodynamic Conservation
 Every biological trait, cultural tradition, and behavioral decision maps to a bounded 6-axis vector:
@@ -95,7 +94,7 @@ An open catalog editor to inspect, tweak, or craft new biological traits, cultur
 
 ### Prerequisites
 - **Godot Engine 4.7+** (`4.7.2-stable` recommended)
-- *(Optional)* **[Ollama](https://ollama.com/)** running locally on `http://127.0.0.1:11434` for live LLM cognitive scoring (`d3:4b`, `tev1:4b`). If Ollama is not running, the simulator automatically uses its built-in deterministic biophysical heuristic engine.
+- **[Ollama](https://ollama.com/)** *(Required)* running locally on `http://127.0.0.1:11434` with the configured System 1 decision models (`d3:4b`, `tev1:4b`). Because Evolution exclusively studies neural decision-model behavior, if Ollama is offline at startup, a blocking warning popup prevents the game from starting and closes the application when dismissed.
 
 ### Running from Source
 ```bash

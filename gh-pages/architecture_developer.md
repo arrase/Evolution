@@ -23,7 +23,7 @@ flowchart TD
     subgraph Engine ["src/engine/ — Simulation & Cognitive AI"]
         Turn["EvoTurnEngine (turn_engine.gd)\n5-Stage Generational Orchestrator & Brushes"]
         Env["EvoEnvPhase (env_phase.gd)\nSeasons, Glacial Cycles, Flooding & Regen"]
-        Cog["EvoDecisionModel + EvoOllamaClient + EvoHeuristicScorer\nDual System 1 (d3:4b / tev1:4b), Signatures & 7-Branch Scorer"]
+        Cog["EvoDecisionModel + EvoOllamaClient + EvoHeuristicScorer\nDual System 1 (d3:4b / tev1:4b), Signatures & Trait Synthesis"]
         Biophys["EvoBiophysPhase + EvoEcologyInteraction + EvoDemographyMigration\nHawk-Dove, Symbiosis, K Degrade, Growth, Fission & Merging"]
         Mile["EvoMilestonePhase (milestone_phase.gd)\nSpeciation, Baldwin, Innovation & Macro-Outcomes"]
     end
@@ -76,7 +76,7 @@ flowchart TD
 │   │   │   ├── ecology_interaction.gd   # EvoEcologyInteraction: Hawk-Dove, extraction, symbiosis, K degrade
 │   │   │   └── demography_migration.gd  # EvoDemographyMigration: metabolism, r/K growth, fission, merging
 │   │   └── cognitive/
-│   │       ├── heuristic_scorer.gd      # EvoHeuristicScorer: 10-part signatures, 7-branch scorer, trait synthesis
+│   │       ├── heuristic_scorer.gd      # EvoHeuristicScorer: 10-part signatures, state briefings, trait synthesis
 │   │       └── ollama_client.gd         # EvoOllamaClient: WorkerThreadPool HTTP batching & model pull
 │   ├── ui/
 │   │   ├── main_hud.gd         # EvoMainHud: top-level UI controller & Ollama startup check
@@ -161,7 +161,7 @@ done
 | :---: | :--- | :--- |
 | **1** | `_test_thermodynamics` | Verifies `BASE_BUDGET = 0.60`, `evaluate_thermodynamics`, required cost $0.5 \cdot (A^+ - 0.60)$, auto-balancing into `metabolic_cost` / `ecological_impact`, and `free_sandbox_mode` bypass. |
 | **2** | `_test_catalog_and_presets` | Verifies cell counts (`91`, `91`, `61`), starting demes, base catalog sizes (`11` traits, `7` decisions), `deme_has_cultural_capacity`, and `inject_trait_into_deme` mutual exclusion (`r` vs `K`). |
-| **3** | `_test_decision_model_and_normalization` | Verifies `normalize_decision_probabilities` ($\sum P(d) = 1.0$) and initial Rift Valley heuristic differentiation (`deme-rift-west` $\to$ `forage`, `deme-rift-east` $\to$ `cooperate`). |
+| **3** | `_test_decision_model_and_normalization` | Verifies `normalize_decision_probabilities` ($\sum P(d) = 1.0$), absence of deterministic decision heuristics, and cached Ollama System 1 model evaluation. |
 | **4** | `_test_hawk_dove_and_symbiosis` | Verifies Hawk-Hawk $-15\%$ population loss and `"dispute"` flow generation, plus Symbiosis $+20\%$ bonus and horizontal cultural transmission of `cul-fire-processing`. |
 | **5** | `_test_tragedy_of_the_commons` | Runs `preset-finite-island` and verifies center hex `0,0` degrades below $0.60 \cdot K_{\max}$ and logs `"tragedy_of_commons"`. |
 | **6** | `_test_baldwin_innovation_and_speciation` | Verifies Baldwin assimilation at `counter >= 8`, Cultural Innovation at `innovation_counter >= 1.0`, and Allopatric Speciation at `isolation_turns >= 10` (new `lineage_id`, new color, 2 tree nodes). |

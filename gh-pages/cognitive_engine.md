@@ -2,7 +2,7 @@
 
 **Evolution** features a non-blocking, dual-model **System 1 Cognitive Architecture** (`EvoDecisionModel`, `EvoOllamaClient`, `EvoHeuristicScorer`) that evaluates each subpopulation's ecological, energetic, and social neighborhood every generation.
 
-To guarantee smooth 60 FPS rendering and instant responsiveness whether running with live local LLMs or offline, the cognitive engine combines **deterministic deme-to-model routing**, **10-part ecological state signature caching**, **background worker thread batching**, and a **calibrated 6-axis biophysical heuristic engine**.
+Because this simulation is designed exclusively to study the behavioral decisions of neural System 1 decision models, **all deme decisions are taken strictly by Ollama decision models**—there are no deterministic decision-scoring heuristics substituting for model evaluations. To guarantee smooth 60 FPS rendering and instant UI responsiveness, the cognitive engine combines **deterministic deme-to-model routing**, **10-part ecological state signature caching**, and **background worker thread batching**.
 
 ---
 
@@ -13,8 +13,7 @@ flowchart TD
     Deme["Deme + 6-Hex Neighborhood State"] --> Sig["1. Compute 10-Part Signature\nmodel | season | biome | adequacy | health |\nvitality | competition | traits | dominant | neighbors"]
     Sig --> CacheCheck{"Signature in\n_live_signature_cache?"}
     CacheCheck -- "Cache Hit" --> ApplyLive["Apply Cached Live Ollama\nProbabilities P(d) & Confidence"]
-    CacheCheck -- "Cache Miss" --> Heur["Apply Immediate 6-Axis Heuristic P(d)\n(Zero-Latency Turn Continuity)"]
-    CacheCheck -- "If use_live_decision_models" --> Queue["Enqueue Signature in\n_pending_jobs_by_sig"]
+    CacheCheck -- "Cache Miss" --> Queue["Enqueue Signature in\n_pending_jobs_by_sig"]
     Queue --> Worker["Background WorkerThreadPool\nBatch up to 4 Jobs Concurrently\nPOST 127.0.0.1:11434/v1/systemone"]
     Worker --> HotSwap["Increment _completed_revision\nHot-Swap Live P(d) into Active Turn\n& Pre-Warm Next Generation"]
 ```
@@ -64,27 +63,24 @@ $$\text{sig} = \texttt{model} \mid \texttt{season} \mid \texttt{biome} \mid \tex
 
 ## Live Ollama Inference Protocol (`EvoOllamaClient`)
 
-### 1. Compact 5-Line System 1 Briefing
-When querying Ollama (`POST http://127.0.0.1:11434/v1/systemone`), `EvoHeuristicScorer.build_compact_system_one_state` distills the deme's full biophysical context into a dense 5-line briefing paired with eligible decision criteria:
+### 1. Compact 4-Line System 1 Briefing
+When querying Ollama (`POST http://127.0.0.1:11434/v1/systemone`), `EvoHeuristicScorer.build_compact_system_one_state` distills the deme's pure biophysical context into a dense 4-line state briefing paired with eligible decision criteria:
 
 ```text
 Gen 6 (wet_warm) | Hex 2,-1 (arid_steppe): resources=260/335 (health=88% of Kmax=380), caloricAdequacy=3.87x, temp=+0.60, hum=0.30, alt=0.42
 Deme "Eastern Savanna Hominids": pop=140 (thriving), reserves=180, delta=+8.0 | CellCompetition: totalPop=140, cohabiting=1 (rivals=0, kin=0)
 Traits: K-Strategy[cost:+0.20,extract:+0.25,eco:+0.15,mobility:+0.05,cohesion:+0.40]; Instinctive Sociability[cost:+0.20,extract:+0.20,eco:+0.05,mobility:+0.10,cohesion:+0.60]
 lastDominant=dec-cooperate-store, baldwin=5/8, innovation=0.72/2.0 | Neighbors: 1,-1(savanna, res=260, pop=0, empty), 2,0(savanna, res=260, pop=0, empty)
-Cue: Seasonal savanna aridity favors cooperation and migration.
 ```
 
 ### 2. Non-Blocking Worker Pool, Hot-Swapping & Prefetching
 * **Concurrent HTTP Batching**: `_run_ollama_worker` runs on Godot's `WorkerThreadPool`, popping up to **4 pending signatures per batch** and polling non-blocking `HTTPClient` connections concurrently (`EVAL_TIMEOUT_MS = 4500` ms, `keep_alive = "30m"`).
-* **Live Intra-Turn Hot-Swap**: Whenever a background batch completes, `_completed_revision` increments. On the very next frame (`_process`), `EvoMainController` calls `EvoDecisionModel.apply_completed_live_results`, immediately updating deme decision bars, justifications, and 2.5D village action structures without stalling gameplay.
-* **Post-Turn Prefetching (`prefetch_for_state`)**: At Stage 5 of every generation, the engine computes the next turn's signatures for all surviving demes and enqueues any uncached states ahead of time—so when playing at `1x` (`1.50s/gen`), live LLM scores are already cached before the next generation triggers.
+* **Live Intra-Turn Hot-Swap**: Whenever a background batch completes, `_completed_revision` increments. On the very next frame (`_process`), `EvoMainController` calls `EvoDecisionModel.apply_completed_live_results`, immediately updating deme decision bars, justifications, and 2.5D village action structures without stalling UI rendering.
+* **Post-Turn Prefetching (`prefetch_for_state`)**: At Stage 5 of every generation, the engine computes the next turn's signatures for all surviving demes and enqueues any uncached states ahead of time—so when playing at `1x` (`1.50s/gen`), live LLM scores are already cached before the next generation triggers. While any batch remains pending, automatic generational progression waits for the models to complete their evaluation.
 
 ---
 
-## Calibrated 6-Axis Heuristic Decision Engine (`EvoHeuristicScorer`)
-
-When Ollama is offline, while a new signature is awaiting background completion, or in deterministic test suites (`use_live_decision_models = false`), `EvoHeuristicScorer.evaluate_deme_heuristic` computes an exact probability distribution across all eligible decisions using a **7-branch socio-ecological priority tree**:
+## Decision Eligibility & Probability Normalization
 
 ### Decision Eligibility Rule (`is_decision_eligible`)
 A decision `dec` is eligible if `dec.required_trait_ids.is_empty()` or the deme possesses **at least one** trait in `dec.required_trait_ids`. Specifically:
@@ -92,22 +88,8 @@ A decision `dec` is eligible if `dec.required_trait_ids.is_empty()` or the deme 
 * **6 Base Decisions** (`dec-conservative-forage`, `dec-intensive-overexploit`, `dec-selective-migration`, `dec-cooperate-store`, `dec-territorial-dispute`, `dec-explore-innovate`) are always eligible.
 * **`dec-exchange-symbiosis`** requires `bio-encephalization` OR `bio-social-instinct`.
 
-### The 7-Branch Priority Matrix
-
-`evaluate_deme_heuristic` evaluates the deme's tools, coastal land bridges, biome stressors, and competition in strict priority order (`pri` = Primary model `d3:4b`, `sec` = Secondary model `tev1:4b`):
-
-| Priority | Branch ID | Trigger Condition | `forage` | `overexploit` | `migrate` | `cooperate` | `exchange` | `dispute` | `innovate` |
-| :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1** | `tech_overexploit` | Has `cul-extraction-tools` AND NOT `cul-communal-conservation` | `0.10` | `0.58` (pri, rivals)<br>`0.54` (sec/no rivals) | `0.04` (rivals)<br>`0.10` (solo) | `0.06` | `0.04` | `0.14` (pri, rivals)<br>`0.18` (sec, rivals)<br>`0.12` (solo) | `0.04` |
-| **2a** | `land_bridge_colonize` | Open `coastal_shallows` land bridge AND `pop >= 40` | `0.10` | `0.03` | `0.52` (pri)<br>`0.48` (sec) | `0.20` (pri)<br>`0.22` (sec) | `0.04` | `0.03` | `0.08` (pri)<br>`0.10` (sec) |
-| **2b** | `land_bridge_recover` | Open `coastal_shallows` land bridge AND `pop < 40` | `0.24` | `0.03` | `0.18` | `0.40` | `0.04` | `0.03` | `0.08` |
-| **3** | `insular_alpine` | Adjacent to `ocean` OR biome in `{tundra, high_mountain}` | `0.16` | `0.04` | `0.04` | `0.46` (pri)<br>`0.44` (sec) | `0.08` | `0.04` | `0.18` (pri)<br>`0.20` (sec) |
-| **4** | `arid_savanna` | Biome in `{savanna, arid_steppe}` OR `humidity <= 0.50` | `0.12` | `0.04` | `0.16` (pri)<br>`0.18` (sec) | `0.42` (pri)<br>`0.40` (sec) | `0.08` | `0.04` | `0.14` |
-| **5** | `scarcity_competition` | `resource_adequacy_ratio < 0.70` AND `rival_demes_count > 0` | `0.28` | `0.04` | `0.16` | `0.36` | `0.08` | `0.04` | `0.04` |
-| **6** | `stable_forest` | Default (abundant, humid, uncontested habitat) | `0.52` (pri)<br>`0.50` (sec) | `0.04` | `0.08` | `0.14` (pri)<br>`0.16` (sec) | `0.10` | `0.04` | `0.08` |
-
 ### Probability Normalization (`normalize_decision_probabilities`)
-Both raw LLM scores and heuristic weights are normalized via `EvoHeuristicScorer.normalize_decision_probabilities(raw_scores, eligible_ids)`:
+Raw LLM probability scores returned by Ollama `/v1/systemone` are normalized via `EvoHeuristicScorer.normalize_decision_probabilities(raw_scores, eligible_ids)`:
 
 1. Any non-positive, `NaN`, or infinite score for an eligible decision is clamped to $0.0$ (if all eligible scores are $\le 0$, uniform weights $1 / |\text{eligible}|$ are assigned).
 2. The highest-scoring eligible decision $d_{\max}$ is identified as `dominant_decision_id`.
@@ -117,11 +99,16 @@ Both raw LLM scores and heuristic weights are normalized via `EvoHeuristicScorer
 
 ---
 
-## Startup Model Verification & Automatic Model Pull
+## Startup Ollama Verification, Blocking Offline Notice & Model Download
 
-When **Evolution** starts, `EvoDecisionModel.check_ollama_status(true)` asynchronously queries `GET http://127.0.0.1:11434/api/tags` and `POST /api/show` to inspect installed models and filter those advertising the `"decision"` capability (`EvoOllamaClient.filter_decision_models_from_tags`).
+When **Evolution** starts, `EvoDecisionModel.check_ollama_status(true)` asynchronously queries `GET http://127.0.0.1:11434/api/tags` and `POST /api/show` to verify connectivity and inspect installed models advertising the `"decision"` capability (`EvoOllamaClient.filter_decision_models_from_tags`).
 
-* **Missing Models Popup (`_missing_models_modal`)**: If Ollama is reachable but either `primary_model` (`d3:4b`) or `secondary_model` (`tev1:4b`) is missing locally, the HUD presents a non-intrusive modal offering:
-  * **Automatic In-Game Download (`⬇️ Download automatically`)**: Streams `POST /api/pull` on a background thread with a real-time 0–100% progress bar and automatic model activation upon completion.
-  * **Continue Without Downloading (`Skip / Escape`)**: Immediately dismisses the prompt and runs seamlessly with the built-in heuristic engine (or whichever model is already available).
+* **Ollama Offline Blocking Popup (`show_ollama_offline_popup`)**:
+  * If Ollama is offline or unreachable (`http://127.0.0.1:11434`), **Evolution** displays a full-screen blocking warning popup (`_missing_models_modal`) notifying the user that Ollama is offline and required to run the simulation.
+  * While this popup is active, the simulation **cannot be started** (`Play` and `Step +1` controls are disabled and keyboard/map interactions are blocked).
+  * Closing the popup (`Close application` button or pressing <kbd>Escape</kbd>) cleanly shuts down worker threads and **closes the application** (`get_tree().quit()`).
+* **Missing Models Popup (`show_missing_models_popup`)**:
+  * If Ollama is online but either `primary_model` (`d3:4b`) or `secondary_model` (`tev1:4b`) is missing locally, the blocking modal offers:
+    * **Automatic In-Game Download (`⬇️ Download automatically`)**: Streams `POST /api/pull` on a background thread with a real-time 0–100% progress bar and unlocks the simulation upon completion.
+    * **Close Application (`Close application` / <kbd>Escape</kbd>)**: Cancels any pending download and exits the application.
 * **Custom Model Selection**: Open the **Settings Gear (`⚙️`)** in the top-right clock panel at any time to switch Primary and Secondary models among any installed decision-capable Ollama models, adjust `num_ctx` (default `8192`), and persist your configuration to `~/.config/Evolution/settings.json`.
