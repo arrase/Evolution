@@ -749,6 +749,13 @@ func _test_main_scene_and_ui_integration() -> void:
 
 	# Verify disused_connections lifecycle aging and HUD inspector zero-information-loss
 	var life_state := EvoCatalog.create_preset_world("preset-finite-island", "es")
+	var ld1: EvoTypes.Deme = life_state.demes["deme-island-1"]
+	var ld2: EvoTypes.Deme = life_state.demes["deme-island-2"]
+	(life_state.cells[ld1.hex_id] as EvoTypes.HexCell).deme_ids.erase(ld1.id)
+	(life_state.cells[ld2.hex_id] as EvoTypes.HexCell).deme_ids.erase(ld2.id)
+	ld1.hex_id = "0,0"
+	ld2.hex_id = "0,0"
+	(life_state.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([ld1.id, ld2.id])
 	var coop_fl := EvoTypes.HexEdgeFlow.new()
 	coop_fl.from_hex_id = "0,0"
 	coop_fl.to_hex_id = "0,0"
@@ -759,12 +766,12 @@ func _test_main_scene_and_ui_integration() -> void:
 	EvoEnvPhase.run_environmental_phase(life_state, "es")
 	_assert(life_state.disused_connections.size() == 1 and int(life_state.disused_connections[0].get("age", -1)) == 0, "Active friendly flow recorded into disused_connections with age 0")
 	# Force dispute so the friendly flow is severed
-	(life_state.demes["deme-island-1"] as EvoTypes.Deme).last_decision_probabilities = {"dec-territorial-dispute": 0.90, "dec-conservative-forage": 0.10}
-	(life_state.demes["deme-island-2"] as EvoTypes.Deme).last_decision_probabilities = {"dec-territorial-dispute": 0.90, "dec-conservative-forage": 0.10}
+	ld1.last_decision_probabilities = {"dec-territorial-dispute": 0.90, "dec-conservative-forage": 0.10}
+	ld2.last_decision_probabilities = {"dec-territorial-dispute": 0.90, "dec-conservative-forage": 0.10}
 	EvoBiophysPhase.run_biophysical_phase(life_state, "es")
 	_assert(life_state.disused_connections.size() == 1 and int(life_state.disused_connections[0].get("age", 0)) == 1, "Severed friendly flow ages to 1 in biophys_phase")
 	main.hud.set_world_state(life_state)
-	var rel_lines := main.hud._build_deme_relations_lines(life_state.demes["deme-island-1"] as EvoTypes.Deme)
+	var rel_lines := main.hud._build_deme_relations_lines(ld1)
 	_assert(rel_lines.size() >= 2, "HUD inspector preserves both active/severed paths and cohabiting village relations without information loss")
 
 	# Verify Right Inspector Village Selector & Cycling
