@@ -71,12 +71,12 @@ func _test_catalog_and_presets() -> void:
 
 	var darwin := EvoCatalog.create_preset_world("preset-darwin-archipelago", "en")
 	_assert(darwin.cells.size() == 91, "Darwin Archipelago radius 5 has 91 cells")
-	_assert(darwin.demes.size() == 1, "Darwin Archipelago starts with 1 founder deme")
+	_assert(darwin.demes.size() == 2 and darwin.demes.has("deme-darwin-founder") and darwin.demes.has("deme-darwin-rival"), "Darwin Archipelago starts with 2 rival founder demes (1v1)")
 	_assert(darwin.glacial_sea_level_cycle, "Darwin Archipelago has glacial sea level cycle enabled")
 
 	var island := EvoCatalog.create_preset_world("preset-finite-island", "es")
 	_assert(island.cells.size() == 61, "Finite Island radius 4 has 61 cells")
-	_assert(island.demes.size() == 3, "Finite Island starts with 3 rival clans in 0,0")
+	_assert(island.demes.size() == 2 and island.demes.has("deme-island-1") and island.demes.has("deme-island-2"), "Finite Island starts with 2 rival clans (1v1)")
 
 	var west: EvoTypes.Deme = rift.demes["deme-rift-west"]
 	_assert(EvoCatalog.deme_has_cultural_capacity(west, rift.traits_catalog), "West deme has cultural capacity via bio-social-instinct")
@@ -84,6 +84,161 @@ func _test_catalog_and_presets() -> void:
 	_assert(injected, "Injecting bio-r-strategy succeeds")
 	_assert(west.biological_trait_ids.has("bio-r-strategy"), "West deme now has bio-r-strategy")
 	_assert(not west.biological_trait_ids.has("bio-k-strategy"), "Mutually exclusive bio-k-strategy was removed")
+
+
+func _test_strategies_duel_and_persistence() -> void:
+	print("-- Testing 1v1 Strategy Duel, Inheritance, Persistence & Forge UI --")
+	# 1. Base strategies catalog & vector computation
+	var base_strats := EvoCatalog.create_base_strategies_catalog("es")
+	var base_traits := EvoCatalog.create_base_traits_catalog("es")
+	var expected_strat_ids: Array[String] = [
+		"strat-cooperation",
+		"strat-expansion",
+		"strat-trade",
+		"strat-war",
+		"strat-innovation"
+	]
+	_assert(base_strats.size() == 5, "Base strategies catalog has 5 default strategies")
+	for sid in expected_strat_ids:
+		_assert(base_strats.has(sid), "Base strategies catalog includes %s" % sid)
+		var s: EvoTypes.StrategyDef = base_strats[sid]
+		var vec := EvoCatalog.compute_strategy_vector(s, base_traits)
+		_assert(vec != null and vec.extraction_efficiency > 0.0, "Strategy %s computes valid biophysical vector" % sid)
+
+	# 2. 1v1 strategy matchup initialization in create_preset_world
+	var duel_world := EvoCatalog.create_preset_world("preset-rift-savanna", "en", "strat-trade", "strat-innovation")
+	_assert(duel_world.strategy_a_id == "strat-trade" and duel_world.strategy_b_id == "strat-innovation", "Preset world records strategy_a_id and strategy_b_id")
+	var west: EvoTypes.Deme = duel_world.demes["deme-rift-west"]
+	var east: EvoTypes.Deme = duel_world.demes["deme-rift-east"]
+	var strat_trade: EvoTypes.StrategyDef = duel_world.strategies_catalog["strat-trade"]
+	var strat_innov: EvoTypes.StrategyDef = duel_world.strategies_catalog["strat-innovation"]
+	_assert(west.strategy_id == "strat-trade" and west.color == strat_trade.color, "Slot A deme receives strat-trade id and color")
+	_assert(west.biological_trait_ids == strat_trade.biological_trait_ids and west.cultural_trait_ids == strat_trade.cultural_trait_ids, "Slot A deme receives strat-trade biological and cultural traits")
+	_assert(east.strategy_id == "strat-innovation" and east.color == strat_innov.color, "Slot B deme receives strat-innovation id and color")
+	_assert(east.biological_trait_ids == strat_innov.biological_trait_ids and east.cultural_trait_ids == strat_innov.cultural_trait_ids, "Slot B deme receives strat-innovation biological and cultural traits")
+	var lin_w: EvoTypes.LineageNode = duel_world.lineage_tree[west.lineage_id]
+	var lin_e: EvoTypes.LineageNode = duel_world.lineage_tree[east.lineage_id]
+	_assert(lin_w.strategy_id == "strat-trade" and lin_w.color == strat_trade.color and lin_w.biological_trait_ids == strat_trade.biological_trait_ids, "Slot A lineage node synchronized with strat-trade")
+	_assert(lin_e.strategy_id == "strat-innovation" and lin_e.color == strat_innov.color and lin_e.biological_trait_ids == strat_innov.biological_trait_ids, "Slot B lineage node synchronized with strat-innovation")
+
+	# 3. Strategy inheritance across colonist budding migration and allopatric speciation
+	west.population = 140
+	west.energy_reserves = 200.0
+	west.last_decision_probabilities = {"dec-selective-migration": 0.90, "dec-conservative-forage": 0.10}
+	west.last_dominant_decision_id = "dec-selective-migration"
+	var init_pops := {west.id: west.population, east.id: east.population}
+	var eff_vecs := {
+		west.id: EvoEcologyInteraction.compute_effective_vector(west, duel_world),
+		east.id: EvoEcologyInteraction.compute_effective_vector(east, duel_world)
+	}
+	var ext_energy := {west.id: 90.0, east.id: 90.0}
+	EvoDemographyMigration.run_demography_and_migration_phase(duel_world, "en", init_pops, eff_vecs, {}, ext_energy)
+	var budded_daughter: EvoTypes.Deme = null
+	for did in duel_world.demes.keys():
+		if did != "deme-rift-west" and did != "deme-rift-east":
+			budded_daughter = duel_world.demes[did]
+			break
+	_assert(budded_daughter != null and budded_daughter.strategy_id == "strat-trade", "Colonist budding migration preserves parent strategy_id")
+
+	var spec_world := EvoCatalog.create_preset_world("preset-darwin-archipelago", "en", "strat-expansion", "strat-war")
+	spec_world.generation = 12
+	var darwin_founder: EvoTypes.Deme = spec_world.demes["deme-darwin-founder"]
+	(spec_world.cells[darwin_founder.hex_id] as EvoTypes.HexCell).deme_ids.erase(darwin_founder.id)
+	darwin_founder.hex_id = "0,-2"
+	(spec_world.cells["0,-2"] as EvoTypes.HexCell).deme_ids.append(darwin_founder.id)
+	darwin_founder.isolation_turns = 10
+	var spec_entries := EvoMilestonePhase.run_milestone_phase(spec_world, "en")
+	_assert(not spec_entries.is_empty() and darwin_founder.strategy_id == "strat-expansion", "Allopatric speciation preserves deme strategy_id")
+	_assert((spec_world.lineage_tree[darwin_founder.lineage_id] as EvoTypes.LineageNode).strategy_id == "strat-expansion", "Allopatric speciation child lineage preserves strategy_id")
+
+	# 4. JSON persistence of custom user strategies and traits via EvoUserSettings
+	var tmp_dir := "/tmp/evolution_test_catalog_%d" % Time.get_ticks_usec()
+	var tmp_settings_path := tmp_dir.path_join("settings.json")
+	EvoUserSettings.config_path_override = tmp_settings_path
+
+	var custom_tr := EvoTypes.TraitDef.new()
+	custom_tr.id = "bio-custom-carapace"
+	custom_tr.name = "Chitinous Carapace"
+	custom_tr.category = "biological"
+	custom_tr.origin = "user"
+	custom_tr.description = "Custom defensive adaptation."
+	custom_tr.vector = EvoTypes.BiophysicalVector.new(0.15, 0.25, 0.05, 0.10, 0.20, 0.20)
+	duel_world.traits_catalog[custom_tr.id] = custom_tr
+
+	var custom_st := EvoTypes.StrategyDef.new()
+	custom_st.id = "strat-custom-fortress"
+	custom_st.name = "Fortress Doctrine"
+	custom_st.description = "Custom defensive strategy."
+	custom_st.icon = "🛡️"
+	custom_st.color = "#14B8A6"
+	custom_st.origin = "user"
+	custom_st.biological_trait_ids = ["bio-k-strategy", "bio-social-instinct", "bio-custom-carapace"]
+	custom_st.cultural_trait_ids = ["cul-communal-conservation"]
+	duel_world.strategies_catalog[custom_st.id] = custom_st
+
+	EvoUserSettings.save_user_catalog(duel_world)
+	var catalog_json_path := EvoUserSettings.get_user_catalog_path()
+	_assert(FileAccess.file_exists(catalog_json_path), "EvoUserSettings.save_user_catalog writes user_catalog.json")
+
+	var fresh_state := EvoTypes.WorldState.new()
+	fresh_state.traits_catalog = EvoCatalog.create_base_traits_catalog("en")
+	fresh_state.decisions_catalog = EvoCatalog.create_base_decisions_catalog("en")
+	fresh_state.strategies_catalog = EvoCatalog.create_base_strategies_catalog("en")
+	EvoUserSettings.load_user_catalog_into(fresh_state)
+	_assert(fresh_state.traits_catalog.has("bio-custom-carapace"), "load_user_catalog_into restores custom user trait")
+	_assert(fresh_state.strategies_catalog.has("strat-custom-fortress"), "load_user_catalog_into restores custom user strategy")
+	_assert((fresh_state.strategies_catalog["strat-custom-fortress"] as EvoTypes.StrategyDef).name == "Fortress Doctrine", "Restored custom user strategy preserves name and metadata")
+
+	# 5. UI integration in EvoMainController, EvoMainHud & EvoLabModal
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var main: EvoMainController = packed.instantiate() as EvoMainController
+	main.quit_on_close_enabled = false
+	root.add_child(main)
+	if main.camera == null:
+		main._ready()
+	main.hud._set_startup_blocked(false)
+
+	var opt_a := main.hud.strategy_a_option
+	var opt_b := main.hud.strategy_b_option
+	_assert(opt_a != null and opt_b != null and opt_a.item_count >= 5 and opt_b.item_count >= 5, "HUD strategy_a_option and strategy_b_option populated with strategies")
+	_assert(str(opt_a.get_item_metadata(opt_a.selected)) == main.world_state.strategy_a_id, "strategy_a_option selection reflects world_state.strategy_a_id")
+	_assert(str(opt_b.get_item_metadata(opt_b.selected)) == main.world_state.strategy_b_id, "strategy_b_option selection reflects world_state.strategy_b_id")
+
+	main.hud.open_lab_modal()
+	var lab := main.hud.lab_modal
+	lab._switch_tab("strategy")
+	lab._start_new_item()
+	var cb_k: CheckBox = lab.strategy_trait_checks["bio-k-strategy"]
+	var cb_r: CheckBox = lab.strategy_trait_checks["bio-r-strategy"]
+	cb_k.button_pressed = true
+	cb_r.button_pressed = true
+	_assert(cb_r.button_pressed and not cb_k.button_pressed, "Lab strategy trait checkboxes enforce mutual exclusion between bio-r-strategy and bio-k-strategy")
+
+	lab.id_edit.text = "strat-custom-duelist"
+	lab.name_edit.text = "Duelist Doctrine"
+	lab._save_current_item()
+	_assert(main.world_state.strategies_catalog.has("strat-custom-duelist"), "Saving custom strategy in Lab Modal adds it to strategies_catalog")
+
+	main.set_matchup_strategies("strat-custom-duelist", "strat-trade")
+	_assert(main.world_state.generation == 0 and main.world_state.strategy_a_id == "strat-custom-duelist" and main.world_state.strategy_b_id == "strat-trade", "set_matchup_strategies resets to Generation 0 with selected strategies")
+	_assert((main.world_state.demes["deme-rift-west"] as EvoTypes.Deme).strategy_id == "strat-custom-duelist", "Founder deme A updated with custom strategy")
+
+	main.step_generation()
+	_assert(main.world_state.generation == 1, "Generation advances before reset_matchup")
+	main.reset_matchup()
+	_assert(main.world_state.generation == 0 and main.world_state.strategies_catalog.has("strat-custom-duelist") and main.world_state.strategy_a_id == "strat-custom-duelist", "reset_matchup resets to Generation 0 and preserves custom user strategies")
+
+	main.hud.select_deme("deme-rift-west")
+	_assert(main.hud.deme_strategy_label != null and "Duelist Doctrine" in main.hud.deme_strategy_label.text, "Inspector deme_strategy_label displays selected village strategy")
+
+	main.free()
+	if FileAccess.file_exists(catalog_json_path):
+		DirAccess.remove_absolute(catalog_json_path)
+	if FileAccess.file_exists(tmp_settings_path):
+		DirAccess.remove_absolute(tmp_settings_path)
+	if DirAccess.dir_exists_absolute(tmp_dir):
+		DirAccess.remove_absolute(tmp_dir)
+	EvoUserSettings.config_path_override = ""
 
 
 func _test_decision_model_and_normalization() -> void:
@@ -131,12 +286,19 @@ func _test_hawk_dove_and_symbiosis() -> void:
 	var state := EvoCatalog.create_preset_world("preset-finite-island", "es")
 	var d1: EvoTypes.Deme = state.demes["deme-island-1"]
 	var d2: EvoTypes.Deme = state.demes["deme-island-2"]
-	var d3: EvoTypes.Deme = state.demes["deme-island-3"]
+
+	# Place both rival clans in center cell 0,0 for direct intra-hex interaction
+	(state.cells[d1.hex_id] as EvoTypes.HexCell).deme_ids.erase(d1.id)
+	(state.cells[d2.hex_id] as EvoTypes.HexCell).deme_ids.erase(d2.id)
+	d1.hex_id = "0,0"
+	d2.hex_id = "0,0"
+	(state.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([d1.id, d2.id])
+	var init_pop_1 := d1.population
+	var init_pop_2 := d2.population
 
 	# Force Hawk vs Hawk between d1 and d2
 	d1.last_decision_probabilities = {"dec-territorial-dispute": 0.60, "dec-conservative-forage": 0.40}
 	d2.last_decision_probabilities = {"dec-territorial-dispute": 0.60, "dec-conservative-forage": 0.40}
-	d3.last_decision_probabilities = {"dec-conservative-forage": 1.0}
 	EvoBiophysPhase.run_biophysical_phase(state, "es")
 
 	var has_dispute_flow := false
@@ -145,17 +307,16 @@ func _test_hawk_dove_and_symbiosis() -> void:
 			has_dispute_flow = true
 			break
 	_assert(has_dispute_flow, "Hawk vs Hawk generates dispute flow")
-	_assert(d1.population < 320 and d2.population < 320, "Hawks suffer casualties and metabolic penalty")
+	_assert(d1.population < init_pop_1 and d2.population < init_pop_2, "Hawks suffer casualties and metabolic penalty")
 
-	# Force Symbiosis and Horizontal Cultural Diffusion between d1 and d3
+	# Force Symbiosis and Horizontal Cultural Diffusion between d1 and d2
 	state.active_flows.clear()
-	d1.cultural_trait_ids = ["cul-fire-processing"]
-	d3.cultural_trait_ids = []
+	d1.cultural_trait_ids.assign(["cul-fire-processing"])
+	d2.cultural_trait_ids.clear()
 	d1.last_decision_probabilities = {"dec-exchange-symbiosis": 0.80, "dec-cooperate-store": 0.20}
-	d3.last_decision_probabilities = {"dec-exchange-symbiosis": 0.80, "dec-cooperate-store": 0.20}
-	d2.last_decision_probabilities = {"dec-conservative-forage": 1.0}
+	d2.last_decision_probabilities = {"dec-exchange-symbiosis": 0.80, "dec-cooperate-store": 0.20}
 	EvoBiophysPhase.run_biophysical_phase(state, "es")
-	_assert(d3.cultural_trait_ids.has("cul-fire-processing"), "Horizontal cultural diffusion transmitted cul-fire-processing to d3")
+	_assert(d2.cultural_trait_ids.has("cul-fire-processing"), "Horizontal cultural diffusion transmitted cul-fire-processing to d2")
 
 
 func _test_tragedy_of_the_commons() -> void:
@@ -166,17 +327,19 @@ func _test_tragedy_of_the_commons() -> void:
 		d.last_decision_probabilities = {"dec-intensive-overexploit": 0.65, "dec-territorial-dispute": 0.20, "dec-conservative-forage": 0.15}
 		d.last_dominant_decision_id = "dec-intensive-overexploit"
 	var tragedy_occurred := false
+	var tragedy_hex_id := ""
 	for _g in range(12):
 		EvoTurnEngine.advance_generation(island, "es")
 		for entry in island.chronicle:
 			if entry.event_type == "tragedy_of_commons":
 				tragedy_occurred = true
+				tragedy_hex_id = entry.hex_id
 				break
 		if tragedy_occurred:
 			break
 	_assert(tragedy_occurred, "Finite Island without conservation triggers Tragedy of the Commons")
-	var center_cell: EvoTypes.HexCell = island.cells["0,0"]
-	_assert(center_cell.carrying_capacity < 0.60 * center_cell.carrying_capacity_max, "Center cell K degraded below 60% of Kmax")
+	var degraded_cell: EvoTypes.HexCell = island.cells[tragedy_hex_id] if island.cells.has(tragedy_hex_id) else island.cells["1,0"]
+	_assert(degraded_cell.carrying_capacity < 0.60 * degraded_cell.carrying_capacity_max, "Overexploited cell K degraded below 60% of Kmax")
 
 
 func _test_baldwin_innovation_and_speciation() -> void:
@@ -193,6 +356,7 @@ func _test_baldwin_innovation_and_speciation() -> void:
 	# 2. Cultural innovation & dec-explore-innovate eligibility
 	var state_c := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
 	var east_c: EvoTypes.Deme = state_c.demes["deme-rift-east"]
+	east_c.cultural_trait_ids.clear()
 	var innovate_dec: EvoTypes.DecisionDef = state_c.decisions_catalog["dec-explore-innovate"]
 	_assert(EvoDecisionModel.is_decision_eligible(east_c, innovate_dec, state_c.traits_catalog), "dec-explore-innovate is eligible for deme with cultural capacity")
 	var non_cultural_deme := east_c.duplicate_deme()
@@ -219,7 +383,7 @@ func _test_baldwin_innovation_and_speciation() -> void:
 	var state_s := EvoCatalog.create_preset_world("preset-darwin-archipelago", "es")
 	state_s.generation = 12
 	var founder: EvoTypes.Deme = state_s.demes["deme-darwin-founder"]
-	(state_s.cells["0,0"] as EvoTypes.HexCell).deme_ids.clear()
+	(state_s.cells[founder.hex_id] as EvoTypes.HexCell).deme_ids.erase(founder.id)
 	founder.hex_id = "0,-2" # North tundra island
 	(state_s.cells["0,-2"] as EvoTypes.HexCell).deme_ids.append(founder.id)
 	founder.isolation_turns = 10
@@ -229,7 +393,7 @@ func _test_baldwin_innovation_and_speciation() -> void:
 	_assert(entries_s.size() == 1 and entries_s[0].event_type == "allopatric_speciation", "Allopatric speciation triggers at isolation >= 10 in distinct biome")
 	_assert(founder.lineage_id != old_lineage, "Speciated deme receives new lineage ID")
 	_assert(founder.color != old_color, "Speciated deme receives new distinct color")
-	_assert(state_s.lineage_tree.size() == 2, "Lineage tree now has 2 nodes")
+	_assert(state_s.lineage_tree.size() == 3, "Lineage tree now has 3 nodes (2 initial + 1 speciated)")
 
 
 func _test_kin_merge_fission_and_macro_outcome() -> void:
