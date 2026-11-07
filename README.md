@@ -103,13 +103,40 @@ An open 4-tab catalog editor (`🧬 Biological Traits`, `🔥 Cultural Tradition
 
 ---
 
-## Getting Started
+## Installation & Getting Started
 
 ### Prerequisites
-- **Godot Engine 4.7+** (`4.7.2-stable` recommended)
 - **[Ollama](https://ollama.com/)** *(Required)* running locally on `http://127.0.0.1:11434` with the configured System 1 decision models (`d3:4b`, `tev1:4b`). Because Evolution exclusively studies neural decision-model behavior, if Ollama is offline at startup, a blocking warning popup prevents the game from starting and closes the application when dismissed.
 
+### Prebuilt Release Binaries
+
+Download the latest release for your operating system from the [**GitHub Releases**](https://github.com/arrase/Evolution/releases/latest) page:
+
+#### Linux (`x86_64`)
+1. Download `evolution-linux-x86_64.tar.gz`.
+2. Extract the archive and run the executable:
+   ```bash
+   tar -xzf evolution-linux-x86_64.tar.gz
+   chmod +x evolution-linux-x86_64
+   ./evolution-linux-x86_64
+   ```
+
+#### Windows (`x86_64`)
+1. Download `evolution-windows-x86_64.zip`.
+2. Extract the `.zip` archive to any folder.
+3. Double-click `evolution-windows-x86_64.exe` to launch the simulator (if Windows SmartScreen appears, click **More info** → **Run anyway**).
+
+#### macOS (`Universal` — Apple Silicon & Intel)
+1. Download `evolution-macos-universal.zip`.
+2. Double-click the `.zip` file to extract `Evolution.app`, and optionally move it to `/Applications`.
+3. Because the bundle is unsigned, remove the macOS Gatekeeper quarantine attribute before launching for the first time (or Right-Click → **Open**):
+   ```bash
+   xattr -dr com.apple.quarantine Evolution.app
+   open Evolution.app
+   ```
+
 ### Running from Source
+Requires **Godot Engine 4.7+** (`4.7.2-stable` recommended):
 ```bash
 # Import project assets and launch the simulator
 godot --path .
