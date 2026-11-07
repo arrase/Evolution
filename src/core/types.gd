@@ -192,6 +192,61 @@ class DecisionDef extends RefCounted:
 		return dec
 
 
+class StrategyDef extends RefCounted:
+	var id: String = ""
+	var name: String = ""
+	var description: String = ""
+	var icon: String = "🛡️"
+	var color: String = "#10B981"
+	var origin: String = "base" # "base" | "user"
+	var biological_trait_ids: Array[String] = []
+	var cultural_trait_ids: Array[String] = []
+
+	func duplicate_strategy() -> StrategyDef:
+		var s := StrategyDef.new()
+		s.id = id
+		s.name = name
+		s.description = description
+		s.icon = icon
+		s.color = color
+		s.origin = origin
+		s.biological_trait_ids = biological_trait_ids.duplicate()
+		s.cultural_trait_ids = cultural_trait_ids.duplicate()
+		return s
+
+	func to_dict() -> Dictionary:
+		return {
+			"id": id,
+			"name": name,
+			"description": description,
+			"icon": icon,
+			"color": color,
+			"origin": origin,
+			"biologicalTraitIds": biological_trait_ids.duplicate(),
+			"culturalTraitIds": cultural_trait_ids.duplicate(),
+			"biological_trait_ids": biological_trait_ids.duplicate(),
+			"cultural_trait_ids": cultural_trait_ids.duplicate()
+		}
+
+	static func from_dict(data: Dictionary) -> StrategyDef:
+		var s := StrategyDef.new()
+		s.id = str(data["id"])
+		s.name = str(data["name"])
+		s.description = str(data["description"]) if data.has("description") else ""
+		s.icon = str(data["icon"]) if data.has("icon") else "🛡️"
+		s.color = str(data["color"]) if data.has("color") else "#10B981"
+		s.origin = str(data["origin"]) if data.has("origin") else "base"
+		s.biological_trait_ids = []
+		var raw_bio: Array = data["biologicalTraitIds"] if data.has("biologicalTraitIds") else (data["biological_trait_ids"] if data.has("biological_trait_ids") else [])
+		for item in raw_bio:
+			s.biological_trait_ids.append(str(item))
+		s.cultural_trait_ids = []
+		var raw_cul: Array = data["culturalTraitIds"] if data.has("culturalTraitIds") else (data["cultural_trait_ids"] if data.has("cultural_trait_ids") else [])
+		for item in raw_cul:
+			s.cultural_trait_ids.append(str(item))
+		return s
+
+
 class HexCell extends RefCounted:
 	var id: String = "0,0"
 	var q: int = 0
@@ -265,6 +320,7 @@ class Deme extends RefCounted:
 	var id: String = ""
 	var name: String = ""
 	var lineage_id: String = ""
+	var strategy_id: String = ""
 	var color: String = "#E07A5F"
 	var hex_id: String = "0,0"
 	var population: int = 100
@@ -286,6 +342,7 @@ class Deme extends RefCounted:
 		d.id = id
 		d.name = name
 		d.lineage_id = lineage_id
+		d.strategy_id = strategy_id
 		d.color = color
 		d.hex_id = hex_id
 		d.population = population
@@ -336,6 +393,8 @@ class Deme extends RefCounted:
 			"id": id,
 			"name": name,
 			"lineageId": lineage_id,
+			"strategyId": strategy_id,
+			"strategy_id": strategy_id,
 			"color": color,
 			"hexId": hex_id,
 			"population": population,
@@ -358,6 +417,10 @@ class Deme extends RefCounted:
 		d.id = str(dict_data["id"])
 		d.name = str(dict_data["name"])
 		d.lineage_id = str(dict_data["lineageId"])
+		if dict_data.has("strategyId"):
+			d.strategy_id = str(dict_data["strategyId"])
+		elif dict_data.has("strategy_id"):
+			d.strategy_id = str(dict_data["strategy_id"])
 		d.color = str(dict_data["color"])
 		d.hex_id = str(dict_data["hexId"])
 		d.population = int(dict_data["population"])
@@ -393,37 +456,50 @@ class LineageNode extends RefCounted:
 	var id: String = ""
 	var name: String = ""
 	var parent_id: String = ""
+	var strategy_id: String = ""
 	var color: String = "#E07A5F"
 	var founded_generation: int = 0
 	var extinct_generation: int = -1
 	var founder_hex_id: String = "0,0"
 	var divergence_reason: String = "initial" # "initial" | "allopatric_speciation" | "cultural_schism" | "baldwin_assimilation"
 	var acquired_trait_ids: Array[String] = []
+	var biological_trait_ids: Array[String] = []
+	var cultural_trait_ids: Array[String] = []
 
 	func duplicate_node() -> LineageNode:
 		var n := LineageNode.new()
 		n.id = id
 		n.name = name
 		n.parent_id = parent_id
+		n.strategy_id = strategy_id
 		n.color = color
 		n.founded_generation = founded_generation
 		n.extinct_generation = extinct_generation
 		n.founder_hex_id = founder_hex_id
 		n.divergence_reason = divergence_reason
 		n.acquired_trait_ids = acquired_trait_ids.duplicate()
+		n.biological_trait_ids = biological_trait_ids.duplicate()
+		n.cultural_trait_ids = cultural_trait_ids.duplicate()
 		return n
+
+	func duplicate_lineage() -> LineageNode:
+		return duplicate_node()
 
 	func to_dict() -> Dictionary:
 		return {
 			"id": id,
 			"name": name,
 			"parentId": parent_id,
+			"strategyId": strategy_id,
+			"strategy_id": strategy_id,
 			"color": color,
 			"foundedGeneration": founded_generation,
 			"extinctGeneration": extinct_generation,
 			"founderHexId": founder_hex_id,
 			"divergenceReason": divergence_reason,
-			"acquiredTraitIds": acquired_trait_ids.duplicate()
+			"acquiredTraitIds": acquired_trait_ids.duplicate(),
+			"biologicalTraitIds": biological_trait_ids.duplicate(),
+			"culturalTraitIds": cultural_trait_ids.duplicate()
 		}
 
 	static func from_dict(d: Dictionary) -> LineageNode:
@@ -431,6 +507,10 @@ class LineageNode extends RefCounted:
 		n.id = str(d["id"])
 		n.name = str(d["name"])
 		n.parent_id = str(d["parentId"]) if d.has("parentId") and d["parentId"] != null else ""
+		if d.has("strategyId"):
+			n.strategy_id = str(d["strategyId"])
+		elif d.has("strategy_id"):
+			n.strategy_id = str(d["strategy_id"])
 		n.color = str(d["color"])
 		n.founded_generation = int(d["foundedGeneration"])
 		n.extinct_generation = int(d["extinctGeneration"]) if d.has("extinctGeneration") and d["extinctGeneration"] != null else -1
@@ -439,6 +519,14 @@ class LineageNode extends RefCounted:
 		n.acquired_trait_ids = []
 		for item in d["acquiredTraitIds"]:
 			n.acquired_trait_ids.append(str(item))
+		n.biological_trait_ids = []
+		if d.has("biologicalTraitIds"):
+			for item in d["biologicalTraitIds"]:
+				n.biological_trait_ids.append(str(item))
+		n.cultural_trait_ids = []
+		if d.has("culturalTraitIds"):
+			for item in d["culturalTraitIds"]:
+				n.cultural_trait_ids.append(str(item))
 		return n
 
 
@@ -549,7 +637,15 @@ class WorldState extends RefCounted:
 	var demes: Dictionary = {} # String (deme_id) -> Deme
 	var traits_catalog: Dictionary = {} # String (trait_id) -> TraitDef
 	var decisions_catalog: Dictionary = {} # String (decision_id) -> DecisionDef
+	var strategies_catalog: Dictionary = {} # String (strategy_id) -> StrategyDef
+	var strategy_a_id: String = "strat-cooperation"
+	var strategy_b_id: String = "strat-war"
 	var lineage_tree: Dictionary = {} # String (lineage_id) -> LineageNode
+	var lineages: Dictionary:
+		get:
+			return lineage_tree
+		set(value):
+			lineage_tree = value
 	var chronicle: Array[ChronicleEntry] = []
 	var active_flows: Array[HexEdgeFlow] = []
 	var recent_extinction_hexes: Array[String] = [] # hex_ids that had real extinction this turn
@@ -574,6 +670,8 @@ class WorldState extends RefCounted:
 		s.unlimited_pressure_mode = unlimited_pressure_mode
 		s.free_sandbox_mode = free_sandbox_mode
 		s.auto_pause_on_milestone = auto_pause_on_milestone
+		s.strategy_a_id = strategy_a_id
+		s.strategy_b_id = strategy_b_id
 		for k in cells.keys():
 			s.cells[k] = (cells[k] as HexCell).duplicate_cell()
 		for k in demes.keys():
@@ -582,6 +680,8 @@ class WorldState extends RefCounted:
 			s.traits_catalog[k] = (traits_catalog[k] as TraitDef).duplicate_trait()
 		for k in decisions_catalog.keys():
 			s.decisions_catalog[k] = (decisions_catalog[k] as DecisionDef).duplicate_decision()
+		for k in strategies_catalog.keys():
+			s.strategies_catalog[k] = (strategies_catalog[k] as StrategyDef).duplicate_strategy()
 		for k in lineage_tree.keys():
 			s.lineage_tree[k] = (lineage_tree[k] as LineageNode).duplicate_node()
 		for entry in chronicle:
@@ -610,6 +710,9 @@ class WorldState extends RefCounted:
 		var decisions_dict := {}
 		for k in decisions_catalog.keys():
 			decisions_dict[k] = (decisions_catalog[k] as DecisionDef).to_dict()
+		var strategies_dict := {}
+		for k in strategies_catalog.keys():
+			strategies_dict[k] = (strategies_catalog[k] as StrategyDef).to_dict()
 		var lineage_dict := {}
 		for k in lineage_tree.keys():
 			lineage_dict[k] = (lineage_tree[k] as LineageNode).to_dict()
@@ -632,10 +735,16 @@ class WorldState extends RefCounted:
 			"unlimitedPressureMode": unlimited_pressure_mode,
 			"freeSandboxMode": free_sandbox_mode,
 			"autoPauseOnMilestone": auto_pause_on_milestone,
+			"strategyAId": strategy_a_id,
+			"strategyBId": strategy_b_id,
+			"strategy_a_id": strategy_a_id,
+			"strategy_b_id": strategy_b_id,
 			"cells": cells_dict,
 			"demes": demes_dict,
 			"traitsCatalog": traits_dict,
 			"decisionsCatalog": decisions_dict,
+			"strategiesCatalog": strategies_dict,
+			"strategies_catalog": strategies_dict,
 			"lineageTree": lineage_dict,
 			"chronicle": chron_arr,
 			"activeFlows": flows_arr,
@@ -662,6 +771,14 @@ class WorldState extends RefCounted:
 		s.unlimited_pressure_mode = bool(d["unlimitedPressureMode"])
 		s.free_sandbox_mode = bool(d["freeSandboxMode"])
 		s.auto_pause_on_milestone = bool(d["autoPauseOnMilestone"])
+		if d.has("strategyAId"):
+			s.strategy_a_id = str(d["strategyAId"])
+		elif d.has("strategy_a_id"):
+			s.strategy_a_id = str(d["strategy_a_id"])
+		if d.has("strategyBId"):
+			s.strategy_b_id = str(d["strategyBId"])
+		elif d.has("strategy_b_id"):
+			s.strategy_b_id = str(d["strategy_b_id"])
 		for k in d["cells"].keys():
 			s.cells[str(k)] = HexCell.from_dict(d["cells"][k])
 		for k in d["demes"].keys():
@@ -670,6 +787,9 @@ class WorldState extends RefCounted:
 			s.traits_catalog[str(k)] = TraitDef.from_dict(d["traitsCatalog"][k])
 		for k in d["decisionsCatalog"].keys():
 			s.decisions_catalog[str(k)] = DecisionDef.from_dict(d["decisionsCatalog"][k])
+		var raw_strats: Dictionary = d["strategiesCatalog"] if d.has("strategiesCatalog") else (d["strategies_catalog"] if d.has("strategies_catalog") else {})
+		for k in raw_strats.keys():
+			s.strategies_catalog[str(k)] = StrategyDef.from_dict(raw_strats[k])
 		for k in d["lineageTree"].keys():
 			s.lineage_tree[str(k)] = LineageNode.from_dict(d["lineageTree"][k])
 		for item in d["chronicle"]:

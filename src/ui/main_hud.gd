@@ -2,6 +2,8 @@ class_name EvoMainHud
 extends Control
 
 signal preset_selected(preset_id: String)
+signal matchup_changed(strategy_a_id: String, strategy_b_id: String)
+signal matchup_reset_requested()
 signal export_json_requested(file_path: String)
 signal import_json_requested(file_path: String)
 signal state_imported(new_state: EvoTypes.WorldState)
@@ -26,10 +28,15 @@ const PRESET_LIST: Array[String] = EvoHudTopBar.PRESET_LIST
 const DEFAULT_EXPORT_PATH: String = "user://evolution_world_state.json"
 const HOTBAR_SLOTS_DEF: Array[Dictionary] = EvoHudHotbarDock.HOTBAR_SLOTS_DEF
 
+var top_bar: EvoHudTopBar
+var inspector_panel: EvoHudInspectorPanel
+var hotbar_dock: EvoHudHotbarDock
+
 var _world_state: EvoTypes.WorldState = null
 var _lang: String = "es"
 var _is_playing: bool = false
 var _is_fast: bool = false
+var _suppress_strategy_signal: bool = false
 
 var _active_tool: String = "inspect"
 var _active_sub_mode: String = "savanna"
@@ -45,8 +52,14 @@ var _step_1_done: bool = false
 var _step_2_done: bool = false
 var _step_3_done: bool = false
 
-# Top-Left Valley Sign, Artifacts & Living Village Medallions
+# Top-Left Valley Sign, Strategy Matchup Selector, Artifacts & Living Village Medallions
 var _preset_option: OptionButton
+var strategy_a_swatch: ColorRect
+var strategy_a_option: OptionButton
+var matchup_vs_label: Label
+var strategy_b_swatch: ColorRect
+var strategy_b_option: OptionButton
+var matchup_reset_button: Button
 var _export_btn: Button
 var _import_btn: Button
 var _notebook_btn: Button
@@ -112,11 +125,14 @@ var _inspector_minimize_btn: Button
 var _inspector_tab: String = "deme" # "deme" | "traits" | "habitat"
 var _village_prev_btn: Button
 var _village_selector_opt: OptionButton
+var deme_selector_option: OptionButton
 var _village_next_btn: Button
 var _inspector_header_swatch: ColorRect
 var _inspector_header_title: Label
 var _inspector_header_hl_btn: Button
 var _inspector_model_badge_lbl: Label
+var _strategy_badge_panel: PanelContainer
+var deme_strategy_label: Label
 var _tab_deme_btn: Button
 var _tab_traits_btn: Button
 var _tab_habitat_btn: Button
@@ -259,6 +275,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 
 func _build_ui() -> void:
+	top_bar = EvoHudTopBar.new(self)
+	top_bar.matchup_changed.connect(func(a: String, b: String) -> void: matchup_changed.emit(a, b))
+	top_bar.matchup_reset_requested.connect(func() -> void: matchup_reset_requested.emit())
+	inspector_panel = EvoHudInspectorPanel.new(self)
+	hotbar_dock = EvoHudHotbarDock.new(self)
+
 	EvoHudTopBar.build_top_left_valley_sign_and_medallions(self)
 	EvoHudTopBar.build_top_right_clock(self)
 	EvoHudTopBar.build_settings_popup(self)
@@ -324,9 +346,11 @@ func set_world_state(world_state: EvoTypes.WorldState) -> void:
 	refresh(_world_state)
 
 
-func refresh(world_state: EvoTypes.WorldState = null) -> void:
+func refresh(world_state: EvoTypes.WorldState = null, is_playing_override: Variant = null) -> void:
 	if world_state != null:
 		_world_state = world_state
+	if is_playing_override is bool:
+		_is_playing = bool(is_playing_override)
 	if _world_state == null:
 		return
 
@@ -344,6 +368,7 @@ func refresh(world_state: EvoTypes.WorldState = null) -> void:
 	_update_top_bar_state()
 	_rebuild_villages_list()
 	_rebuild_active_inspector_sheet()
+	_rebuild_legend_content()
 	_update_first_steps_labels()
 	_update_hotbar_visuals()
 
@@ -353,6 +378,14 @@ func refresh(world_state: EvoTypes.WorldState = null) -> void:
 		tree_modal.refresh(_world_state)
 	if lab_modal != null and lab_modal.visible:
 		lab_modal.refresh(_world_state, _selected_deme_id)
+
+
+func refresh_strategies(state: EvoTypes.WorldState, lang: String = "es") -> void:
+	EvoHudTopBar.refresh_strategies_for_hud(self, state, lang)
+
+
+func refresh_legend(state: EvoTypes.WorldState, lang: String = "es") -> void:
+	EvoHudHotbarDock.refresh_legend_for_hud(self, state, lang)
 
 
 func _rebuild_active_inspector_sheet() -> void:
@@ -405,6 +438,7 @@ func set_playing_state(is_playing: bool) -> void:
 
 func set_language(lang: String) -> void:
 	_lang = lang
+	refresh_strategies(_world_state, _lang)
 	_update_static_labels()
 	_rebuild_sub_tool_options()
 	_rebuild_legend_content()
@@ -509,6 +543,26 @@ func _update_first_steps_labels() -> void:
 	EvoHudBannersToasts.update_first_steps_labels(self)
 
 
+func _on_strategy_option_selected(_index: int) -> void:
+	if _suppress_strategy_signal or strategy_a_option == null or strategy_b_option == null:
+		return
+	var sel_a := maxi(0, strategy_a_option.selected)
+	var sel_b := maxi(0, strategy_b_option.selected)
+	var strat_a_id := str(strategy_a_option.get_item_metadata(sel_a)) if strategy_a_option.item_count > 0 else EvoCatalog.DEFAULT_STRATEGY_A_ID
+	var strat_b_id := str(strategy_b_option.get_item_metadata(sel_b)) if strategy_b_option.item_count > 0 else EvoCatalog.DEFAULT_STRATEGY_B_ID
+	if top_bar != null:
+		top_bar.matchup_changed.emit(strat_a_id, strat_b_id)
+	else:
+		matchup_changed.emit(strat_a_id, strat_b_id)
+
+
+func _on_matchup_reset_pressed() -> void:
+	if top_bar != null:
+		top_bar.matchup_reset_requested.emit()
+	else:
+		matchup_reset_requested.emit()
+
+
 func _on_village_selector_item_selected(index: int) -> void:
 	if _village_selector_opt == null or index < 0 or index >= _village_selector_opt.item_count:
 		return
@@ -554,7 +608,7 @@ func _on_toggle_inspector_minimize() -> void:
 	_inspector_minimized = not _inspector_minimized
 	_inspector_body_vbox.visible = not _inspector_minimized
 	_inspector_minimize_btn.text = "▸" if _inspector_minimized else "▾"
-	_inspector_frame.offset_bottom = 204 if _inspector_minimized else 865
+	_inspector_frame.offset_bottom = 228 if _inspector_minimized else 865
 	if not _inspector_minimized:
 		_rebuild_active_inspector_sheet()
 

@@ -3,6 +3,8 @@ extends Control
 
 signal catalog_item_saved(item_type: String, item_data: Dictionary)
 signal inject_trait_requested(deme_id: String, trait_id: String)
+signal strategy_saved(strategy_id: String)
+signal strategy_assigned(slot: String, strategy_id: String)
 signal modal_closed()
 
 const SLIDER_KEYS: Array[String] = [
@@ -14,41 +16,91 @@ const SLIDER_KEYS: Array[String] = [
 	"transmission_threshold"
 ]
 
+const STRATEGY_ICONS: Array[String] = [
+	"🤝", "🧭", "⚖️", "⚔️", "🔬", "🛡️", "🌿", "🔥", "👑", "⚡"
+]
+
+const STRATEGY_SWATCH_COLORS: Array[String] = [
+	"#10B981", "#3B82F6", "#F59E0B", "#EF4444", "#A855F7", "#EC4899", "#14B8A6", "#F97316"
+]
+
 var _world_state: EvoTypes.WorldState = null
 var _lang: String = "es"
 var _selected_deme_id: String = ""
-var _active_tab: String = "biological" # "biological" | "cultural" | "decision"
-var _editing_id: String = ""
+var _current_tab: String = "strategy"
+var _selected_id: String = ""
 var _updating_sliders: bool = false
+var _updating_strategy_checks: bool = false
+var _custom_counter: int = 0
 
+var _active_tab: String:
+	get:
+		return _current_tab
+	set(value):
+		_current_tab = value
+
+var _editing_id: String:
+	get:
+		return _selected_id
+	set(value):
+		_selected_id = value
+
+# Public controls required by HUD and test suite
+var tab_strategy_btn: Button
+var tab_bio_btn: Button
+var tab_cul_btn: Button
+var tab_dec_btn: Button
+var item_list: VBoxContainer
+var new_item_button: Button
+var id_edit: LineEdit
+var name_edit: LineEdit
+var desc_edit: TextEdit
+var enables_culture_check: CheckBox
+var sliders: Dictionary = {}
+var balance_bar: ProgressBar
+var balance_status_label: Label
+var auto_balance_button: Button
+var save_item_button: Button
+var inject_deme_option: OptionButton
+var inject_button: Button
+
+# Strategy-specific controls
+var strategy_icon_option: OptionButton
+var strategy_color_picker: ColorPickerButton
+var strategy_traits_box: VBoxContainer
+var strategy_trait_checks: Dictionary = {}
+var strategy_vector_label: Label
+var use_strategy_a_button: Button
+var use_strategy_b_button: Button
+
+# Internal layout & labels
 var _title_label: Label
 var _close_btn: Button
-var _tab_bio_btn: Button
-var _tab_cul_btn: Button
-var _tab_dec_btn: Button
-var _new_item_btn: Button
-var _items_list_vbox: VBoxContainer
-
 var _form_header_lbl: Label
+var _id_lbl: Label
 var _name_lbl: Label
-var _name_input: LineEdit
 var _desc_lbl: Label
-var _desc_input: LineEdit
-var _culture_check: CheckBox
 var _archetype_row: HBoxContainer
 var _archetype_lbl: Label
 var _archetype_option: OptionButton
 
-var _slider_controls: Dictionary = {} # key -> HSlider
-var _slider_title_labels: Dictionary = {} # key -> Label
-var _slider_val_labels: Dictionary = {} # key -> Label
+var _strategy_emblem_row: HBoxContainer
+var _strategy_icon_lbl: Label
+var _strategy_color_lbl: Label
+var _strategy_traits_card: PanelContainer
+var _strategy_traits_title_lbl: Label
+var _strategy_vector_card: PanelContainer
+var _strategy_vector_title_lbl: Label
+var _strategy_matchup_row: HBoxContainer
 
+var _sliders_card: PanelContainer
+var _slider_title_labels: Dictionary = {}
+var _slider_val_labels: Dictionary = {}
+var _thermo_card: PanelContainer
 var _thermo_title_lbl: Label
 var _thermo_metrics_lbl: Label
-var _thermo_status_lbl: Label
-var _auto_balance_btn: Button
-var _save_btn: Button
-var _inject_btn: Button
+var _inject_row: HBoxContainer
+var _inject_deme_lbl: Label
 var _feedback_lbl: Label
 
 
@@ -79,7 +131,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	var frame := PanelContainer.new()
-	frame.custom_minimum_size = Vector2(980, 650)
+	frame.custom_minimum_size = Vector2(1020, 680)
 	frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(14))
 	center.add_child(frame)
 
@@ -106,31 +158,35 @@ func _build_ui() -> void:
 	_close_btn.pressed.connect(close_modal)
 	header_hbox.add_child(_close_btn)
 
-	# 3 Tabs bar
+	# 4 Tabs bar
 	var tabs_hbox := HBoxContainer.new()
 	tabs_hbox.add_theme_constant_override("separation", 8)
 	main_vbox.add_child(tabs_hbox)
 
-	_tab_bio_btn = Button.new()
-	_tab_bio_btn.pressed.connect(_on_tab_selected.bind("biological"))
-	tabs_hbox.add_child(_tab_bio_btn)
+	tab_strategy_btn = Button.new()
+	tab_strategy_btn.pressed.connect(_switch_tab.bind("strategy"))
+	tabs_hbox.add_child(tab_strategy_btn)
 
-	_tab_cul_btn = Button.new()
-	_tab_cul_btn.pressed.connect(_on_tab_selected.bind("cultural"))
-	tabs_hbox.add_child(_tab_cul_btn)
+	tab_bio_btn = Button.new()
+	tab_bio_btn.pressed.connect(_switch_tab.bind("biological"))
+	tabs_hbox.add_child(tab_bio_btn)
 
-	_tab_dec_btn = Button.new()
-	_tab_dec_btn.pressed.connect(_on_tab_selected.bind("decision"))
-	tabs_hbox.add_child(_tab_dec_btn)
+	tab_cul_btn = Button.new()
+	tab_cul_btn.pressed.connect(_switch_tab.bind("cultural"))
+	tabs_hbox.add_child(tab_cul_btn)
 
-	# Content split: Catalog List (left) + Craft Form (right)
+	tab_dec_btn = Button.new()
+	tab_dec_btn.pressed.connect(_switch_tab.bind("decision"))
+	tabs_hbox.add_child(tab_dec_btn)
+
+	# Body split: Left catalog list + Right editor
 	var body_hbox := HBoxContainer.new()
 	body_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	body_hbox.add_theme_constant_override("separation", 10)
 	main_vbox.add_child(body_hbox)
 
 	var left_panel := PanelContainer.new()
-	left_panel.custom_minimum_size = Vector2(280, 0)
+	left_panel.custom_minimum_size = Vector2(300, 0)
 	left_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(10, true))
 	body_hbox.add_child(left_panel)
@@ -139,19 +195,19 @@ func _build_ui() -> void:
 	left_vbox.add_theme_constant_override("separation", 8)
 	left_panel.add_child(left_vbox)
 
-	_new_item_btn = Button.new()
-	_new_item_btn.pressed.connect(_on_new_item_pressed)
-	left_vbox.add_child(_new_item_btn)
+	new_item_button = Button.new()
+	new_item_button.pressed.connect(_start_new_item)
+	left_vbox.add_child(new_item_button)
 
 	var list_scroll := ScrollContainer.new()
 	list_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	list_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_vbox.add_child(list_scroll)
 
-	_items_list_vbox = VBoxContainer.new()
-	_items_list_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_items_list_vbox.add_theme_constant_override("separation", 6)
-	list_scroll.add_child(_items_list_vbox)
+	item_list = VBoxContainer.new()
+	item_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	item_list.add_theme_constant_override("separation", 6)
+	list_scroll.add_child(item_list)
 
 	# Right panel: Editor Form
 	var right_panel := PanelContainer.new()
@@ -175,6 +231,18 @@ func _build_ui() -> void:
 	_form_header_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	form_vbox.add_child(_form_header_lbl)
 
+	var id_row := HBoxContainer.new()
+	id_row.add_theme_constant_override("separation", 8)
+	form_vbox.add_child(id_row)
+
+	_id_lbl = Label.new()
+	_id_lbl.custom_minimum_size = Vector2(110, 0)
+	id_row.add_child(_id_lbl)
+
+	id_edit = LineEdit.new()
+	id_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	id_row.add_child(id_edit)
+
 	var name_row := HBoxContainer.new()
 	name_row.add_theme_constant_override("separation", 8)
 	form_vbox.add_child(name_row)
@@ -183,9 +251,9 @@ func _build_ui() -> void:
 	_name_lbl.custom_minimum_size = Vector2(110, 0)
 	name_row.add_child(_name_lbl)
 
-	_name_input = LineEdit.new()
-	_name_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_row.add_child(_name_input)
+	name_edit = LineEdit.new()
+	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_row.add_child(name_edit)
 
 	var desc_row := HBoxContainer.new()
 	desc_row.add_theme_constant_override("separation", 8)
@@ -195,12 +263,87 @@ func _build_ui() -> void:
 	_desc_lbl.custom_minimum_size = Vector2(110, 0)
 	desc_row.add_child(_desc_lbl)
 
-	_desc_input = LineEdit.new()
-	_desc_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	desc_row.add_child(_desc_input)
+	desc_edit = TextEdit.new()
+	desc_edit.custom_minimum_size = Vector2(0, 56)
+	desc_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	desc_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	desc_row.add_child(desc_edit)
 
-	_culture_check = CheckBox.new()
-	form_vbox.add_child(_culture_check)
+	# Strategy Emblem & Color row
+	_strategy_emblem_row = HBoxContainer.new()
+	_strategy_emblem_row.add_theme_constant_override("separation", 10)
+	form_vbox.add_child(_strategy_emblem_row)
+
+	_strategy_icon_lbl = Label.new()
+	_strategy_icon_lbl.custom_minimum_size = Vector2(110, 0)
+	_strategy_emblem_row.add_child(_strategy_icon_lbl)
+
+	strategy_icon_option = OptionButton.new()
+	strategy_icon_option.custom_minimum_size = Vector2(90, 0)
+	for i in range(STRATEGY_ICONS.size()):
+		strategy_icon_option.add_item(STRATEGY_ICONS[i], i)
+		strategy_icon_option.set_item_metadata(i, STRATEGY_ICONS[i])
+	_strategy_emblem_row.add_child(strategy_icon_option)
+
+	_strategy_color_lbl = Label.new()
+	_strategy_emblem_row.add_child(_strategy_color_lbl)
+
+	strategy_color_picker = ColorPickerButton.new()
+	strategy_color_picker.custom_minimum_size = Vector2(56, 28)
+	strategy_color_picker.edit_alpha = false
+	strategy_color_picker.color = Color("#10B981")
+	_strategy_emblem_row.add_child(strategy_color_picker)
+
+	for swatch_hex in STRATEGY_SWATCH_COLORS:
+		var swatch_btn := Button.new()
+		swatch_btn.custom_minimum_size = Vector2(22, 22)
+		var col := Color(swatch_hex)
+		swatch_btn.add_theme_stylebox_override("normal", EvoUiStyle.make_button_style(col, col.darkened(0.35), 1, 2, 2))
+		swatch_btn.add_theme_stylebox_override("hover", EvoUiStyle.make_button_style(col.lightened(0.15), EvoUiStyle.COLOR_GOLD_BRIGHT, 2, 2, 2))
+		swatch_btn.pressed.connect(func() -> void: strategy_color_picker.color = col)
+		_strategy_emblem_row.add_child(swatch_btn)
+
+	# Strategy Traits Selection Box
+	_strategy_traits_card = PanelContainer.new()
+	_strategy_traits_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 10))
+	form_vbox.add_child(_strategy_traits_card)
+
+	var strat_traits_outer := VBoxContainer.new()
+	strat_traits_outer.add_theme_constant_override("separation", 6)
+	_strategy_traits_card.add_child(strat_traits_outer)
+
+	_strategy_traits_title_lbl = Label.new()
+	_strategy_traits_title_lbl.add_theme_font_size_override("font_size", 14)
+	_strategy_traits_title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
+	strat_traits_outer.add_child(_strategy_traits_title_lbl)
+
+	strategy_traits_box = VBoxContainer.new()
+	strategy_traits_box.add_theme_constant_override("separation", 4)
+	strat_traits_outer.add_child(strategy_traits_box)
+
+	# Strategy Combined Biophysical Vector Preview
+	_strategy_vector_card = PanelContainer.new()
+	_strategy_vector_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#f4e2b8"), EvoUiStyle.COLOR_GOLD_BEVEL, 10))
+	form_vbox.add_child(_strategy_vector_card)
+
+	var strat_vec_vbox := VBoxContainer.new()
+	strat_vec_vbox.add_theme_constant_override("separation", 4)
+	_strategy_vector_card.add_child(strat_vec_vbox)
+
+	_strategy_vector_title_lbl = Label.new()
+	_strategy_vector_title_lbl.add_theme_font_size_override("font_size", 14)
+	_strategy_vector_title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
+	strat_vec_vbox.add_child(_strategy_vector_title_lbl)
+
+	strategy_vector_label = Label.new()
+	strategy_vector_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	strategy_vector_label.add_theme_font_size_override("font_size", 12)
+	strategy_vector_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
+	strat_vec_vbox.add_child(strategy_vector_label)
+
+	# Trait / Decision specific controls
+	enables_culture_check = CheckBox.new()
+	form_vbox.add_child(enables_culture_check)
 
 	_archetype_row = HBoxContainer.new()
 	_archetype_row.add_theme_constant_override("separation", 8)
@@ -214,14 +357,14 @@ func _build_ui() -> void:
 	_archetype_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_archetype_row.add_child(_archetype_option)
 
-	# 6 Sliders box
-	var sliders_card := PanelContainer.new()
-	sliders_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 10))
-	form_vbox.add_child(sliders_card)
+	# 6 Sliders box (for traits & decisions)
+	_sliders_card = PanelContainer.new()
+	_sliders_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 10))
+	form_vbox.add_child(_sliders_card)
 
 	var sliders_vbox := VBoxContainer.new()
 	sliders_vbox.add_theme_constant_override("separation", 6)
-	sliders_card.add_child(sliders_vbox)
+	_sliders_card.add_child(sliders_vbox)
 
 	for s_key in SLIDER_KEYS:
 		var row := HBoxContainer.new()
@@ -242,7 +385,7 @@ func _build_ui() -> void:
 		slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		slider.value_changed.connect(_on_slider_value_changed.bind(s_key))
 		row.add_child(slider)
-		_slider_controls[s_key] = slider
+		sliders[s_key] = slider
 
 		var v_lbl := Label.new()
 		v_lbl.custom_minimum_size = Vector2(54, 0)
@@ -251,14 +394,14 @@ func _build_ui() -> void:
 		row.add_child(v_lbl)
 		_slider_val_labels[s_key] = v_lbl
 
-	# Live Thermodynamic Meter
-	var thermo_card := PanelContainer.new()
-	thermo_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#f4e2b8"), EvoUiStyle.COLOR_GOLD_BEVEL, 10))
-	form_vbox.add_child(thermo_card)
+	# Live Thermodynamic Meter (for traits & decisions)
+	_thermo_card = PanelContainer.new()
+	_thermo_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#f4e2b8"), EvoUiStyle.COLOR_GOLD_BEVEL, 10))
+	form_vbox.add_child(_thermo_card)
 
 	var thermo_vbox := VBoxContainer.new()
 	thermo_vbox.add_theme_constant_override("separation", 6)
-	thermo_card.add_child(thermo_vbox)
+	_thermo_card.add_child(thermo_vbox)
 
 	var thermo_top := HBoxContainer.new()
 	thermo_vbox.add_child(thermo_top)
@@ -269,34 +412,67 @@ func _build_ui() -> void:
 	_thermo_title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	thermo_top.add_child(_thermo_title_lbl)
 
-	_auto_balance_btn = Button.new()
-	_auto_balance_btn.pressed.connect(_on_auto_balance_pressed)
-	thermo_top.add_child(_auto_balance_btn)
+	auto_balance_button = Button.new()
+	auto_balance_button.pressed.connect(_auto_balance_vector)
+	thermo_top.add_child(auto_balance_button)
+
+	balance_bar = ProgressBar.new()
+	balance_bar.min_value = 0.0
+	balance_bar.max_value = 1.8
+	balance_bar.show_percentage = false
+	balance_bar.custom_minimum_size = Vector2(0, 14)
+	thermo_vbox.add_child(balance_bar)
 
 	_thermo_metrics_lbl = Label.new()
 	_thermo_metrics_lbl.add_theme_font_size_override("font_size", 12)
 	_thermo_metrics_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 	thermo_vbox.add_child(_thermo_metrics_lbl)
 
-	_thermo_status_lbl = Label.new()
-	_thermo_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_thermo_status_lbl.add_theme_font_size_override("font_size", 12)
-	thermo_vbox.add_child(_thermo_status_lbl)
+	balance_status_label = Label.new()
+	balance_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	balance_status_label.add_theme_font_size_override("font_size", 12)
+	thermo_vbox.add_child(balance_status_label)
 
 	# Bottom Actions
 	var actions_hbox := HBoxContainer.new()
 	actions_hbox.add_theme_constant_override("separation", 10)
 	form_vbox.add_child(actions_hbox)
 
-	_save_btn = Button.new()
-	_save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_save_btn.pressed.connect(_on_save_pressed)
-	actions_hbox.add_child(_save_btn)
+	save_item_button = Button.new()
+	save_item_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	save_item_button.pressed.connect(_save_current_item)
+	actions_hbox.add_child(save_item_button)
 
-	_inject_btn = Button.new()
-	_inject_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_inject_btn.pressed.connect(_on_inject_pressed)
-	actions_hbox.add_child(_inject_btn)
+	_strategy_matchup_row = HBoxContainer.new()
+	_strategy_matchup_row.add_theme_constant_override("separation", 10)
+	form_vbox.add_child(_strategy_matchup_row)
+
+	use_strategy_a_button = Button.new()
+	use_strategy_a_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	use_strategy_a_button.pressed.connect(_on_use_strategy_slot_pressed.bind("a"))
+	_strategy_matchup_row.add_child(use_strategy_a_button)
+
+	use_strategy_b_button = Button.new()
+	use_strategy_b_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	use_strategy_b_button.pressed.connect(_on_use_strategy_slot_pressed.bind("b"))
+	_strategy_matchup_row.add_child(use_strategy_b_button)
+
+	_inject_row = HBoxContainer.new()
+	_inject_row.add_theme_constant_override("separation", 8)
+	form_vbox.add_child(_inject_row)
+
+	_inject_deme_lbl = Label.new()
+	_inject_row.add_child(_inject_deme_lbl)
+
+	inject_deme_option = OptionButton.new()
+	inject_deme_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inject_deme_option.item_selected.connect(_on_inject_deme_option_selected)
+	_inject_row.add_child(inject_deme_option)
+
+	inject_button = Button.new()
+	inject_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inject_button.pressed.connect(_on_inject_pressed)
+	_inject_row.add_child(inject_button)
 
 	_feedback_lbl = Label.new()
 	_feedback_lbl.add_theme_font_size_override("font_size", 12)
@@ -304,34 +480,51 @@ func _build_ui() -> void:
 	form_vbox.add_child(_feedback_lbl)
 
 	_rebuild_archetype_options()
-	_update_labels()
-	_reset_form_for_new()
+	_rebuild_strategy_trait_checks()
+	_start_new_item()
+
+
+func setup(state: EvoTypes.WorldState, lang: String = "es", selected_deme_id: String = "") -> void:
+	if _title_label == null:
+		_ready()
+	_world_state = state
+	_lang = lang
+	if selected_deme_id != "":
+		_selected_deme_id = selected_deme_id
+	elif _world_state != null and not _world_state.demes.has(_selected_deme_id):
+		_selected_deme_id = str(_world_state.demes.keys()[0]) if not _world_state.demes.is_empty() else ""
+	_feedback_lbl.text = ""
+	_rebuild_archetype_options()
+	_rebuild_inject_deme_options()
+	_rebuild_strategy_trait_checks()
+	if _selected_id == "":
+		_start_new_item()
+	else:
+		_load_selected_item_into_form()
+		_update_labels()
+		_rebuild_catalog_list()
+		_update_thermodynamics_preview()
+		_update_strategy_vector_preview()
 
 
 func open_modal(world_state: EvoTypes.WorldState, lang: String = "es", selected_deme_id: String = "") -> void:
-	if _title_label == null:
-		_ready()
-	_world_state = world_state
-	_lang = lang
-	_selected_deme_id = selected_deme_id
-	_feedback_lbl.text = ""
+	setup(world_state, lang, selected_deme_id)
 	visible = true
-	_rebuild_archetype_options()
-	if _editing_id == "":
-		_reset_form_for_new()
-	else:
-		_update_labels()
-	_rebuild_catalog_list()
-	_update_thermodynamics_preview()
 
 
-func refresh(world_state: EvoTypes.WorldState, selected_deme_id: String = "") -> void:
-	_world_state = world_state
+func refresh(world_state: EvoTypes.WorldState = null, selected_deme_id: String = "") -> void:
+	if world_state != null:
+		_world_state = world_state
 	if selected_deme_id != "":
 		_selected_deme_id = selected_deme_id
-	if visible:
-		_rebuild_catalog_list()
-		_update_thermodynamics_preview()
+	if _title_label == null:
+		return
+	_rebuild_inject_deme_options()
+	_rebuild_strategy_trait_checks()
+	_rebuild_catalog_list()
+	_update_labels()
+	_update_thermodynamics_preview()
+	_update_strategy_vector_preview()
 
 
 func set_language(lang: String) -> void:
@@ -339,18 +532,462 @@ func set_language(lang: String) -> void:
 	if _title_label == null:
 		return
 	_rebuild_archetype_options()
-	if _editing_id == "":
-		_reset_form_for_new()
-	else:
-		_update_labels()
-	if visible:
-		_rebuild_catalog_list()
-		_update_thermodynamics_preview()
+	_rebuild_inject_deme_options()
+	var checked_ids := _get_checked_strategy_trait_ids()
+	_rebuild_strategy_trait_checks()
+	_set_checked_strategy_trait_ids(checked_ids)
+	if _selected_id != "":
+		_load_selected_item_into_form()
+	_update_labels()
+	_rebuild_catalog_list()
+	_update_thermodynamics_preview()
+	_update_strategy_vector_preview()
 
 
 func close_modal() -> void:
 	visible = false
 	modal_closed.emit()
+
+
+func _switch_tab(tab: String) -> void:
+	if _title_label == null:
+		_ready()
+	_current_tab = tab
+	_start_new_item()
+
+
+func _start_new_item() -> void:
+	if _title_label == null:
+		_ready()
+	_selected_id = ""
+	id_edit.text = ""
+	_feedback_lbl.text = ""
+
+	if _current_tab == "strategy":
+		id_edit.text = _next_custom_id("strat")
+		name_edit.text = EvoUiStyle.tr_text(_lang, "Estrategia Personalizada", "Custom Strategy")
+		desc_edit.text = EvoUiStyle.tr_text(
+			_lang,
+			"Doctrina bio-cultural diseñada en el laboratorio para el duelo de estrategias.",
+			"Bio-cultural doctrine crafted in the laboratory for the strategy duel."
+		)
+		_select_strategy_icon("🛡️")
+		strategy_color_picker.color = Color("#10B981")
+		_rebuild_strategy_trait_checks()
+		_set_checked_strategy_trait_ids(["bio-k-strategy", "bio-social-instinct", "cul-communal-conservation"])
+	elif _current_tab == "biological":
+		id_edit.text = _next_custom_id("bio")
+		name_edit.text = EvoUiStyle.tr_text(_lang, "Adaptación Metabólica", "Metabolic Adaptation")
+		desc_edit.text = EvoUiStyle.tr_text(
+			_lang,
+			"Rasgo biológico experimental diseñado en el laboratorio.",
+			"Experimental biological trait crafted in the lab."
+		)
+		enables_culture_check.button_pressed = false
+		_set_vector_to_sliders(EvoTypes.BiophysicalVector.new(0.15, 0.30, 0.05, 0.20, 0.10, 0.20))
+	elif _current_tab == "cultural":
+		id_edit.text = _next_custom_id("cul")
+		name_edit.text = EvoUiStyle.tr_text(_lang, "Tradición Artesanal", "Artisanal Tradition")
+		desc_edit.text = EvoUiStyle.tr_text(
+			_lang,
+			"Práctica cultural transmitida socialmente entre generaciones.",
+			"Socially transmitted cultural practice across generations."
+		)
+		_set_vector_to_sliders(EvoTypes.BiophysicalVector.new(0.20, 0.35, 0.15, 0.10, 0.35, 0.45))
+	else:
+		id_edit.text = _next_custom_id("dec")
+		name_edit.text = EvoUiStyle.tr_text(_lang, "Estrategia Adaptativa", "Adaptive Strategy")
+		desc_edit.text = EvoUiStyle.tr_text(
+			_lang,
+			"Patrón conductual colectivo evaluado por las aldeas.",
+			"Collective behavioral pattern evaluated by villages."
+		)
+		_select_archetype("custom")
+		_set_vector_to_sliders(EvoTypes.BiophysicalVector.new(0.20, 0.35, 0.10, 0.15, 0.20, 0.25))
+
+	_update_labels()
+	_rebuild_catalog_list()
+	_update_thermodynamics_preview()
+	_update_strategy_vector_preview()
+
+
+func _save_current_item() -> void:
+	if _title_label == null:
+		_ready()
+	var clean_name := name_edit.text.strip_edges()
+	if clean_name == "":
+		clean_name = "Custom Item"
+	var clean_desc := desc_edit.text.strip_edges()
+
+	if _current_tab == "strategy":
+		var strat := _build_strategy_from_form()
+		strat.name = clean_name
+		strat.description = clean_desc
+		strat.origin = "user"
+		if _world_state != null:
+			_world_state.strategies_catalog[strat.id] = strat
+			EvoUserSettings.save_user_catalog(_world_state)
+		_selected_id = strat.id
+		id_edit.text = strat.id
+		strategy_saved.emit(strat.id)
+		catalog_item_saved.emit("strategy", strat.to_dict())
+		_rebuild_catalog_list()
+		_update_labels()
+		_update_strategy_vector_preview()
+		_show_saved_feedback(strat.id)
+		return
+
+	var raw_vec := _read_vector_from_sliders()
+	var free_mode := _world_state.free_sandbox_mode if _world_state != null else false
+	var final_vec := raw_vec if free_mode else EvoUiStyle.balance_vector(raw_vec)
+	_set_vector_to_sliders(final_vec)
+	_update_thermodynamics_preview()
+
+	if _current_tab == "decision":
+		var dec := EvoTypes.DecisionDef.new()
+		dec.id = _resolve_target_id("dec")
+		dec.name = clean_name
+		dec.description = clean_desc
+		dec.archetype = _get_selected_archetype()
+		dec.origin = "user"
+		dec.vector = final_vec
+		if _world_state != null and _world_state.decisions_catalog.has(dec.id):
+			var prev_dec: EvoTypes.DecisionDef = _world_state.decisions_catalog[dec.id]
+			dec.required_trait_ids = prev_dec.required_trait_ids.duplicate()
+		if _world_state != null:
+			_world_state.decisions_catalog[dec.id] = dec
+			EvoUserSettings.save_user_catalog(_world_state)
+		_selected_id = dec.id
+		id_edit.text = dec.id
+		catalog_item_saved.emit("decision", dec.to_dict())
+		_rebuild_catalog_list()
+		_update_labels()
+		_show_saved_feedback(dec.id)
+	else:
+		var prefix := "bio" if _current_tab == "biological" else "cul"
+		var tr := EvoTypes.TraitDef.new()
+		tr.id = _resolve_target_id(prefix)
+		tr.name = clean_name
+		tr.description = clean_desc
+		tr.category = _current_tab
+		tr.origin = "user"
+		tr.vector = final_vec
+		tr.enables_cultural_transmission = enables_culture_check.button_pressed if _current_tab == "biological" else false
+		if _world_state != null and _world_state.traits_catalog.has(tr.id):
+			var prev_tr: EvoTypes.TraitDef = _world_state.traits_catalog[tr.id]
+			tr.mutually_exclusive_with = prev_tr.mutually_exclusive_with.duplicate()
+		if _world_state != null:
+			_world_state.traits_catalog[tr.id] = tr
+			EvoUserSettings.save_user_catalog(_world_state)
+		_selected_id = tr.id
+		id_edit.text = tr.id
+		_rebuild_strategy_trait_checks()
+		catalog_item_saved.emit("trait", tr.to_dict())
+		_rebuild_catalog_list()
+		_update_labels()
+		_show_saved_feedback(tr.id)
+
+
+func _auto_balance_vector() -> void:
+	var vec := _read_vector_from_sliders()
+	var balanced := EvoUiStyle.balance_vector(vec)
+	_set_vector_to_sliders(balanced)
+	_update_thermodynamics_preview()
+
+
+func _catalog_has_id(candidate: String) -> bool:
+	if _world_state == null:
+		return false
+	return (
+		_world_state.strategies_catalog.has(candidate)
+		or _world_state.traits_catalog.has(candidate)
+		or _world_state.decisions_catalog.has(candidate)
+	)
+
+
+func _next_custom_id(prefix: String) -> String:
+	_custom_counter += 1
+	var candidate := "%s-custom-%d" % [prefix, _custom_counter]
+	while _catalog_has_id(candidate):
+		_custom_counter += 1
+		candidate = "%s-custom-%d" % [prefix, _custom_counter]
+	return candidate
+
+
+func _resolve_target_id(prefix: String) -> String:
+	var manual_id := id_edit.text.strip_edges()
+	if manual_id != "":
+		return manual_id
+	if _selected_id != "":
+		return _selected_id
+	return _next_custom_id(prefix)
+
+
+func _show_saved_feedback(saved_id: String) -> void:
+	_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
+	_feedback_lbl.text = EvoUiStyle.tr_text(
+		_lang,
+		"✓ Guardado en el catálogo (%s)" % saved_id,
+		"✓ Saved to catalog (%s)" % saved_id
+	)
+
+
+func _rebuild_strategy_trait_checks() -> void:
+	if strategy_traits_box == null:
+		return
+	for child in strategy_traits_box.get_children():
+		child.queue_free()
+	strategy_trait_checks.clear()
+
+	var traits_cat: Dictionary = _world_state.traits_catalog if _world_state != null else EvoCatalog.create_base_traits_catalog(_lang)
+
+	var bio_hdr := Label.new()
+	bio_hdr.text = "🧬 " + EvoI18n.t(_lang, "panel.traits_bio")
+	bio_hdr.add_theme_font_size_override("font_size", 13)
+	bio_hdr.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
+	strategy_traits_box.add_child(bio_hdr)
+
+	for tid in traits_cat.keys():
+		var t: EvoTypes.TraitDef = traits_cat[tid]
+		if t.category != "biological":
+			continue
+		var cb := _make_strategy_trait_checkbox(t)
+		strategy_trait_checks[t.id] = cb
+		strategy_traits_box.add_child(cb)
+
+	var cul_hdr := Label.new()
+	cul_hdr.text = "🔥 " + EvoI18n.t(_lang, "panel.traits_cul")
+	cul_hdr.add_theme_font_size_override("font_size", 13)
+	cul_hdr.add_theme_color_override("font_color", EvoUiStyle.COLOR_PURPLE_CULTURE)
+	strategy_traits_box.add_child(cul_hdr)
+
+	for tid in traits_cat.keys():
+		var t: EvoTypes.TraitDef = traits_cat[tid]
+		if t.category != "cultural":
+			continue
+		var cb := _make_strategy_trait_checkbox(t)
+		strategy_trait_checks[t.id] = cb
+		strategy_traits_box.add_child(cb)
+
+
+func _make_strategy_trait_checkbox(t: EvoTypes.TraitDef) -> CheckBox:
+	var cb := CheckBox.new()
+	var t_name := EvoI18n.trait_name(_lang, t)
+	var summary := _format_trait_vector_summary(t.vector)
+	var culture_tag := ""
+	if t.enables_cultural_transmission:
+		culture_tag = " [★ Cultura]" if _lang != "en" else " [★ Culture]"
+	cb.text = "%s%s  (%s)" % [t_name, culture_tag, summary]
+	cb.tooltip_text = EvoI18n.trait_description(_lang, t)
+	cb.toggled.connect(_on_strategy_trait_toggled.bind(t.id))
+	return cb
+
+
+func _format_trait_vector_summary(v: EvoTypes.BiophysicalVector) -> String:
+	var parts: Array[String] = []
+	if not is_zero_approx(v.metabolic_cost):
+		parts.append("Cost %+.2f" % v.metabolic_cost)
+	if not is_zero_approx(v.extraction_efficiency):
+		parts.append("Ext %+.2f" % v.extraction_efficiency)
+	if not is_zero_approx(v.ecological_impact):
+		parts.append("Eco %+.2f" % v.ecological_impact)
+	if not is_zero_approx(v.spatial_mobility):
+		parts.append("Mob %+.2f" % v.spatial_mobility)
+	if not is_zero_approx(v.social_cohesion):
+		parts.append("Soc %+.2f" % v.social_cohesion)
+	return ", ".join(parts) if not parts.is_empty() else "0.00"
+
+
+func _on_strategy_trait_toggled(is_checked: bool, trait_id: String) -> void:
+	if _updating_strategy_checks:
+		return
+	var traits_cat: Dictionary = _world_state.traits_catalog if _world_state != null else {}
+	_updating_strategy_checks = true
+
+	if is_checked:
+		if trait_id == "bio-r-strategy" and strategy_trait_checks.has("bio-k-strategy"):
+			(strategy_trait_checks["bio-k-strategy"] as CheckBox).button_pressed = false
+		elif trait_id == "bio-k-strategy" and strategy_trait_checks.has("bio-r-strategy"):
+			(strategy_trait_checks["bio-r-strategy"] as CheckBox).button_pressed = false
+
+		if traits_cat.has(trait_id):
+			var tr: EvoTypes.TraitDef = traits_cat[trait_id]
+			for ex_id in tr.mutually_exclusive_with:
+				if strategy_trait_checks.has(ex_id):
+					(strategy_trait_checks[ex_id] as CheckBox).button_pressed = false
+			for other_id in traits_cat.keys():
+				var other_tr: EvoTypes.TraitDef = traits_cat[other_id]
+				if other_tr.mutually_exclusive_with.has(trait_id) and strategy_trait_checks.has(other_id):
+					(strategy_trait_checks[other_id] as CheckBox).button_pressed = false
+
+			if tr.category == "cultural" and not _has_checked_cultural_capacity(traits_cat):
+				if strategy_trait_checks.has("bio-social-instinct"):
+					(strategy_trait_checks["bio-social-instinct"] as CheckBox).button_pressed = true
+				elif strategy_trait_checks.has("bio-encephalization"):
+					(strategy_trait_checks["bio-encephalization"] as CheckBox).button_pressed = true
+				else:
+					for bid in traits_cat.keys():
+						var btr: EvoTypes.TraitDef = traits_cat[bid]
+						if btr.category == "biological" and btr.enables_cultural_transmission and strategy_trait_checks.has(bid):
+							(strategy_trait_checks[bid] as CheckBox).button_pressed = true
+							break
+	else:
+		var is_culture_enabler := trait_id in ["bio-social-instinct", "bio-encephalization"]
+		if traits_cat.has(trait_id):
+			var tr: EvoTypes.TraitDef = traits_cat[trait_id]
+			if tr.category == "biological" and tr.enables_cultural_transmission:
+				is_culture_enabler = true
+		if is_culture_enabler and not _has_checked_cultural_capacity(traits_cat):
+			for cid in strategy_trait_checks.keys():
+				var is_cul := str(cid).begins_with("cul-")
+				if traits_cat.has(cid):
+					is_cul = (traits_cat[cid] as EvoTypes.TraitDef).category == "cultural"
+				if is_cul:
+					(strategy_trait_checks[cid] as CheckBox).button_pressed = false
+
+	_updating_strategy_checks = false
+	_update_strategy_vector_preview()
+
+
+func _has_checked_cultural_capacity(traits_cat: Dictionary) -> bool:
+	for tid in strategy_trait_checks.keys():
+		var cb: CheckBox = strategy_trait_checks[tid]
+		if not cb.button_pressed:
+			continue
+		if traits_cat.has(tid):
+			var tr: EvoTypes.TraitDef = traits_cat[tid]
+			if tr.category == "biological" and tr.enables_cultural_transmission:
+				return true
+		elif tid in ["bio-social-instinct", "bio-encephalization"]:
+			return true
+	return false
+
+
+func _get_checked_strategy_trait_ids() -> Array[String]:
+	var res: Array[String] = []
+	for tid in strategy_trait_checks.keys():
+		if (strategy_trait_checks[tid] as CheckBox).button_pressed:
+			res.append(str(tid))
+	return res
+
+
+func _set_checked_strategy_trait_ids(trait_ids: Array) -> void:
+	_updating_strategy_checks = true
+	for tid in strategy_trait_checks.keys():
+		(strategy_trait_checks[tid] as CheckBox).button_pressed = trait_ids.has(tid)
+	_updating_strategy_checks = false
+	_update_strategy_vector_preview()
+
+
+func _build_strategy_from_form() -> EvoTypes.StrategyDef:
+	var strat := EvoTypes.StrategyDef.new()
+	strat.id = _resolve_target_id("strat")
+	strat.name = name_edit.text.strip_edges()
+	if strat.name == "":
+		strat.name = "Custom Strategy"
+	strat.description = desc_edit.text.strip_edges()
+	strat.icon = _get_selected_strategy_icon()
+	strat.color = "#" + strategy_color_picker.color.to_html(false).to_upper()
+
+	var traits_cat: Dictionary = _world_state.traits_catalog if _world_state != null else {}
+	var bio_ids: Array[String] = []
+	var cul_ids: Array[String] = []
+	for tid in strategy_trait_checks.keys():
+		var cb: CheckBox = strategy_trait_checks[tid]
+		if not cb.button_pressed:
+			continue
+		var is_cul := str(tid).begins_with("cul-")
+		if traits_cat.has(tid):
+			is_cul = (traits_cat[tid] as EvoTypes.TraitDef).category == "cultural"
+		if is_cul:
+			cul_ids.append(str(tid))
+		else:
+			bio_ids.append(str(tid))
+
+	if bio_ids.has("bio-r-strategy") and bio_ids.has("bio-k-strategy"):
+		bio_ids.erase("bio-k-strategy")
+	if not cul_ids.is_empty():
+		var has_cap := false
+		for bid in bio_ids:
+			if bid in ["bio-social-instinct", "bio-encephalization"] or (traits_cat.has(bid) and (traits_cat[bid] as EvoTypes.TraitDef).enables_cultural_transmission):
+				has_cap = true
+				break
+		if not has_cap:
+			bio_ids.append("bio-social-instinct")
+
+	strat.biological_trait_ids = bio_ids
+	strat.cultural_trait_ids = cul_ids
+	return strat
+
+
+func _update_strategy_vector_preview() -> void:
+	if strategy_vector_label == null:
+		return
+	var temp_strat := _build_strategy_from_form()
+	var traits_cat: Dictionary = _world_state.traits_catalog if _world_state != null else EvoCatalog.create_base_traits_catalog(_lang)
+	var vec := EvoCatalog.compute_strategy_vector(temp_strat, traits_cat)
+	strategy_vector_label.text = (
+		"%s: %+.2f   |   %s: %+.2f   |   %s: %+.2f\n%s: %+.2f   |   %s: %+.2f   |   %s: %.2f" % [
+			EvoI18n.t(_lang, "axis.metabolic_cost"), vec.metabolic_cost,
+			EvoI18n.t(_lang, "axis.extraction_efficiency"), vec.extraction_efficiency,
+			EvoI18n.t(_lang, "axis.ecological_impact"), vec.ecological_impact,
+			EvoI18n.t(_lang, "axis.spatial_mobility"), vec.spatial_mobility,
+			EvoI18n.t(_lang, "axis.social_cohesion"), vec.social_cohesion,
+			EvoI18n.t(_lang, "axis.transmission_threshold"), vec.transmission_threshold
+		]
+	)
+
+
+func _select_strategy_icon(icon: String) -> void:
+	if strategy_icon_option == null:
+		return
+	for i in range(strategy_icon_option.item_count):
+		if strategy_icon_option.get_item_text(i) == icon:
+			strategy_icon_option.select(i)
+			return
+	if strategy_icon_option.item_count > 0:
+		strategy_icon_option.select(0)
+
+
+func _get_selected_strategy_icon() -> String:
+	if strategy_icon_option == null:
+		return "🛡️"
+	var idx := strategy_icon_option.selected
+	if idx >= 0 and idx < strategy_icon_option.item_count:
+		return strategy_icon_option.get_item_text(idx)
+	return "🛡️"
+
+
+func _is_strategy_form_dirty(existing: EvoTypes.StrategyDef) -> bool:
+	var form_strat := _build_strategy_from_form()
+	if form_strat.id != existing.id or form_strat.name != existing.name or form_strat.description != existing.description:
+		return true
+	if form_strat.icon != existing.icon or form_strat.color.to_upper() != existing.color.to_upper():
+		return true
+	if form_strat.biological_trait_ids != existing.biological_trait_ids or form_strat.cultural_trait_ids != existing.cultural_trait_ids:
+		return true
+	return false
+
+
+func _on_use_strategy_slot_pressed(slot: String) -> void:
+	if _current_tab != "strategy":
+		return
+	var target_id := id_edit.text.strip_edges()
+	if target_id == "":
+		target_id = _selected_id
+	if target_id == "" or _world_state == null or not _world_state.strategies_catalog.has(target_id) or _is_strategy_form_dirty(_world_state.strategies_catalog[target_id]):
+		_save_current_item()
+	if _world_state != null:
+		if slot == "a":
+			_world_state.strategy_a_id = _selected_id
+		elif slot == "b":
+			_world_state.strategy_b_id = _selected_id
+	strategy_assigned.emit(slot, _selected_id)
+	_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
+	_feedback_lbl.text = "%s: %s" % [
+		EvoI18n.t(_lang, "lab_use_strat_a" if slot == "a" else "lab_use_strat_b"),
+		_selected_id
+	]
 
 
 func _rebuild_archetype_options() -> void:
@@ -366,35 +1003,83 @@ func _rebuild_archetype_options() -> void:
 		_archetype_option.select(prev_idx)
 
 
+func _rebuild_inject_deme_options() -> void:
+	if inject_deme_option == null:
+		return
+	inject_deme_option.clear()
+	if _world_state == null or _world_state.demes.is_empty():
+		return
+	var idx := 0
+	var selected_idx := 0
+	for did in _world_state.demes.keys():
+		var d: EvoTypes.Deme = _world_state.demes[did]
+		inject_deme_option.add_item(d.name, idx)
+		inject_deme_option.set_item_metadata(idx, d.id)
+		if d.id == _selected_deme_id:
+			selected_idx = idx
+		idx += 1
+	inject_deme_option.select(selected_idx)
+	_selected_deme_id = str(inject_deme_option.get_item_metadata(selected_idx))
+
+
+func _on_inject_deme_option_selected(index: int) -> void:
+	if inject_deme_option == null or index < 0 or index >= inject_deme_option.item_count:
+		return
+	_selected_deme_id = str(inject_deme_option.get_item_metadata(index))
+	_update_labels()
+
+
 func _update_labels() -> void:
 	if _title_label == null:
 		return
+	var is_strat := (_current_tab == "strategy")
+
 	_title_label.text = EvoUiStyle.tr_text(
 		_lang,
-		"⚗️ Forja de Rasgos y Decisiones — Laboratorio Evolutivo",
-		"⚗️ Trait & Decision Forge — Evolutionary Laboratory"
+		"⚗️ Forja de Estrategias, Rasgos y Decisiones — Laboratorio Evolutivo",
+		"⚗️ Strategy, Trait & Decision Forge — Evolutionary Laboratory"
 	)
 	_close_btn.text = EvoUiStyle.tr_text(_lang, "✕ Cerrar", "✕ Close")
-	_tab_bio_btn.text = EvoUiStyle.tr_text(_lang, "🧬 Rasgos Biológicos", "🧬 Biological Traits")
-	_tab_cul_btn.text = EvoUiStyle.tr_text(_lang, "🔥 Tradiciones Culturales", "🔥 Cultural Traditions")
-	_tab_dec_btn.text = EvoUiStyle.tr_text(_lang, "⚖️ Decisiones Conductuales", "⚖️ Behavioral Decisions")
+	tab_strategy_btn.text = EvoI18n.t(_lang, "lab_tab_strat")
+	tab_bio_btn.text = EvoUiStyle.tr_text(_lang, "🧬 Rasgos Biológicos", "🧬 Biological Traits")
+	tab_cul_btn.text = EvoUiStyle.tr_text(_lang, "🔥 Tradiciones Culturales", "🔥 Cultural Traditions")
+	tab_dec_btn.text = EvoUiStyle.tr_text(_lang, "⚖️ Decisiones Conductuales", "⚖️ Behavioral Decisions")
 
-	EvoUiStyle.apply_button_active(_tab_bio_btn, _active_tab == "biological")
-	EvoUiStyle.apply_button_active(_tab_cul_btn, _active_tab == "cultural")
-	EvoUiStyle.apply_button_active(_tab_dec_btn, _active_tab == "decision")
+	EvoUiStyle.apply_button_active(tab_strategy_btn, _current_tab == "strategy")
+	EvoUiStyle.apply_button_active(tab_bio_btn, _current_tab == "biological")
+	EvoUiStyle.apply_button_active(tab_cul_btn, _current_tab == "cultural")
+	EvoUiStyle.apply_button_active(tab_dec_btn, _current_tab == "decision")
 
-	_new_item_btn.text = EvoUiStyle.tr_text(_lang, "+ Crear Nuevo", "+ Create New")
+	new_item_button.text = EvoI18n.t(_lang, "lab_new_strat") if is_strat else EvoUiStyle.tr_text(_lang, "+ Crear Nuevo", "+ Create New")
+	_id_lbl.text = "ID:"
+	id_edit.placeholder_text = "strat-custom" if is_strat else "custom-id"
 	_name_lbl.text = EvoUiStyle.tr_text(_lang, "Nombre:", "Name:")
 	_desc_lbl.text = EvoUiStyle.tr_text(_lang, "Descripción:", "Description:")
-	_culture_check.text = EvoUiStyle.tr_text(
+
+	_strategy_icon_lbl.text = EvoI18n.t(_lang, "lab_strat_icon") + ":"
+	_strategy_color_lbl.text = EvoI18n.t(_lang, "lab_strat_color") + ":"
+	_strategy_traits_title_lbl.text = EvoI18n.t(_lang, "lab_strat_traits")
+	_strategy_vector_title_lbl.text = EvoI18n.t(_lang, "lab_strat_vector")
+	use_strategy_a_button.text = EvoI18n.t(_lang, "lab_use_strat_a")
+	use_strategy_b_button.text = EvoI18n.t(_lang, "lab_use_strat_b")
+
+	enables_culture_check.text = EvoUiStyle.tr_text(
 		_lang,
 		"Habilita transmisión cultural (enablesCulturalTransmission)",
 		"Enables cultural transmission (enablesCulturalTransmission)"
 	)
 	_archetype_lbl.text = EvoUiStyle.tr_text(_lang, "Arquetipo:", "Archetype:")
 
-	_culture_check.visible = (_active_tab == "biological")
-	_archetype_row.visible = (_active_tab == "decision")
+	_strategy_emblem_row.visible = is_strat
+	_strategy_traits_card.visible = is_strat
+	_strategy_vector_card.visible = is_strat
+	_strategy_matchup_row.visible = is_strat
+
+	enables_culture_check.visible = (_current_tab == "biological")
+	_archetype_row.visible = (_current_tab == "decision")
+	_sliders_card.visible = not is_strat
+	_thermo_card.visible = not is_strat
+	_inject_row.visible = (_current_tab in ["biological", "cultural"])
 
 	var slider_names_es := {
 		"metabolic_cost": "Coste Metabólico (-1 a +1)",
@@ -421,68 +1106,131 @@ func _update_labels() -> void:
 		"⚖️ Medidor de Equilibrio Termodinámico en Vivo",
 		"⚖️ Live Thermodynamic Balance Meter"
 	)
-	_auto_balance_btn.text = EvoUiStyle.tr_text(_lang, "Auto-Equilibrar Vector", "Auto-Balance Vector")
-	_save_btn.text = EvoUiStyle.tr_text(_lang, "💾 Guardar en el Catálogo", "💾 Save to Catalog")
-	_inject_btn.text = EvoUiStyle.tr_text(_lang, "💉 Inyectar en Aldea Seleccionada", "💉 Inject into Selected Village")
-	_inject_btn.visible = (_active_tab != "decision")
-	_inject_btn.disabled = (_selected_deme_id == "" or _world_state == null or not _world_state.demes.has(_selected_deme_id))
+	auto_balance_button.text = EvoUiStyle.tr_text(_lang, "Auto-Equilibrar Vector", "Auto-Balance Vector")
+	save_item_button.text = EvoI18n.t(_lang, "lab_save_strat") if is_strat else EvoUiStyle.tr_text(_lang, "💾 Guardar en el Catálogo", "💾 Save to Catalog")
+	_inject_deme_lbl.text = EvoUiStyle.tr_text(_lang, "Aldea:", "Village:")
+	inject_button.text = EvoUiStyle.tr_text(_lang, "💉 Inyectar en Aldea", "💉 Inject into Village")
+	inject_button.disabled = (_selected_deme_id == "" or _world_state == null or not _world_state.demes.has(_selected_deme_id))
 
-	if _editing_id == "":
-		_form_header_lbl.text = EvoUiStyle.tr_text(_lang, "✨ Nuevo Elemento Experimental", "✨ New Experimental Item")
+	if _selected_id == "":
+		_form_header_lbl.text = EvoI18n.t(_lang, "lab_new_strat") if is_strat else EvoUiStyle.tr_text(_lang, "✨ Nuevo Elemento Experimental", "✨ New Experimental Item")
 	else:
-		_form_header_lbl.text = EvoUiStyle.tr_text(_lang, "🛠️ Editando: %s" % _editing_id, "🛠️ Editing: %s" % _editing_id)
+		_form_header_lbl.text = EvoUiStyle.tr_text(_lang, "🛠️ Editando: %s" % _selected_id, "🛠️ Editing: %s" % _selected_id)
 
 
 func _rebuild_catalog_list() -> void:
-	if _items_list_vbox == null:
+	if item_list == null:
 		return
-	for child in _items_list_vbox.get_children():
+	for child in item_list.get_children():
 		child.queue_free()
 
 	if _world_state == null:
 		return
 
-	if _active_tab == "decision":
+	if _current_tab == "strategy":
+		for strat_id in _world_state.strategies_catalog.keys():
+			var strat: EvoTypes.StrategyDef = _world_state.strategies_catalog[strat_id]
+			var btn := Button.new()
+			var trait_count := strat.biological_trait_ids.size() + strat.cultural_trait_ids.size()
+			var strat_title := EvoI18n.strategy_name(_lang, strat)
+			var traits_word := "traits" if _lang == "en" else "rasgos"
+			btn.text = "%s %s (%d %s)" % [strat.icon, strat_title, trait_count, traits_word]
+			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			var accent_col := Color.from_string(strat.color, Color("#10B981"))
+			var is_sel := (_selected_id == strat.id)
+			var bg_col := EvoUiStyle.COLOR_BTN_ACTIVE_BG.lerp(accent_col, 0.25) if is_sel else EvoUiStyle.COLOR_BTN_NORMAL.lerp(accent_col, 0.16)
+			var style_box := EvoUiStyle.make_button_style(bg_col, accent_col, 3 if is_sel else 2)
+			btn.add_theme_stylebox_override("normal", style_box)
+			btn.add_theme_stylebox_override("hover", EvoUiStyle.make_button_style(bg_col.lightened(0.08), accent_col, 3))
+			btn.pressed.connect(_on_catalog_strategy_clicked.bind(strat.id))
+			item_list.add_child(btn)
+	elif _current_tab == "decision":
 		for dec_id in _world_state.decisions_catalog.keys():
 			var dec: EvoTypes.DecisionDef = _world_state.decisions_catalog[dec_id]
 			var btn := Button.new()
-			btn.text = "%s [%s]" % [dec.name, dec.archetype]
+			btn.text = "%s [%s]" % [EvoI18n.decision_name(_lang, dec), dec.archetype]
 			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			EvoUiStyle.apply_button_active(btn, _editing_id == dec.id)
+			EvoUiStyle.apply_button_active(btn, _selected_id == dec.id)
 			btn.pressed.connect(_on_catalog_decision_clicked.bind(dec.id))
-			_items_list_vbox.add_child(btn)
+			item_list.add_child(btn)
 	else:
 		for t_id in _world_state.traits_catalog.keys():
 			var t: EvoTypes.TraitDef = _world_state.traits_catalog[t_id]
-			if t.category != _active_tab:
+			if t.category != _current_tab:
 				continue
 			var btn := Button.new()
-			btn.text = t.name
+			btn.text = EvoI18n.trait_name(_lang, t)
 			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			EvoUiStyle.apply_button_active(btn, _editing_id == t.id)
+			EvoUiStyle.apply_button_active(btn, _selected_id == t.id)
 			btn.pressed.connect(_on_catalog_trait_clicked.bind(t.id))
-			_items_list_vbox.add_child(btn)
+			item_list.add_child(btn)
 
 
-func _reset_form_for_new() -> void:
-	_editing_id = ""
+func _load_selected_item_into_form() -> void:
+	if _world_state == null or _selected_id == "":
+		return
+	if _current_tab == "strategy" and _world_state.strategies_catalog.has(_selected_id):
+		_on_catalog_strategy_clicked(_selected_id)
+	elif _current_tab == "decision" and _world_state.decisions_catalog.has(_selected_id):
+		_on_catalog_decision_clicked(_selected_id)
+	elif _world_state.traits_catalog.has(_selected_id):
+		_on_catalog_trait_clicked(_selected_id)
+
+
+func _on_catalog_strategy_clicked(strategy_id: String) -> void:
+	if _world_state == null or not _world_state.strategies_catalog.has(strategy_id):
+		return
+	var strat: EvoTypes.StrategyDef = _world_state.strategies_catalog[strategy_id]
+	_selected_id = strat.id
+	id_edit.text = strat.id
+	name_edit.text = EvoI18n.strategy_name(_lang, strat)
+	desc_edit.text = EvoI18n.strategy_description(_lang, strat)
+	_select_strategy_icon(strat.icon)
+	strategy_color_picker.color = Color.from_string(strat.color, Color("#10B981"))
+
+	var combined_traits: Array[String] = []
+	for bid in strat.biological_trait_ids:
+		combined_traits.append(bid)
+	for cid in strat.cultural_trait_ids:
+		combined_traits.append(cid)
+	_set_checked_strategy_trait_ids(combined_traits)
+
 	_feedback_lbl.text = ""
-	if _active_tab == "biological":
-		_name_input.text = EvoUiStyle.tr_text(_lang, "Adaptación Metabólica", "Metabolic Adaptation")
-		_desc_input.text = EvoUiStyle.tr_text(_lang, "Rasgo biológico experimental diseñado en el laboratorio.", "Experimental biological trait crafted in the lab.")
-		_culture_check.button_pressed = false
-		_set_vector_to_sliders(EvoTypes.BiophysicalVector.new(0.15, 0.30, 0.05, 0.20, 0.10, 0.20))
-	elif _active_tab == "cultural":
-		_name_input.text = EvoUiStyle.tr_text(_lang, "Tradición Artesanal", "Artisanal Tradition")
-		_desc_input.text = EvoUiStyle.tr_text(_lang, "Práctica cultural transmitida socialmente entre generaciones.", "Socially transmitted cultural practice across generations.")
-		_set_vector_to_sliders(EvoTypes.BiophysicalVector.new(0.20, 0.35, 0.15, 0.10, 0.35, 0.45))
-	else:
-		_name_input.text = EvoUiStyle.tr_text(_lang, "Estrategia Adaptativa", "Adaptive Strategy")
-		_desc_input.text = EvoUiStyle.tr_text(_lang, "Patrón conductual colectivo evaluado por las aldeas.", "Collective behavioral pattern evaluated by villages.")
-		_select_archetype("custom")
-		_set_vector_to_sliders(EvoTypes.BiophysicalVector.new(0.20, 0.35, 0.10, 0.15, 0.20, 0.25))
+	_update_labels()
+	_rebuild_catalog_list()
+	_update_strategy_vector_preview()
+
+
+func _on_catalog_trait_clicked(trait_id: String) -> void:
+	if _world_state == null or not _world_state.traits_catalog.has(trait_id):
+		return
+	var tr: EvoTypes.TraitDef = _world_state.traits_catalog[trait_id]
+	_selected_id = tr.id
+	id_edit.text = tr.id
+	name_edit.text = EvoI18n.trait_name(_lang, tr)
+	desc_edit.text = EvoI18n.trait_description(_lang, tr)
+	enables_culture_check.button_pressed = tr.enables_cultural_transmission
+	_set_vector_to_sliders(tr.vector)
+	_feedback_lbl.text = ""
+	_update_labels()
+	_rebuild_catalog_list()
+	_update_thermodynamics_preview()
+
+
+func _on_catalog_decision_clicked(decision_id: String) -> void:
+	if _world_state == null or not _world_state.decisions_catalog.has(decision_id):
+		return
+	var dec: EvoTypes.DecisionDef = _world_state.decisions_catalog[decision_id]
+	_selected_id = dec.id
+	id_edit.text = dec.id
+	name_edit.text = EvoI18n.decision_name(_lang, dec)
+	desc_edit.text = EvoI18n.decision_description(_lang, dec)
+	_select_archetype(dec.archetype)
+	_set_vector_to_sliders(dec.vector)
+	_feedback_lbl.text = ""
 	_update_labels()
 	_rebuild_catalog_list()
 	_update_thermodynamics_preview()
@@ -490,30 +1238,30 @@ func _reset_form_for_new() -> void:
 
 func _set_vector_to_sliders(vec: EvoTypes.BiophysicalVector) -> void:
 	_updating_sliders = true
-	(_slider_controls["metabolic_cost"] as HSlider).value = vec.metabolic_cost
-	(_slider_controls["extraction_efficiency"] as HSlider).value = vec.extraction_efficiency
-	(_slider_controls["ecological_impact"] as HSlider).value = vec.ecological_impact
-	(_slider_controls["spatial_mobility"] as HSlider).value = vec.spatial_mobility
-	(_slider_controls["social_cohesion"] as HSlider).value = vec.social_cohesion
-	(_slider_controls["transmission_threshold"] as HSlider).value = vec.transmission_threshold
+	(sliders["metabolic_cost"] as HSlider).value = vec.metabolic_cost
+	(sliders["extraction_efficiency"] as HSlider).value = vec.extraction_efficiency
+	(sliders["ecological_impact"] as HSlider).value = vec.ecological_impact
+	(sliders["spatial_mobility"] as HSlider).value = vec.spatial_mobility
+	(sliders["social_cohesion"] as HSlider).value = vec.social_cohesion
+	(sliders["transmission_threshold"] as HSlider).value = vec.transmission_threshold
 	_updating_sliders = false
 	_refresh_slider_value_labels()
 
 
 func _read_vector_from_sliders() -> EvoTypes.BiophysicalVector:
 	return EvoTypes.BiophysicalVector.new(
-		snappedf((_slider_controls["metabolic_cost"] as HSlider).value, 0.01),
-		snappedf((_slider_controls["extraction_efficiency"] as HSlider).value, 0.01),
-		snappedf((_slider_controls["ecological_impact"] as HSlider).value, 0.01),
-		snappedf((_slider_controls["spatial_mobility"] as HSlider).value, 0.01),
-		snappedf((_slider_controls["social_cohesion"] as HSlider).value, 0.01),
-		snappedf((_slider_controls["transmission_threshold"] as HSlider).value, 0.01)
+		snappedf((sliders["metabolic_cost"] as HSlider).value, 0.01),
+		snappedf((sliders["extraction_efficiency"] as HSlider).value, 0.01),
+		snappedf((sliders["ecological_impact"] as HSlider).value, 0.01),
+		snappedf((sliders["spatial_mobility"] as HSlider).value, 0.01),
+		snappedf((sliders["social_cohesion"] as HSlider).value, 0.01),
+		snappedf((sliders["transmission_threshold"] as HSlider).value, 0.01)
 	)
 
 
 func _refresh_slider_value_labels() -> void:
 	for s_key in SLIDER_KEYS:
-		var val: float = (_slider_controls[s_key] as HSlider).value
+		var val: float = (sliders[s_key] as HSlider).value
 		var lbl: Label = _slider_val_labels[s_key]
 		lbl.text = "%+.2f" % val if s_key != "transmission_threshold" else "%.2f" % val
 
@@ -531,6 +1279,9 @@ func _update_thermodynamics_preview() -> void:
 	var is_bal: bool = bool(eval_res["is_balanced"])
 	var bal_vec: EvoTypes.BiophysicalVector = eval_res["balanced_vector"]
 
+	balance_bar.value = clampf(a_plus, balance_bar.min_value, balance_bar.max_value)
+	EvoUiStyle.style_progress_bar(balance_bar, EvoUiStyle.COLOR_GREEN_OK if is_bal else EvoUiStyle.COLOR_AMBER_WARN)
+
 	_thermo_metrics_lbl.text = EvoUiStyle.tr_text(
 		_lang,
 		"Ventajas Positivas (A+): %.2f   |   Coste Actual (C_actual): %.2f   |   Coste Requerido (C_req): %.2f" % [a_plus, c_actual, c_req],
@@ -538,19 +1289,19 @@ func _update_thermodynamics_preview() -> void:
 	)
 
 	if is_bal:
-		_thermo_status_lbl.text = EvoUiStyle.tr_text(
+		balance_status_label.text = EvoUiStyle.tr_text(
 			_lang,
 			"✓ Cumple la Ley de Conservación Termodinámica (C_actual >= C_req).",
 			"✓ Complies with the Law of Thermodynamic Conservation (C_actual >= C_req)."
 		)
-		_thermo_status_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
+		balance_status_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
 	else:
-		_thermo_status_lbl.text = EvoUiStyle.tr_text(
+		balance_status_label.text = EvoUiStyle.tr_text(
 			_lang,
 			"⚠ Exceso de ventaja sin coste: al guardar se auto-equilibrará a Coste Metabólico = %+.2f, Impacto Eco = %+.2f." % [bal_vec.metabolic_cost, bal_vec.ecological_impact],
 			"⚠ Uncompensated advantage: saving will auto-balance to Metabolic Cost = %+.2f, Eco Impact = %+.2f." % [bal_vec.metabolic_cost, bal_vec.ecological_impact]
 		)
-		_thermo_status_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_AMBER_WARN)
+		balance_status_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_AMBER_WARN)
 
 
 func _select_archetype(archetype: String) -> void:
@@ -567,125 +1318,17 @@ func _get_selected_archetype() -> String:
 	return "custom"
 
 
-func _save_current_item_to_catalog() -> String:
-	var raw_vec := _read_vector_from_sliders()
-	var free_mode := _world_state.free_sandbox_mode if _world_state != null else false
-	var final_vec := raw_vec if free_mode else EvoUiStyle.balance_vector(raw_vec)
-	_set_vector_to_sliders(final_vec)
-	_update_thermodynamics_preview()
-
-	var clean_name := _name_input.text.strip_edges()
-	if clean_name == "":
-		clean_name = "Custom Item"
-	var clean_desc := _desc_input.text.strip_edges()
-
-	if _active_tab == "decision":
-		var dec := EvoTypes.DecisionDef.new()
-		dec.id = _editing_id if _editing_id != "" else "dec-custom-%d" % (Time.get_ticks_msec() % 100000)
-		dec.name = clean_name
-		dec.description = clean_desc
-		dec.archetype = _get_selected_archetype()
-		dec.origin = "custom"
-		dec.vector = final_vec
-		if _world_state != null and _world_state.decisions_catalog.has(dec.id):
-			var prev_dec: EvoTypes.DecisionDef = _world_state.decisions_catalog[dec.id]
-			dec.required_trait_ids = prev_dec.required_trait_ids.duplicate()
-		if _world_state != null:
-			_world_state.decisions_catalog[dec.id] = dec
-		_editing_id = dec.id
-		catalog_item_saved.emit("decision", dec.to_dict())
-		_rebuild_catalog_list()
-		_update_labels()
-		return dec.id
-	else:
-		var tr := EvoTypes.TraitDef.new()
-		var prefix := "bio" if _active_tab == "biological" else "cul"
-		tr.id = _editing_id if _editing_id != "" else "%s-custom-%d" % [prefix, Time.get_ticks_msec() % 100000]
-		tr.name = clean_name
-		tr.description = clean_desc
-		tr.category = _active_tab
-		tr.origin = "custom"
-		tr.vector = final_vec
-		tr.enables_cultural_transmission = _culture_check.button_pressed if _active_tab == "biological" else false
-		if _world_state != null and _world_state.traits_catalog.has(tr.id):
-			var prev_tr: EvoTypes.TraitDef = _world_state.traits_catalog[tr.id]
-			tr.mutually_exclusive_with = prev_tr.mutually_exclusive_with.duplicate()
-		if _world_state != null:
-			_world_state.traits_catalog[tr.id] = tr
-		_editing_id = tr.id
-		catalog_item_saved.emit("trait", tr.to_dict())
-		_rebuild_catalog_list()
-		_update_labels()
-		return tr.id
-
-
-func _on_tab_selected(tab_key: String) -> void:
-	_active_tab = tab_key
-	_reset_form_for_new()
-
-
-func _on_new_item_pressed() -> void:
-	_reset_form_for_new()
-
-
-func _on_catalog_trait_clicked(trait_id: String) -> void:
-	if _world_state == null or not _world_state.traits_catalog.has(trait_id):
-		return
-	var tr: EvoTypes.TraitDef = _world_state.traits_catalog[trait_id]
-	_editing_id = tr.id
-	_name_input.text = tr.name
-	_desc_input.text = tr.description
-	_culture_check.button_pressed = tr.enables_cultural_transmission
-	_set_vector_to_sliders(tr.vector)
-	_feedback_lbl.text = ""
-	_update_labels()
-	_rebuild_catalog_list()
-	_update_thermodynamics_preview()
-
-
-func _on_catalog_decision_clicked(decision_id: String) -> void:
-	if _world_state == null or not _world_state.decisions_catalog.has(decision_id):
-		return
-	var dec: EvoTypes.DecisionDef = _world_state.decisions_catalog[decision_id]
-	_editing_id = dec.id
-	_name_input.text = dec.name
-	_desc_input.text = dec.description
-	_select_archetype(dec.archetype)
-	_set_vector_to_sliders(dec.vector)
-	_feedback_lbl.text = ""
-	_update_labels()
-	_rebuild_catalog_list()
-	_update_thermodynamics_preview()
-
-
 func _on_slider_value_changed(_val: float, _key: String) -> void:
 	if _updating_sliders:
 		return
 	_update_thermodynamics_preview()
 
 
-func _on_auto_balance_pressed() -> void:
-	var vec := _read_vector_from_sliders()
-	var balanced := EvoUiStyle.balance_vector(vec)
-	_set_vector_to_sliders(balanced)
-	_update_thermodynamics_preview()
-
-
-func _on_save_pressed() -> void:
-	var saved_id := _save_current_item_to_catalog()
-	_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
-	_feedback_lbl.text = EvoUiStyle.tr_text(
-		_lang,
-		"✓ Guardado en el catálogo (%s)" % saved_id,
-		"✓ Saved to catalog (%s)" % saved_id
-	)
-
-
 func _on_inject_pressed() -> void:
-	if _active_tab == "decision" or _selected_deme_id == "":
+	if _current_tab not in ["biological", "cultural"] or _selected_deme_id == "":
 		return
-	var saved_id := _save_current_item_to_catalog()
-	if _active_tab == "cultural" and _world_state != null and _world_state.demes.has(_selected_deme_id):
+	_save_current_item()
+	if _current_tab == "cultural" and _world_state != null and _world_state.demes.has(_selected_deme_id):
 		var target_deme: EvoTypes.Deme = _world_state.demes[_selected_deme_id]
 		if not EvoCatalog.deme_has_cultural_capacity(target_deme, _world_state.traits_catalog):
 			_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_WARN)
@@ -695,12 +1338,14 @@ func _on_inject_pressed() -> void:
 				"⚠ Selected village lacks cultural capacity (requires Encephalization or Instinctive Sociability)."
 			)
 			return
+	if _world_state != null:
+		EvoCatalog.inject_trait_into_deme(_world_state, _selected_deme_id, _selected_id, _lang)
 	_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
-	inject_trait_requested.emit(_selected_deme_id, saved_id)
+	inject_trait_requested.emit(_selected_deme_id, _selected_id)
 	_feedback_lbl.text = EvoUiStyle.tr_text(
 		_lang,
-		"💉 Rasgo '%s' inyectado en la aldea seleccionada." % _name_input.text,
-		"💉 Trait '%s' injected into selected village." % _name_input.text
+		"💉 Rasgo '%s' inyectado en la aldea seleccionada." % name_edit.text,
+		"💉 Trait '%s' injected into selected village." % name_edit.text
 	)
 
 

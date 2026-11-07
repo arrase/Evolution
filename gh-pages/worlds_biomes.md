@@ -106,11 +106,15 @@ $$R_{t+1} = \min\Big(K_{t+1},\ R_t + K_{t+1} \cdot r_{\text{regen}} \cdot \gamma
 
 ---
 
-## Deep-Dive: The 3 Scientific World Presets
+## Deep-Dive: The 3 Scientific World Presets & 1v1 Strategy Matchups
+
+Every preset world (`EvoPresets.create_preset_world(preset_id, lang, strategy_a_id, strategy_b_id)`) initializes a balanced **1v1 Evolutionary Strategy Duel** between **Founder A (`state.strategy_a_id`)** and **Founder B (`state.strategy_b_id`)**. By default, `strategy_a_id` is `strat-cooperation` (🤝 Cooperative Alliance, `#10B981`) and `strategy_b_id` is `strat-war` (⚔️ Conquering Horde, `#EF4444`), and players can switch either slot to any of the 5 base archetypes or custom user strategies (`~/.config/Evolution/user_catalog.json`) via the Top HUD Matchup Bar at Generation 0.
+
+When a preset builds its founding subpopulations, `EvoCatalog.apply_strategy_to_deme(state, deme, strategy_id, lang)` assigns each founder's `strategy_id`, `color`, `biological_trait_ids`, and `cultural_trait_ids` (enforcing `deme_has_cultural_capacity`), and synchronizes its root `LineageNode`.
 
 ### 1. The Rift Valley (`preset-rift-savanna`)
 
-> **Scientific Hypothesis**: *East Side Story / Tectonic Savanna Hypothesis* — How tectonic uplift and eastern rain-shadow aridification split an ancestral hominid lineage into conservative western forest foragers and cooperative, innovative eastern savanna populations.
+> **Scientific Hypothesis**: *East Side Story / Tectonic Savanna Hypothesis* — How tectonic uplift and eastern rain-shadow aridification pit a western rainforest population (Strategy A) against an eastern savanna-steppe population (Strategy B) separated by a high-mountain ridge.
 
 ![Late Simulation in The Rift Valley — Consolidated Settlements & Road Networks](assets/img/screenshot_late_simulation.png)
 
@@ -123,16 +127,20 @@ $$R_{t+1} = \min\Big(K_{t+1},\ R_t + K_{t+1} \cdot r_{\text{regen}} \cdot \gamma
   | **Tectonic Ridge** | $q = 0, r \neq 0$ (10 hexes) | `high_mountain` | `-0.35` | `0.25` | `0.88` | `70.0` | `108.0` | `120.0` | `0.08` |
   | **Eastern Mosaic (Odd)** | $q > 0,\ |q+r| \bmod 2 = 1$ | `savanna` | `+0.60` | `0.30` | `0.42` | `260.0` | `335.0` | `380.0` | `0.16` |
   | **Eastern Mosaic (Even)** | $q > 0,\ |q+r| \bmod 2 = 0$ | `arid_steppe` | `+0.60` | `0.30` | `0.42` | `260.0` | `335.0` | `380.0` | `0.16` |
-* **Founding Lineage & Initial Subpopulations**:
-  * **Lineage**: `lineage-rift-ancestral` (*Rift Hominids* / *Homínidos del Rift*, color `#E07A5F`, founder hex `-2,1`), equipped with `bio-k-strategy` and `bio-social-instinct`.
-  * **`deme-rift-west` (*Western Forest Hominids*)**: Spawned at `(-2, 1)` in lush `tropical_forest` (`pop = 140`, `reserves = 180.0`, `model = d3:4b`). High biomass adequacy keeps them anchored in `dec-conservative-forage`.
-  * **`deme-rift-east` (*Eastern Savanna Hominids*)**: Spawned at `(2, -1)` in drying `arid_steppe`/`savanna` (`pop = 140`, `reserves = 180.0`, `model = tev1:4b`). Lower humidity (`0.30`) and seasonal scarcity drive `dec-cooperate-store`, `dec-selective-migration`, and `dec-explore-innovate`, triggering **Baldwin genetic assimilation** (`baldwin_counters >= 8`), **Cumulative Cultural Innovation**, and **Allopatric Speciation**.
+* **1v1 Founding Lineages & Subpopulations**:
+  | Slot | Deme ID & Name (EN / ES) | Lineage ID & Name (EN / ES) | Founder Hex | Initial Pop | Reserves | $\Delta E_0$ | Assigned Strategy | System 1 Model |
+  | :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+  | **Strategy A** | `deme-rift-west`<br>**Western Forest Hominids**<br>*Homínidos del Bosque Occidental* | `lineage-rift-west`<br>**Western Rift Lineage**<br>*Linaje Occidental del Rift* | `-2,1`<br>(`tropical_forest`) | `140` | `180.0` | `+12.0` | `state.strategy_a_id`<br>*(Default: `strat-cooperation` 🤝)* | `d3:4b` |
+  | **Strategy B** | `deme-rift-east`<br>**Eastern Savanna Hominids**<br>*Homínidos de la Sabana Oriental* | `lineage-rift-east`<br>**Eastern Rift Lineage**<br>*Linaje Oriental del Rift* | `2,-1`<br>(`arid_steppe`) | `140` | `180.0` | `+8.0` | `state.strategy_b_id`<br>*(Default: `strat-war` ⚔️)* | `tev1:4b` |
+* **Evolutionary Dynamics**:
+  * **Western Forest Hominids (`-2,1`)** inhabit high-biomass `tropical_forest` ($R = 560, K = 600$), enabling steady demographic growth and western basin expansion.
+  * **Eastern Savanna Hominids (`2,-1`)** face lower humidity (`0.30`) and seasonal scarcity in the eastern mosaic, driving cooperation, storage, selective migration through the central pass `(0, 0)`, **Baldwin genetic assimilation** (`baldwin_counters >= 8`), **Cumulative Cultural Innovation**, and **Allopatric Speciation**.
 
 ---
 
 ### 2. Darwin's Archipelago (`preset-darwin-archipelago`)
 
-> **Scientific Hypothesis**: *Insular Biogeography & Allopatric Speciation* — How glacial eustatic sea-level oscillations alternately connect volcanic islands via temporary land bridges (`coastal_shallows`) and isolate colonizing founder populations across contrasting thermal niches.
+> **Scientific Hypothesis**: *Insular Biogeography & Allopatric Speciation* — How glacial eustatic sea-level oscillations alternately connect volcanic islands via temporary land bridges (`coastal_shallows`) and isolate rival colonizing founder strategies across contrasting thermal niches.
 
 ![Darwin's Archipelago — Insular Dispersal & Land Bridges](assets/img/screenshot_darwin_archipelago.png)
 
@@ -140,24 +148,28 @@ $$R_{t+1} = \min\Big(K_{t+1},\ R_t + K_{t+1} \cdot r_{\text{regen}} \cdot \gamma
 * **Archipelago Layout**:
   | Island / Feature | Hex Coordinates | Biome | Temp | Humidity | Altitude | Initial $R$ | Initial $K$ | $K_{\max}$ | Regen $r_{\text{regen}}$ |
   | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-  | **Central Founder Island** | `0,0` (1 hex) | `tropical_forest` | `+0.20` | `0.75` | `0.40` | `320.0` | `395.0` | `450.0` | `0.24` |
-  | **3 Tidal Land Bridges** | `0,-1`, `0,1`, `1,0` (3 hexes) | `coastal_shallows` | `+0.15` | `0.65` | `0.18` | `200.0` | `230.0` | `260.0` | `0.22` |
+  | **Central Hub Island** | `0,0` (1 hex) | `tropical_forest` | `+0.20` | `0.75` | `0.40` | `320.0` | `395.0` | `450.0` | `0.24` |
+  | **2 Central Duel Islands** | `-1,0`, `1,0` (2 hexes) | `tropical_forest` | `+0.22` | `0.75` | `0.65` | `220.0` | `220.0` | `220.0` | `0.24` |
+  | **3 Tidal Land Bridges** | `0,-1`, `0,1`, `2,0` (3 hexes) | `coastal_shallows` | `+0.15` | `0.65` | `0.18` | `200.0` | `230.0` | `260.0` | `0.22` |
   | **Northern Boreal Island** | `0,-2`, `0,-3` (2 hexes) | `tundra` | `-0.55` | `0.40` | `0.55` | `360.0` | `380.0` | `420.0` | `0.24` |
   | **Southern Tropical Island** | `0,2`, `0,3` (2 hexes) | `tropical_forest` | `+0.55` | `0.85` | `0.45` | `420.0` | `450.0` | `500.0` | `0.28` |
-  | **Eastern Xeric Island** | `2,0`, `3,0` (2 hexes) | `arid_steppe` | `+0.65` | `0.25` | `0.45` | `330.0` | `360.0` | `400.0` | `0.22` |
-  | **Surrounding Deep Sea** | Remaining 81 hexes | `ocean` | `+0.10` | `0.90` | `0.05` | `0.0` | `20.0` | `60.0` | `0.05` |
-* **Founding Lineage & Initial Deme**:
-  * **Lineage**: `lineage-darwin-ancestral` (*Archipelago Ancestors*, color `#3D85C6`, founder hex `0,0`).
-  * **`deme-darwin-founder` (*Archipelago Founders*)**: Spawned at `(0, 0)` with `population = 220`, `energy_reserves = 300.0`, `model = d3:4b`, and biological traits `["bio-r-strategy", "bio-thermal-tolerance", "bio-social-instinct"]`.
+  | **Eastern Xeric Island** | `3,0`, `3,-1` (2 hexes) | `arid_steppe` | `+0.65` | `0.25` | `0.45` | `330.0` | `360.0` | `400.0` | `0.22` |
+  | **Surrounding Deep Sea** | Remaining 79 hexes | `ocean` | `+0.10` | `0.90` | `0.05` | `0.0` | `20.0` | `60.0` | `0.05` |
+* **1v1 Founding Lineages & Subpopulations**:
+  | Slot | Deme ID & Name (EN / ES) | Lineage ID & Name (EN / ES) | Founder Hex | Initial Pop | Reserves | $\Delta E_0$ | Assigned Strategy | System 1 Model |
+  | :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+  | **Strategy A** | `deme-darwin-founder`<br>**Western Island Founders**<br>*Fundadores Insulares del Oeste* | `lineage-darwin-a`<br>**Western Archipelago Lineage**<br>*Linaje Occidental del Archipiélago* | `-1,0`<br>(`tropical_forest`) | `95` | `165.0` | `+12.0` | `state.strategy_a_id`<br>*(Default: `strat-cooperation` 🤝)* | `d3:4b` |
+  | **Strategy B** | `deme-darwin-rival`<br>**Eastern Island Rivals**<br>*Rivales Insulares del Este* | `lineage-darwin-b`<br>**Eastern Archipelago Lineage**<br>*Linaje Oriental del Archipiélago* | `1,0`<br>(`tropical_forest`) | `95` | `165.0` | `+10.0` | `state.strategy_b_id`<br>*(Default: `strat-war` ⚔️)* | `tev1:4b` |
 * **Evolutionary Dynamics**:
-  * During **Generations 1–7** (low tide, `sea_level = 0.12`), open coastal land bridges and high fecundity (`bio-r-strategy`) propel budding daughter demes across `(0,-1)`, `(0,1)`, and `(1,0)` onto the outer Tundra, Tropical Forest, and Arid Steppe islands.
-  * At **Generation 8**, `sea_level` rises to `0.25`, submerging the 3 land bridges (`altitude = 0.18 < 0.25`) into `ocean`. Any deme still standing on a bridge flees onto an adjacent island or drowns, and the outer island colonies accumulate `isolation_turns` until reaching $\ge 10$ turns and diverging via **Allopatric Speciation** into distinct species with new colors from `SPECIATION_PALETTE`.
+  * Both rival founders begin on symmetric high-ground island perches (`-1,0` and `1,0`, `K = 220`) flanking the central hub `(0, 0)`.
+  * During **Generations 1–7** (low tide, `sea_level = 0.12`), exposed coastal land bridges (`0,-1`, `0,1`, `2,0`) allow budding daughter demes from both strategies to race across the central hub onto the outer Tundra (`0,-2`, `0,-3`), Southern Tropical (`0,2`, `0,3`), and Eastern Arid Steppe (`3,0`, `3,-1`) islands.
+  * At **Generation 8**, `sea_level` rises to `0.25`, submerging the 3 land bridges (`altitude = 0.18 < 0.25`) into `ocean`. Any deme still standing on a bridge flees onto an adjacent island or drowns, and isolated island colonies accumulate `isolation_turns` until reaching $\ge 10$ turns and diverging via **Allopatric Speciation** into new child species in `lineage_tree` (while retaining their parent `strategy_id`).
 
 ---
 
 ### 3. The Finite Island (`preset-finite-island`)
 
-> **Scientific Hypothesis**: *The Tragedy of the Commons & Cultural Stewardship* — How competing tool-equipped clans sharing a bounded island ecosystem either exhaust their carrying capacity $K$ through intensive overexploitation and Hawk-Dove conflict, or stabilize via Communal Conservation Norms and Reciprocal Symbiosis.
+> **Scientific Hypothesis**: *The Tragedy of the Commons & Cultural Stewardship* — How two competing clans sharing a bounded island ecosystem with slow biomass regeneration ($r_{\text{regen}} = 0.08$) either exhaust their carrying capacity $K$ through intensive overexploitation and Hawk-Dove conflict, or stabilize via Communal Conservation Norms and Reciprocal Symbiosis.
 
 ![The Finite Island — Ecological Health Lens & Valley Legend](assets/img/screenshot_finite_island.png)
 
@@ -168,13 +180,11 @@ $$R_{t+1} = \min\Big(K_{t+1},\ R_t + K_{t+1} \cdot r_{\text{regen}} \cdot \gamma
   | **Fertile Core** | $d \le 1$ (7 hexes) | `savanna` | `+0.30` | `0.55` | `0.42` | `580.0` | `600.0` | `600.0` | `0.08` |
   | **Coastal Perimeter** | $d = 2$ (12 hexes) | `arid_steppe` | `+0.45` | `0.30` | `0.48` | `200.0` | `250.0` | `280.0` | `0.08` |
   | **Abyssal Ocean** | $d \ge 3$ (42 hexes) | `ocean` | `+0.15` | `0.90` | `0.05` | `0.0` | `20.0` | `60.0` | `0.05` |
-* **3 Competing Lineages & Clans** (all initially cohabiting the central hex `"0,0"`):
-  Every clan starts with `population = 320` ($960$ total inhabitants in hex `0,0`!), `energy_reserves = 400.0`, `last_energy_delta = -10.0`, biological traits `["bio-encephalization", "bio-k-strategy"]`, and cultural tradition `["cul-extraction-tools"]`:
-  | Deme ID | Clan Name (EN / ES) | Lineage ID | Color | Assigned Model |
-  | :--- | :--- | :--- | :---: | :---: |
-  | `deme-island-1` | **Northern Quarry Clan** / *Clan de la Cantera Norte* | `lineage-island-1` | `#E07A5F` | `d3:4b` |
-  | `deme-island-2` | **Southern Timber Clan** / *Clan Maderero del Sur* | `lineage-island-2` | `#F2CC8F` | `tev1:4b` |
-  | `deme-island-3` | **Eastern Ridge Clan** / *Clan de la Cresta Oriental* | `lineage-island-3` | `#9B5DE5` | `d3:4b` |
+* **1v1 Founding Lineages & Clans**:
+  | Slot | Deme ID & Clan Name (EN / ES) | Lineage ID & Name (EN / ES) | Founder Hex | Initial Pop | Reserves | $\Delta E_0$ | Assigned Strategy | System 1 Model |
+  | :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+  | **Strategy A** | `deme-island-1`<br>**Northern Quarry Clan**<br>*Clan de la Cantera Norte* | `lineage-island-1`<br>**Northern Quarry Lineage**<br>*Linaje de la Cantera Norte* | `-1,0`<br>(`savanna`) | `95` | `140.0` | `+8.0` | `state.strategy_a_id`<br>*(Default: `strat-cooperation` 🤝)* | `d3:4b` |
+  | **Strategy B** | `deme-island-2`<br>**Southern Timber Clan**<br>*Clan Maderero del Sur* | `lineage-island-2`<br>**Southern Timber Lineage**<br>*Linaje Maderero del Sur* | `1,0`<br>(`savanna`) | `95` | `140.0` | `+8.0` | `state.strategy_b_id`<br>*(Default: `strat-war` ⚔️)* | `tev1:4b` |
 * **Evolutionary Dynamics**:
-  * Because all three clans possess `cul-extraction-tools` (`extraction_efficiency = +0.65`, `ecological_impact = -0.25`) without `cul-communal-conservation`, the `tech_overexploit` behavioral profile dominates (`dec-intensive-overexploit` + `dec-territorial-dispute`).
-  * Combined extraction rapidly exceeds the low natural regeneration rate ($r_{\text{regen}} = 0.08$), degrading $K$ by $18\% \cdot \sum v_{\text{eff}}.\text{ecological\_impact}$ per turn until $K < 0.60 \cdot K_{\max}$ triggers the **Tragedy of the Commons**, forcing demographic collapse, cultural loss of `cul-extraction-tools`, or player intervention via the **Trait & Decision Forge** (injecting `cul-communal-conservation`).
+  * **Northern Quarry Clan (`-1,0`, Strategy A)** and **Southern Timber Clan (`1,0`, Strategy B)** start on opposite sides of the fertile savanna core ($d \le 1$, where natural regeneration is constrained to $r_{\text{regen}} = 0.08$).
+  * When an extractive or martial strategy (`strat-war` ⚔️ or `strat-innovation` 🔬 carrying `cul-extraction-tools` without `cul-communal-conservation`) expands across the island, intensive harvesting degrades $K$ by $18\% \cdot \sum v_{\text{eff}}.\text{ecological\_impact}$ per turn until $K < 0.60 \cdot K_{\max}$ triggers the **Tragedy of the Commons**—whereas cooperative or mercantile strategies (`strat-cooperation` 🤝, `strat-trade` ⚖️) preserve $K$ and build symbiotic trade networks.

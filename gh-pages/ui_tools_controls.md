@@ -13,29 +13,33 @@ The main interface is organized into four non-intrusive peripheral docks that le
 ```mermaid
 flowchart TD
     subgraph HUD ["EvoMainHud (CanvasLayer)"]
-        TopLeft["1. Top-Left Valley Sign & Medallions\n• Scenario Preset Selector + JSON Save/Load\n• Modal Medallions: Journal, Lineages, Forge\n• Map Lenses (Biome, Food, Health) + Valley Legend"]
+        TopLeft["1. Top-Left Valley Sign, Matchup Bar & Medallions\n• Scenario Preset Selector + JSON Save/Load\n• Pre-Play 1v1 Matchup: [Strategy A] ⚔️ [Strategy B] [🔄]\n• Modal Medallions: Journal, Lineages, Forge\n• Map Lenses (Biome, Food, Health) + Valley Legend"]
         TopRight["2. Top-Right Season Clock & Mana Panel\n• Live 72×76 Season & Tide Pixel Portrait\n• Year / Gen Counter + Play / Pause / +1 / Speed\n• Selective Pressure (⚡ Mana) Bar + Settings Gear"]
-        RightInsp["3. Right-Hand Scroll Inspector\n• Village Cycler (◀ / ▶) + Lineage Highlighter\n• Tab 1: Village Vitals, Decisions & Relations\n• Tab 2: Milestone Meters & Trait Medallions\n• Tab 3: Hex Habitat Climate, R & K Health"]
+        RightInsp["3. Right-Hand Scroll Inspector\n• Village Cycler (◀ / ▶) + Lineage Highlighter\n• Tab 1: Strategy Badge, Vitals, Decisions & Relations\n• Tab 2: Milestone Meters & Trait Medallions\n• Tab 3: Hex Habitat Climate, R & K Health"]
         BottomDock["4. Bottom 10-Slot Hotbar & Toast Stack\n• Slots 1–0 (Inspect, Biomes, Altitude, K, Sea)\n• Brush Radius Toggle: ◯ 1x (1 hex) vs ◎ 7x (7 hexes)\n• Floating Tidal Bar + Bottom-Left Chronicle Toasts"]
     end
 ```
 
-### 1. Top-Left Valley Sign, Lenses & Valley Legend (`EvoHudTopBar`)
+### 1. Top-Left Valley Sign, Pre-Play Strategy Matchup, Lenses & Valley Legend (`EvoHudTopBar`)
 * **Row 1 — Scenario & State Persistence**:
   * **Preset Dropdown**: Switch immediately between *The Rift and the Savanna* (`preset-rift-savanna`), *Darwin's Archipelago* (`preset-darwin-archipelago`), and *The Finite Island* (`preset-finite-island`).
-  * **Export (`💾`) & Import (`📂`) World State**: Serializes or restores the complete `WorldState` (cells, demes, custom traits, lineage tree, and chronicle history) to/from `user://evolution_world_state.json`.
-* **Row 2 — Analytical Modal Medallions**:
+  * **Export (`💾`) & Import (`📂`) World State**: Serializes or restores the complete `WorldState` (cells, demes, custom strategies/traits/decisions, `strategy_a_id`, `strategy_b_id`, lineage tree, and chronicle history) to/from `user://evolution_world_state.json`.
+* **Row 2 — Pre-Play 1v1 Strategy Matchup Selector (`[Strategy A] ⚔️ [Strategy B] [🔄]`)**:
+  * **Strategy A & Strategy B Dropdowns**: Choose any of the **5 Base Archetypal Strategies** (`strat-cooperation` 🤝, `strat-expansion` 🧭, `strat-trade` ⚖️, `strat-war` ⚔️, `strat-innovation` 🔬) or any custom user-forged strategy (`origin = "user"` loaded from `~/.config/Evolution/user_catalog.json`) for Slot A (`state.strategy_a_id`) and Slot B (`state.strategy_b_id`).
+  * **Live Generation 0 Reconfiguration**: While the simulation is at **Generation 0 (`state.generation == 0`)**, changing either dropdown immediately applies the chosen strategy to the corresponding founding lineage and deme via `EvoCatalog.apply_strategy_to_deme` and re-evaluates initial decision probabilities.
+  * **Reset Duel Button (`🔄` — `hud_matchup_reset`)**: Resets the active preset back to Generation 0 at any time with the currently selected `Strategy A ⚔️ Strategy B` matchup (`Reset duel at Generation 0 with the selected strategies`).
+* **Row 3 — Analytical Modal Medallions**:
   * **`📖 Journal / Diario`**: Opens the *Naturalist's Notebook* (`EvoNotebookModal`).
   * **`🌳 Lineages / Linajes`**: Opens the *Phylo-Cultural Lineage Tree* (`EvoTreeModal`).
-  * **`⚗️ Forge / Forja`**: Opens the *Trait & Decision Forge* (`EvoLabModal`).
-* **Row 3 — Map Lenses & Valley Legend**:
+  * **`⚗️ Forge / Forja`**: Opens the *Strategy, Trait & Decision Forge* (`EvoLabModal`).
+* **Row 4 — Map Lenses & Valley Legend**:
   * **`🌿 Biome / Bioma`**: Renders authentic biome pixel textures, subtly shifting toward ochre/brown when a hexagon's carrying capacity $K$ is degraded.
   * **`🌾 Food / Alimento`**: Visualizes current biomass ratio $R / K_{\max}$ across 50 quantized bands along a barren-brown (`#8c583a`) $\to$ amber (`#eab308`) $\to$ lush-green (`#65f06c`) gradient.
   * **`💚 Health / Salud`**: Visualizes structural habitat integrity $K / K_{\max}$:
     * **Healthy ($\ge 85\%$ $K_{\max}$)**: Emerald mint (`#6ee7b7`).
     * **Stressed ($60\%\text{–}84\%$ $K_{\max}$)**: Amber (`#fbbf24`) with a dashed orange perimeter border (`#f59e0b`).
     * **Collapsed ($< 60\%$ $K_{\max}$ — Tragedy of the Commons)**: Coral red (`#f87171`) with a thick dashed crimson border (`#ef4444`).
-  * **`🗺️ Legend / Leyenda`**: Toggles the floating *Valley Legend* card detailing all 7 biome swatches, the 4 architectural village tiers (`I–IV`), and the 3 inter-village path symbols (`🛣️`, `⚔️`, `🧭`).
+  * **`🗺️ Legend / Leyenda`**: Toggles the floating *Valley Legend* card detailing the live **Strategy Duel Counter (`legend_strategies`)** (showing each active strategy's color swatch, emblem icon, name, living village count, and total population), all 7 biome swatches, the 4 architectural village tiers (`I–IV`), and the 3 inter-village path symbols (`🛣️`, `⚔️`, `🧭`).
 
 ### 2. Top-Right Season Clock, Playback & Settings Popup
 * **Dynamic Season & Tide Portrait (`SeasonTidePortrait`)**: A custom-drawn $72 \times 76$ pixel-art vignette displaying a radiant sun over green hills during `wet_warm` ($\gamma = 1.20$), a crescent moon with falling snow over slate hills during `dry_cold` ($\gamma = 0.75$), and a live water-level gauge (`🌊 %d%%`) tracking global `sea_level`.
@@ -51,6 +55,18 @@ flowchart TD
 
 ---
 
+## Visual Strategy Identification on the 2.5D Map & HUD
+
+Every village's founding **Evolutionary Strategy** (`deme.strategy_id`) is immediately recognizable across the 2.5D isometric valley and HUD without opening a modal:
+
+1. **Floating Village Billboards (`EvoWorldOverlayRenderer.draw_village_billboard`)**: Each settlement displays a compact overhead dark-wood pill featuring a **strategy-colored emblem shield (`shield_c`)** with the strategy's icon/color on the left and the village's current population count (`sub_text`) on the right, plus a golden selection arrow when inspected.
+2. **Strategy-Colored Ground Rings & Plazas (`EvoPropFloraRenderer.draw_village_plaza`)**: Each settlement's circular stone plaza is framed by a ground ring and status border tinted with its strategy/lineage identity and vital health (`thriving`, `stable`, `struggling`, `starving`).
+3. **Plaza Banners & Villager Tunics (`EvoPixelArtGen.get_villager_texture`)**: Orbiting villagers and road travelers dynamically recolor their pixel-art tunics (`villager_idle`, `villager_walk1`, `villager_walk2`) and settlement banners to match `deme.color` (inherited from the founding `StrategyDef.color`, or diverged from `SPECIATION_PALETTE` upon allopatric speciation while retaining `deme.strategy_id`).
+4. **Inspector Strategy Badge (`insp_strategy`)**: The Right-Hand Scroll Inspector displays the selected village's founding strategy emblem, localized strategy name, and color swatch right alongside its lineage and population telemetry.
+5. **Valley Legend Strategy Duel Counter (`legend_strategies`)**: Opening `🗺️ Legend` displays a live head-to-head breakdown of the active **Strategy Duel**, tallying active settlements and total population per competing strategy across the map.
+
+---
+
 ## Right-Hand Scroll Inspector (`EvoHudInspectorPanel`)
 
 The collapsible parchment Scroll Inspector on the right side of the screen provides deep, zero-information-loss telemetry on any selected village or hexagon:
@@ -61,8 +77,8 @@ The collapsible parchment Scroll Inspector on the right side of the screen provi
 
 === "Tab 1: 🧠 Village (`Aldea`)"
 
-    * **Vitals Card**:
-      * **Lineage & Population**: Species name, headcount, and architectural tier (`I · Camp` $<50$, `II · Hamlet` $50\text{–}149$, `III · Village` $150\text{–}399$, `IV · Citadel` $400+$).
+    * **Vitals & Strategy Card**:
+      * **Strategy (`insp_strategy`) & Lineage**: Displays the village's founding **Evolutionary Strategy badge** (`<icon> <Strategy Name>`), species lineage name, headcount, and architectural tier (`I · Camp` $<50$, `II · Hamlet` $50\text{–}149$, `III · Village` $150\text{–}399$, `IV · Citadel` $400+$).
       * **Caloric Reserves (`🍯`)**: Progress bar tracking stored `energy_reserves`.
       * **Turn Energy Delta (`⚡`)**: Net caloric balance $\Delta E$ from the last turn and vital status badge (`💚 Thriving` $\Delta E \ge +10$, `💙 Stable` $\Delta E \ge 0$, `💛 Struggling` reserves $> 40$, `❤️‍🩹 Starving` reserves $\le 40$).
     * **Dominant Intention (`🧠`)**: Displays the top 3 behavioral decisions from `last_decision_probabilities` as horizontal probability bars, marking the dominant intention with a gold star (`★`).
@@ -101,22 +117,28 @@ The collapsible parchment Scroll Inspector on the right side of the screen provi
 ![Phylo-Cultural Lineage Tree Modal](assets/img/screenshot_tree_modal.png)
 
 * **Hierarchical Phylogenetic Canvas**: Automatically lays out root and child `LineageNode` cards left-to-right by evolutionary depth and connects parent-child divergences with cubic Bézier curves. Supports click-and-drag panning across large evolutionary trees.
-* **Live Species Telemetry**: Each card displays the lineage's color emblem, species name, founding generation (`G%d`), divergence mechanism (*Initial*, *Allopatric Speciation*, *Baldwin Assimilation*, *Cultural Schism*), founder hex, acquired trait count, and live status (`● N living villages` in green or `✕ Extinct at G%d` in red).
+* **Live Species & Strategy Telemetry**: Each card displays the lineage's color emblem, inherited `strategy_id` badge, species name, founding generation (`G%d`), divergence mechanism (*Initial*, *Allopatric Speciation*, *Baldwin Assimilation*, *Cultural Schism*), founder hex, acquired trait count, and live status (`● N living villages` in green or `✕ Extinct at G%d` in red).
 * **Map Lineage Highlighting (`✨ Highlight Lineage on Map`)**: Selecting any lineage node populates the right-hand detail sidebar (showing all acquired traits and active villages with their population and model tags) and lets you project pulsing lineage light beams across the 2.5D world map.
 
 ---
 
-### 3. Trait & Decision Forge — Evolutionary Laboratory (`EvoLabModal`)
+### 3. Strategy, Trait & Decision Forge — Evolutionary Laboratory (`EvoLabModal`)
 
 ![Trait & Decision Forge — Evolutionary Laboratory Modal](assets/img/screenshot_lab_modal.png)
 
-* **3 Catalog Tabs**: Inspect, modify, or create new **Biological Traits (`🧬`)**, **Cultural Traditions (`🔥`)**, and **Behavioral Decisions (`⚖️`)**.
-* **Interactive 6-Axis Vector Sliders**: Fine-tune `metabolic_cost`, `extraction_efficiency`, `ecological_impact`, `spatial_mobility`, `social_cohesion` ($[-1.0, +1.0]$, step `0.05`), and `transmission_threshold` ($[0.0, +1.0]$, step `0.05`).
-* **Real-Time Thermodynamic Balance Meter**: Continuously computes positive advantages $A^+$, actual cost $C_{\text{curr}}$, and required cost $C_{\text{req}} = \max(0, 0.5 \cdot (A^+ - 0.60))$, displaying a green compliance badge when balanced or previewing the exact auto-balanced cost adjustment.
-* **One-Click Actions**:
-  * **`⚖️ Auto-Balance Vector`**: Snaps the sliders to satisfy thermodynamic conservation (`EvoThermodynamics.validate_and_balance_thermodynamics`).
-  * **`💾 Save to Catalog`**: Registers the custom or modified trait/decision (`bio-custom-*`, `cul-custom-*`, `dec-custom-*`) into the active `WorldState` and immediately re-evaluates all demes.
-  * **`💉 Inject into Selected Village`**: Saves the trait and directly injects it into the currently selected deme via `EvoCatalog.inject_trait_into_deme` (automatically resolving mutual exclusions such as `bio-r-strategy` vs. `bio-k-strategy` and verifying cultural capacity).
+* **4 Catalog Tabs**:
+  1. **`🧬 Biological Traits` (`biological`)**: Inspect, modify, or craft heritable biological adaptations (`bio-*`).
+  2. **`🔥 Cultural Traditions` (`cultural`)**: Inspect, modify, or craft socially transmitted traditions (`cul-*`).
+  3. **`⚖️ Behavioral Decisions` (`decision`)**: Inspect, modify, or craft collective behavioral archetypes (`dec-*`).
+  4. **`🛡️ Strategies` (`lab_tab_strat`)**: Create, edit, and preview custom **Evolutionary Strategies** (`EvoTypes.StrategyDef`) for 1v1 duels.
+* **`🛡️ Strategies` Builder & Duel Slot Assignment**:
+  * **Emblem (`lab_strat_icon`) & Color (`lab_strat_color`) Pickers**: Choose a visual shield emblem (e.g., `🤝`, `🧭`, `⚖️`, `⚔️`, `🔬`, `🛡️`, `🌿`, `👑`) and hex color swatch for the strategy.
+  * **Compatible Trait Checkboxes (`lab_strat_traits`)**: Select any combination of biological (`bio-*`) and cultural (`cul-*`) traits from the catalog. The builder automatically enforces mutual exclusion between `bio-r-strategy` and `bio-k-strategy` and requires at least one cultural-capacity biological trait (`bio-encephalization` or `bio-social-instinct`) before cultural traditions can be active.
+  * **Combined Biophysical Footprint Preview (`lab_strat_vector`)**: Live 6-axis readout computed via `EvoCatalog.compute_strategy_vector(strategy, state.traits_catalog)` showing the strategy's aggregate `metabolic_cost`, `extraction_efficiency`, `ecological_impact`, `spatial_mobility`, `social_cohesion`, and `transmission_threshold`.
+  * **Save & Assign to Duel (`💾 Save Strategy`, `Set as Strategy A`, `Set as Strategy B`)**: Saves the custom strategy (`strat-custom-*`, `origin = "user"`) into `state.strategies_catalog`, persists all user-created strategies, traits, and decisions to **`~/.config/Evolution/user_catalog.json`** via `EvoUserSettings.save_user_catalog(state)`, and lets you assign the strategy directly to **Slot A (`lab_use_strat_a`)** or **Slot B (`lab_use_strat_b`)**.
+* **Interactive 6-Axis Vector Sliders & Live Thermodynamic Balance Meter** (for Traits & Decisions):
+  * Fine-tune `metabolic_cost`, `extraction_efficiency`, `ecological_impact`, `spatial_mobility`, `social_cohesion` ($[-1.0, +1.0]$), and `transmission_threshold` ($[0.0, +1.0]$).
+  * Continuously computes positive advantages $A^+$, actual cost $C_{\text{curr}}$, and required cost $C_{\text{req}} = \max(0, 0.5 \cdot (A^+ - 0.60))$, with one-click **`⚖️ Auto-Balance Vector`**, **`💾 Save to Catalog`** (persisted to `~/.config/Evolution/user_catalog.json`), and **`💉 Inject into Selected Village`**.
 
 ---
 

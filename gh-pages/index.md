@@ -10,7 +10,7 @@ hide:
   </div>
   <h1>Evolution</h1>
   <p class="hero-subtitle">
-    An interactive bio-cultural and evolutionary population simulator built with Godot 4.7. Shape climates, terrain altitude, sea levels, carrying capacity ($K$), and genetic or cultural traits on a handcrafted 2.5D isometric hexagonal ecosystem—while local subpopulations (<em>demes</em>) autonomously adapt, migrate, cooperate, innovate, or diverge into new species.
+    An interactive bio-cultural and evolutionary population simulator built with Godot 4.7. Configure <strong>1v1 Evolutionary Strategy Duels (<code>Strategy A ⚔️ Strategy B</code>)</strong>, forge custom strategies and traits, and shape climates, terrain altitude, sea levels, and carrying capacity ($K$) on a handcrafted 2.5D isometric hexagonal ecosystem—while local subpopulations (<em>demes</em>) autonomously adapt, migrate, cooperate, innovate, or diverge into new species.
   </p>
   <div class="hero-badges">
     <a href="https://github.com/arrase/Evolution/actions/workflows/ci.yml"><img src="https://github.com/arrase/Evolution/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -27,6 +27,13 @@ hide:
 </div>
 
 <div class="projects-grid">
+  <div class="feature-card">
+    <div>
+      <i class="fa-solid fa-shield-halved feature-icon" aria-hidden="true"></i>
+      <h3>1v1 Evolutionary Strategy Duels</h3>
+      <p>Before pressing Play at Generation 0, pit any two evolutionary strategies (<code>Strategy A ⚔️ Strategy B</code>) against each other—or craft custom strategies in the Forge and persist them to <code>~/.config/Evolution/user_catalog.json</code>.</p>
+    </div>
+  </div>
   <div class="feature-card">
     <div>
       <i class="fa-solid fa-scale-balanced feature-icon" aria-hidden="true"></i>
@@ -50,42 +57,50 @@ hide:
   </div>
   <div class="feature-card">
     <div>
-      <i class="fa-solid fa-fire-flame-curved feature-icon" aria-hidden="true"></i>
-      <h3>Dual Inheritance &amp; Culture</h3>
-      <p>Lineages with <em>Encephalization</em> or <em>Instinctive Sociability</em> unlock cumulative cultural innovation, horizontal cultural transmission across trade routes, and demographic bottleneck loss.</p>
-    </div>
-  </div>
-  <div class="feature-card">
-    <div>
       <i class="fa-solid fa-chess-knight feature-icon" aria-hidden="true"></i>
       <h3>Evolutionary Game Theory</h3>
-      <p>Cohabiting and neighboring demes navigate <em>Hawk-Dove</em> territorial disputes, reciprocal symbiosis ($+20\%$ caloric surplus), and the <em>Tragedy of the Commons</em> when $K &lt; 0.60 \cdot K_{\max}$.</p>
+      <p>Cohabiting and neighboring demes navigate <em>Hawk-Dove</em> territorial disputes, reciprocal symbiosis ($+20\%$ caloric surplus &amp; horizontal cultural diffusion), and the <em>Tragedy of the Commons</em> when $K &lt; 0.60 \cdot K_{\max}$.</p>
     </div>
   </div>
   <div class="feature-card">
     <div>
       <i class="fa-solid fa-wand-magic-sparkles feature-icon" aria-hidden="true"></i>
       <h3>God-Mode Selective Pressure</h3>
-      <p>Wield a 10-slot brush dock to sculpt biomes, raise tectonic ridges, flood glacial archipelagos, enrich carrying capacity $K$, or forge and inject custom traits in the Evolutionary Laboratory.</p>
+      <p>Wield a 10-slot brush dock to sculpt biomes, raise tectonic ridges, flood glacial archipelagos, enrich carrying capacity $K$, or forge and inject custom strategies, traits, and decisions in the Evolutionary Laboratory.</p>
     </div>
   </div>
 </div>
 
 ---
 
-## Visual Tour & Screenshot Gallery
+## 1v1 Evolutionary Strategy Duels (`Strategy A ⚔️ Strategy B`)
+
+At Generation 0, every scenario sets up a head-to-head evolutionary experiment between **Strategy A** (Founding Lineage A) and **Strategy B** (Founding Lineage B). Use the top HUD matchup bar (`[Strategy A] ⚔️ [Strategy B] [🔄]`) to select from the **5 Default Archetypal Strategies**—or design custom strategies in the `🛡️ Strategies` tab of the **Evolutionary Laboratory** (saved automatically to `~/.config/Evolution/user_catalog.json` alongside custom traits and decisions):
+
+| Strategy ID | Emblem & Name (EN / ES) | Hex Color | Included Traits (`biological_trait_ids` + `cultural_trait_ids`) | Evolutionary Philosophy |
+| :--- | :--- | :---: | :--- | :--- |
+| `strat-cooperation` | 🤝 **Cooperative Alliance**<br>*Alianza Cooperativa* | `#10B981` | `bio-k-strategy`, `bio-social-instinct` + `cul-communal-conservation` | Fosters social cohesion, communal habitat conservation, and resource buffering. |
+| `strat-expansion` | 🧭 **Expansionist Pioneers**<br>*Pioneros Expansionistas* | `#3B82F6` | `bio-r-strategy`, `bio-thermal-tolerance`, `bio-social-instinct` + `cul-fire-processing` | Fast reproduction, high mobility, and thermal tolerance to colonize new territories. |
+| `strat-trade` | ⚖️ **Merchant League**<br>*Liga Mercantil* | `#F59E0B` | `bio-k-strategy`, `bio-encephalization` + `cul-interdeme-barter` | Drives inter-village barter, commercial symbiosis, and horizontal cultural diffusion. |
+| `strat-war` | ⚔️ **Conquering Horde**<br>*Horda Conquistadora* | `#EF4444` | `bio-r-strategy`, `bio-social-instinct` + `cul-warrior-expansion`, `cul-extraction-tools` | Aggressive martial expansion and intensive extraction to dominate rival territories. |
+| `strat-innovation` | 🔬 **Innovator Technocrats**<br>*Tecnócratas Innovadores* | `#A855F7` | `bio-encephalization`, `bio-digestive-spec` + `cul-fire-processing`, `cul-extraction-tools` | High encephalization, thermal food processing, and specialized extraction toolkits. |
+
+---
+
+## Visual Tour & 1v1 Scenario Gallery
 
 ![The Rift Valley — Isometric Hexagonal Ecosystem & HUD](assets/img/screenshot_rift_savanna.png)
+*The Rift Valley (`preset-rift-savanna`): Western Forest Hominids (`(-2, 1)`, Strategy A) vs. Eastern Savanna Hominids (`(2, -1)`, Strategy B) separated by a high-mountain tectonic ridge (`q = 0`).*
 
 | Darwin's Archipelago (`preset-darwin-archipelago`) | The Finite Island (`preset-finite-island`) |
 | :---: | :---: |
 | ![Darwin's Archipelago — Insular Dispersal & Land Bridges](assets/img/screenshot_darwin_archipelago.png) | ![The Finite Island — Ecological Health Lens & Valley Legend](assets/img/screenshot_finite_island.png) |
-| *Volcanic islands linked by shallow coastal land bridges (`coastal_shallows`) that flood and emerge every 8 generations during glacial sea-level cycles* | *Three competing tool-wielding clans on a bounded island viewed through the Ecological Health Lens ($K / K_{\max}$) with the Valley Legend open* |
+| *Symmetric 1v1 insular duel between Western Island Founders (`(-1, 0)`, Strategy A) and Eastern Island Rivals (`(1, 0)`, Strategy B) connected by tidal `coastal_shallows` land bridges (`0,-1`, `0,1`, `2,0`) that flood and emerge every 8 generations* | *1v1 resource stewardship duel between Northern Quarry Clan (`(-1, 0)`, Strategy A) and Southern Timber Clan (`(1, 0)`, Strategy B) on a bounded island viewed through the Ecological Health Lens ($K / K_{\max}$) with the Valley Legend open* |
 
-| Naturalist's Notebook (Chronicle) | Phylo-Cultural Lineage Tree | Trait & Decision Forge (Lab) |
+| Naturalist's Notebook (Chronicle) | Phylo-Cultural Lineage Tree | Strategy, Trait & Decision Forge (Lab) |
 | :---: | :---: | :---: |
 | ![Naturalist's Notebook Modal](assets/img/screenshot_notebook_modal.png) | ![Phylo-Cultural Lineage Tree Modal](assets/img/screenshot_tree_modal.png) | ![Trait & Decision Forge Modal](assets/img/screenshot_lab_modal.png) |
-| *Chronological log of speciation, Baldwin assimilation, cultural innovation, symbiosis, and extinctions with 1-click hex jump* | *Interactive phylogenetic hierarchy tracking ancestral and diverged lineages, traits, and active village counts* | *Live 6-axis catalog editor with a real-time Thermodynamic Balance Meter and direct village trait injection* |
+| *Chronological log of speciation, Baldwin assimilation, cultural innovation, symbiosis, and extinctions with 1-click hex jump* | *Interactive phylogenetic hierarchy tracking ancestral and diverged lineages, strategy emblems, traits, and active village counts* | *4-tab catalog editor (`🧬`, `🔥`, `⚖️`, `🛡️`) with live Thermodynamic Balance Meter, strategy builder, and `~/.config/Evolution/user_catalog.json` persistence* |
 
 ---
 

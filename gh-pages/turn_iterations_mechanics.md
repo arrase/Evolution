@@ -147,7 +147,7 @@ $$P_{t+1} = \begin{cases} P_i - 1 & \text{if } \Delta E_{\text{eff}} < 0.0 \;\la
   $$\Delta I = \big(P(\text{"innovate"}) + 0.35 \cdot P(\text{"cooperate"})\big) \times 0.45$$
   $$\text{innovation\_counter}_{t+1} = \min\big(2.0,\ \text{snapped}(\text{innovation\_counter}_t + \Delta I,\ 0.0001)\big)$$
 
-### Step 4: Population Fission (Budding Migration)
+### Step 4: Population Fission (Budding Migration) & Strategy Inheritance
 When a deme with $P_i \ge 20$ exhibits intentional or emergency migration:
 
 * **Migrant Cohort Size**: $\text{migrants} = \lfloor P_i \times P(\text{"migrate"}) \times 0.45 \rfloor$.
@@ -158,7 +158,9 @@ When a deme with $P_i \ge 20$ exhibits intentional or emergency migration:
   4. **Emergency Scarcity**: $R_{\text{cell}} < 0.20 \cdot P_i \;\land\; E_{\text{reserves}} < 0.35 \cdot P_i$.
 * **Target Hex Scoring**: Passable neighboring hexes (`ncell.biome != "ocean"`, `ncell.altitude - 0.50 <= v_eff.spatial_mobility`, `ncell.deme_ids.size() < 3`, and—unless in emergency—no closely related kin deme with Jaccard trait divergence $< 0.25$) are ranked by highest per-deme resource share:
   $$\text{Score}(\text{ncell}) = \frac{R_{\text{ncell}}}{\text{ncell.deme\_ids.size()} + 1}$$
-* **Fission Mechanics**: The parent deme sends `migrants` and a proportional share of `energy_reserves` (minus a **$15\%$ transit energy loss**, so the daughter receives $85\%$) into the top-ranked neighbor hex as a newly founded daughter deme (`<root>-m<gen>-<q>_<r>`), spawning a `"migration"` flow rendered as a stepping-stone expedition trail with a settler wagon.
+* **Fission Mechanics & Strategy Identity Inheritance (`EvoDemographyMigration`)**:
+  * The parent deme sends `migrants` and a proportional share of `energy_reserves` (minus a **$15\%$ transit energy loss**, so the daughter receives $85\%$) into the top-ranked neighbor hex as a newly founded daughter deme (`<root>-m<gen>-<q>_<r>`), spawning a `"migration"` flow rendered as a stepping-stone expedition trail with a settler wagon.
+  * The daughter deme inherits `daughter.lineage_id = deme.lineage_id`, **`daughter.strategy_id = deme.strategy_id`**, `daughter.color = deme.color`, and copies of `biological_trait_ids` and `cultural_trait_ids`, ensuring colonist settlements always preserve their founding strategy identity (`strategy_a_id` or `strategy_b_id`) across the valley.
 
 ### Step 5: Extinction & Demographic Bottleneck Cultural Loss
 * **Minimum Viable Population Extinction**: Any deme whose population falls below **$10$ individuals** (`deme.population < 10`) goes extinct. It is removed from the world, spawns `ruins` on its hex, logs an `"extinction"` Chronicle entry, and—if no living demes of its `lineage_id` remain—marks `extinct_generation = state.generation` on its `LineageNode`.
@@ -169,19 +171,26 @@ When a deme with $P_i \ge 20$ exhibits intentional or emergency migration:
 
 ### Step 6: Compatible Kin Merging & Isolation Tracking
 * **Kin Merging**: If two demes of the **same `lineage_id`** cohabit the same hex and their Jaccard trait divergence is $< 0.25$, they fuse into a single consolidated settlement (summing `population` and `energy_reserves`, taking the union of traits, and computing population-weighted averages of `innovation_counter` and `baldwin_counters`).
-* **Geographic Isolation Counter (`isolation_turns`)**: Reset to `0` if the deme is on its lineage's `founder_hex_id`, merged with kin this turn, or is adjacent via a passable hex to `founder_hex_id` while `founder_hex_id` is still occupied by the same lineage. Otherwise, `deme.isolation_turns += 1`.
+* **Geographic Isolation Counter (`isolation_turns`)**: Reset to `0` if the deme is on its lineage's `founder_hex_id`, merged with kin this turn, or is connected within 3 passable hex steps (`_is_connected_to_founder`) to `founder_hex_id`. Otherwise, `deme.isolation_turns += 1`.
 
 ---
 
-## Stage 4: Evolutionary Milestones & Macro-Outcomes (`EvoMilestonePhase`)
+## Stage 4: Evolutionary Milestones, Speciation Strategy Inheritance & Macro-Outcomes (`EvoMilestonePhase`)
 
 At the end of each generation, `EvoMilestonePhase.run_milestone_phase` collects all eligible evolutionary milestone candidates across all demes, sorts them by strict priority (`0` $\to$ `1` $\to$ `2`), and synthesizes at most **one emergent trait per turn globally**:
 
-| Priority | Milestone Type | Chronicle `event_type` | Exact Trigger Conditions | Evolutionary Consequence |
+| Priority | Milestone Type | Chronicle `event_type` | Exact Trigger Conditions | Evolutionary Consequence & Strategy Inheritance |
 | :---: | :--- | :--- | :--- | :--- |
-| **0 (Highest)** | **Allopatric Speciation** | `allopatric_speciation` | 1. `isolation_turns >= 10`<br>2. `< 3` emergent biological traits<br>3. Separated from `founder_hex_id`<br>4. Distinct biome (`cell.biome != founder_cell.biome`), novel bio trait, or Jaccard trait divergence $\ge 0.30$ | Synthesizes `Allopatric Divergence (<Biome>)` (`bio`), resets `isolation_turns = 0`, creates a new child `LineageNode` in `lineage_tree`, assigns a new species color from `SPECIATION_PALETTE`, and updates `deme.lineage_id`. |
+| **0 (Highest)** | **Allopatric Speciation** | `allopatric_speciation` | 1. `isolation_turns >= 10`<br>2. `< 3` emergent biological traits<br>3. Separated from `founder_hex_id`<br>4. Distinct biome (`cell.biome != founder_cell.biome`), novel bio trait, or Jaccard trait divergence $\ge 0.30$ | Synthesizes `Allopatric Divergence (<Biome>)` (`bio`), resets `isolation_turns = 0`, creates a new child `LineageNode` in `lineage_tree` with **`new_node.strategy_id = deme.strategy_id`** (plus `biological_trait_ids`, `cultural_trait_ids`, and `acquired_trait_ids`), assigns a new species color from `SPECIATION_PALETTE`, and updates `deme.lineage_id`. Even after speciating into a new lineage, the village retains its founding `strategy_id`. |
 | **1** | **The Baldwin Effect**<br>*(Genetic Assimilation)* | `baldwin_trait` | 1. `< 3` emergent biological traits<br>2. Any non-foraging decision `dec_id` has `baldwin_counters[dec_id] >= 8` AND ($P(\text{dec\_id}) \ge 0.35$ or is dominant) | Synthesizes `Adaptive Homeostasis (<Biome>)` (`bio`), appends it to `biological_trait_ids`, and resets `baldwin_counters[dec_id] = 0`. |
-| **2** | **Cumulative Cultural Innovation** | `cultural_innovation` | 1. `innovation_counter >= 1.0`<br>2. Has cultural capacity (`enables_cultural_transmission`)<br>3. `0` existing emergent cultural traits<br>4. Non-negative energy balance ($\Delta E \ge 0.0$) | Synthesizes `Cooperative Ecological Tradition (<Biome>)` (`cul`), appends it to `cultural_trait_ids`, and decrements `innovation_counter -= 1.0`. |
+| **2** | **Cumulative Cultural Innovation** | `cultural_innovation` | 1. `innovation_counter >= 1.0`<br>2. Has cultural capacity (`enables_cultural_transmission`)<br>3. `< 2` existing emergent cultural traits<br>4. Non-negative energy balance ($\Delta E \ge 0.0$) | Synthesizes `Cooperative Ecological Tradition (<Biome>)` (`cul`), appends it to `cultural_trait_ids`, and decrements `innovation_counter -= 1.0`. |
+
+### Strategy Lineage Continuity (`Deme.strategy_id` & `LineageNode.strategy_id`)
+Across the entire generational lifecycle, every subpopulation and phylogenetic node maintains an unbroken link to its founding **Evolutionary Strategy** (`EvoTypes.StrategyDef` in `state.strategies_catalog`):
+
+1. **Generation 0 Initialization (`EvoCatalog.apply_strategy_to_deme`)**: Assigns `state.strategy_a_id` to Founder A (`deme.strategy_id`, `lin.strategy_id`) and `state.strategy_b_id` to Founder B.
+2. **Colonist Migration (`EvoDemographyMigration`)**: Every daughter deme budded via population fission inherits `daughter.strategy_id = deme.strategy_id`.
+3. **Allopatric Speciation (`EvoMilestonePhase`)**: When an isolated colony diverges into a new species (`new_node := EvoTypes.LineageNode.new()`), `new_node.strategy_id = deme.strategy_id` is preserved alongside `deme.strategy_id`, allowing the HUD Valley Legend and Scroll Inspector to track which founding strategy (`Strategy A` vs. `Strategy B`) is winning the macro-evolutionary duel even after multiple speciation events.
 
 ### Global Macro-Outcomes
 Finally, `EvoMilestonePhase` evaluates whether the ecosystem has reached one of three overarching macro-outcomes (displayed in the top-center golden banner and optionally auto-pausing playback):

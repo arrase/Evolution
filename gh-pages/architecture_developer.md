@@ -13,11 +13,11 @@ flowchart TD
     end
 
     subgraph Core ["src/core/ — Pure Domain Primitives"]
-        Types["EvoTypes (types.gd)\nWorldState, Deme, HexCell, LineageNode,\nTraitDef, DecisionDef, BiophysicalVector"]
+        Types["EvoTypes (types.gd)\nWorldState, Deme, HexCell, LineageNode,\nStrategyDef, TraitDef, DecisionDef, BiophysicalVector"]
         Thermo["EvoThermodynamics (thermodynamics.gd)\n6-Axis Conservation & Auto-Balancing"]
-        Catalog["EvoCatalog & EvoPresets\nBase Traits, Decisions & 3 World Presets"]
+        Catalog["EvoCatalog & EvoPresets\n5 Base Strategies, Traits, Decisions & 3 Presets"]
         HexMath["HexMath (hex_math.gd)\nAxial Geometry, Spirals & Sector Offsets"]
-        I18n["EvoI18n & EvoUserSettings\nBilingual ES/EN Catalog & JSON Config"]
+        I18n["EvoI18n & EvoUserSettings\nBilingual ES/EN Catalog, settings.json & user_catalog.json"]
     end
 
     subgraph Engine ["src/engine/ — Simulation & Cognitive AI"]
@@ -59,13 +59,13 @@ flowchart TD
 ├── src/
 │   ├── main.gd                 # EvoMainController: turn loop, async LLM hot-swap, signal routing
 │   ├── core/
-│   │   ├── catalog.gd          # EvoCatalog: 6 bio traits, 5 cultural traits, 7 decisions, trait injection
+│   │   ├── catalog.gd          # EvoCatalog: 5 base strategies, 6 bio traits, 5 cultural traits, 7 decisions
 │   │   ├── hex_math.gd         # HexMath: pointy-top axial math, distance, spirals, village sector offsets
-│   │   ├── i18n.gd             # EvoI18n: 145-key bilingual (ES / EN) localization dictionary
-│   │   ├── presets.gd          # EvoPresets: Rift Valley, Darwin's Archipelago, Finite Island builders
+│   │   ├── i18n.gd             # EvoI18n: bilingual (ES / EN) localization dictionary & strategy helpers
+│   │   ├── presets.gd          # EvoPresets: 1v1 strategy builders for Rift Valley, Darwin's Archipelago, Finite Island
 │   │   ├── thermodynamics.gd   # EvoThermodynamics: BASE_BUDGET = 0.60 validation & auto-balancing
-│   │   ├── types.gd            # EvoTypes: serializable data models & BIOME_CLIMATE_DEFAULTS
-│   │   └── user_settings.gd    # EvoUserSettings: ~/.config/Evolution/settings.json persistence
+│   │   ├── types.gd            # EvoTypes: serializable data models (StrategyDef, Deme, LineageNode, WorldState)
+│   │   └── user_settings.gd    # EvoUserSettings: ~/.config/Evolution/settings.json & user_catalog.json persistence
 │   ├── engine/
 │   │   ├── turn_engine.gd      # EvoTurnEngine: advance_generation() pipeline & God-mode brush actions
 │   │   ├── env_phase.gd        # EvoEnvPhase: seasonal & glacial cycles, coastal flooding, K/R regen
@@ -83,11 +83,11 @@ flowchart TD
 │   │   ├── ui_style.gd         # EvoUiStyle: parchment/wood theme tokens, StyleBoxes & helpers
 │   │   ├── notebook_modal.gd   # EvoNotebookModal: filterable Evolutionary Chronicle & hex jump
 │   │   ├── tree_modal.gd       # EvoTreeModal: Bézier phylogenetic tree & map lineage highlighter
-│   │   ├── lab_modal.gd        # EvoLabModal: 6-axis Trait & Decision Forge with live balance meter
+│   │   ├── lab_modal.gd        # EvoLabModal: 4-tab Strategy, Trait & Decision Forge with live balance meter
 │   │   └── hud/
-│   │       ├── hud_top_bar.gd           # EvoHudTopBar: valley sign, lenses, season/tide portrait, settings
+│   │       ├── hud_top_bar.gd           # EvoHudTopBar: valley sign, 1v1 matchup bar, lenses, season portrait, settings
 │   │       ├── hud_inspector_panel.gd   # EvoHudInspectorPanel: 3-tab village/traits/habitat scroll inspector
-│   │       ├── hud_hotbar_dock.gd       # EvoHudHotbarDock: 10-slot hotbar, radius toggle, valley legend
+│   │       ├── hud_hotbar_dock.gd       # EvoHudHotbarDock: 10-slot hotbar, radius toggle, valley legend duel counter
 │   │       └── hud_banners_toasts.gd    # EvoHudBannersToasts: macro banner, chronicle toasts, model pull modal
 │   └── world/
 │       ├── world_renderer.gd   # EvoWorldRenderer: 2.5D hex column extrusion, dirty-state cache, lenses
@@ -102,9 +102,47 @@ flowchart TD
 │           ├── terrain_sprites.gd       # EvoTerrainSprites: 7 hex biome tiles (224×192) & 17 flora sprites
 │           └── village_ui_sprites.gd    # EvoVillageUiSprites: 28 village/action/cart sprites & 23 UI icons
 └── tests/
-    ├── test_runner.gd          # Headless unit, biophysical, integration & UI test suite (11 suites)
+    ├── test_runner.gd          # Headless unit, biophysical, integration & UI test suite
     └── test_visual_capture.gd  # Automated screenshot generator for gh-pages/assets/img/
 ```
+
+---
+
+## Core Data Models, Strategy Inheritance & User Catalog Persistence
+
+### 1. Evolutionary Strategy Primitives (`EvoTypes`)
+The 1v1 strategy duel system is modeled directly in `src/core/types.gd`:
+
+* **`EvoTypes.StrategyDef`**:
+  * `id: String` — Unique identifier (e.g., `"strat-cooperation"`, `"strat-war"`, or `"strat-custom-*"`).
+  * `name: String` & `description: String` — Localized name and philosophy for `"base"` strategies (`EvoI18n.strategy_text`) or user-defined strings for `"user"` strategies.
+  * `icon: String` (`"🛡️"` default) & `color: String` (`"#10B981"` default) — Visual emblem and hex color swatch rendered on HUD selectors, village billboards, plaza rings, and villager tunics.
+  * `origin: String` — `"base"` for the 5 built-in archetypes or `"user"` / `"custom"` for strategies crafted in `EvoLabModal`.
+  * `biological_trait_ids: Array[String]` & `cultural_trait_ids: Array[String]` — Bundled traits applied to founding demes and lineages.
+* **`EvoTypes.WorldState`**:
+  * `strategies_catalog: Dictionary` (`String -> StrategyDef`) — Holds the 5 base strategies from `EvoCatalog.create_base_strategies_catalog` merged with user-created strategies from `~/.config/Evolution/user_catalog.json`.
+  * `strategy_a_id: String` (default `"strat-cooperation"`) & `strategy_b_id: String` (default `"strat-war"`) — The two competing strategies assigned to Founder A and Founder B in the active 1v1 matchup.
+* **`EvoTypes.Deme` & `EvoTypes.LineageNode`**:
+  * Both `Deme` and `LineageNode` carry `strategy_id: String` (serialized in JSON as both `"strategyId"` and `"strategy_id"` for full schema compatibility).
+  * `LineageNode` also stores `biological_trait_ids: Array[String]` and `cultural_trait_ids: Array[String]` alongside `acquired_trait_ids`.
+
+### 2. End-to-End `strategy_id` Inheritance Lifecycle
+To guarantee that every village on the map always retains its founding strategy identity regardless of how far it migrates or diverges phylogenetically:
+
+1. **Preset Initialization & Generation 0 Matchup (`EvoCatalog.apply_strategy_to_deme`)**:
+   Sets `deme.strategy_id = strategy.id`, `deme.color = strategy.color`, `deme.biological_trait_ids`, and (if `deme_has_cultural_capacity` is satisfied) `deme.cultural_trait_ids`, and mirrors `strategy_id`, `color`, and traits onto `state.lineage_tree[deme.lineage_id]`.
+2. **Colonist Migration (`EvoDemographyMigration.run_demography_and_migration_phase`)**:
+   When a parent deme undergoes population fission into a neighboring hex, the newly budded daughter deme explicitly inherits `daughter.strategy_id = deme.strategy_id`, `daughter.lineage_id = deme.lineage_id`, and `daughter.color = deme.color`.
+3. **Allopatric Speciation (`EvoMilestonePhase.run_milestone_phase`)**:
+   When an isolated colony (`isolation_turns >= 10`) speciates into a new child `LineageNode` (`new_node`), the new lineage node inherits **`new_node.strategy_id = deme.strategy_id`** while receiving a fresh species color from `SPECIATION_PALETTE`, and the speciated deme keeps its `deme.strategy_id`.
+
+### 3. Persistent User Configuration & User Catalog (`EvoUserSettings`)
+`src/core/user_settings.gd` persists user preferences and custom laboratory creations inside `~/.config/Evolution/`:
+
+| File Path | Managed Methods | Stored JSON Payload |
+| :--- | :--- | :--- |
+| `~/.config/Evolution/settings.json` | `EvoUserSettings.load_settings()`<br>`EvoUserSettings.save_settings()` | `{ "primary_model": "d3:4b", "secondary_model": "tev1:4b", "context_length": 8192 }` |
+| `~/.config/Evolution/user_catalog.json` | `EvoUserSettings.save_user_catalog(state)`<br>`EvoUserSettings.load_user_catalog_into(state)` | `{ "strategies": [...], "traits": [...], "decisions": [...] }` — Automatically serializes all entries in `state.strategies_catalog`, `state.traits_catalog`, and `state.decisions_catalog` where `origin in ["user", "custom"]`, and reloads them into every new or reset `WorldState`. |
 
 ---
 
@@ -160,13 +198,13 @@ done
 | Suite # | Test Method | Verification Scope |
 | :---: | :--- | :--- |
 | **1** | `_test_thermodynamics` | Verifies `BASE_BUDGET = 0.60`, `evaluate_thermodynamics`, required cost $0.5 \cdot (A^+ - 0.60)$, auto-balancing into `metabolic_cost` / `ecological_impact`, and `free_sandbox_mode` bypass. |
-| **2** | `_test_catalog_and_presets` | Verifies cell counts (`91`, `91`, `61`), starting demes, base catalog sizes (`11` traits, `7` decisions), `deme_has_cultural_capacity`, and `inject_trait_into_deme` mutual exclusion (`r` vs `K`). |
+| **2** | `_test_catalog_and_presets` | Verifies cell counts (`91`, `91`, `61`), balanced 1v1 starting demes (`2` per preset), base catalog sizes (`5` strategies, `11` traits, `7` decisions), `apply_strategy_to_deme`, `deme_has_cultural_capacity`, and `inject_trait_into_deme` mutual exclusion (`r` vs `K`). |
 | **3** | `_test_decision_model_and_normalization` | Verifies `normalize_decision_probabilities` ($\sum P(d) = 1.0$), absence of deterministic decision heuristics, and cached Ollama System 1 model evaluation. |
 | **4** | `_test_hawk_dove_and_symbiosis` | Verifies Hawk-Hawk $-15\%$ population loss and `"dispute"` flow generation, plus Symbiosis $+20\%$ bonus and horizontal cultural transmission of `cul-fire-processing`. |
-| **5** | `_test_tragedy_of_the_commons` | Runs `preset-finite-island` and verifies center hex `0,0` degrades below $0.60 \cdot K_{\max}$ and logs `"tragedy_of_commons"`. |
-| **6** | `_test_baldwin_innovation_and_speciation` | Verifies Baldwin assimilation at `counter >= 8`, Cultural Innovation at `innovation_counter >= 1.0`, and Allopatric Speciation at `isolation_turns >= 10` (new `lineage_id`, new color, 2 tree nodes). |
+| **5** | `_test_tragedy_of_the_commons` | Runs `preset-finite-island` and verifies overexploitation degrades hex $K$ below $0.60 \cdot K_{\max}$ and logs `"tragedy_of_commons"`. |
+| **6** | `_test_baldwin_innovation_and_speciation` | Verifies Baldwin assimilation at `counter >= 8`, Cultural Innovation at `innovation_counter >= 1.0`, and Allopatric Speciation at `isolation_turns >= 10` (new `lineage_id`, inherited `strategy_id`, new color, tree divergence). |
 | **7** | `_test_interventions` | Verifies `apply_set_biome` (`⚡10`), `apply_adjust_altitude` (`⚡15`), `apply_adjust_carrying_capacity` (`⚡10`), and `apply_adjust_sea_level` (`⚡25`). |
-| **8** | `_test_serialization_roundtrip` | Verifies `WorldState.to_dict()` $\to$ `JSON.stringify` $\to$ `WorldState.from_dict()` preserves generation, cells, and demes. |
+| **8** | `_test_serialization_roundtrip` | Verifies `WorldState.to_dict()` $\to$ `JSON.stringify` $\to$ `WorldState.from_dict()` preserves generation, cells, demes, `strategies_catalog`, `strategy_a_id`, `strategy_b_id`, `strategy_id`, and `user_catalog.json` persistence. |
 | **9** | `_test_25_generations_all_presets` | Advances all 3 presets for 25 generations and asserts $\sum P(d) = 1.0$ for every surviving deme. |
 | **10** | `_test_main_scene_and_ui_integration` | Instantiates `res://scenes/main.tscn`, verifies all 75 procedural sprites, dual System 1 model routing (`d3:4b` / `tev1:4b`), settings persistence (`num_ctx = 16384`), missing models modal, preset/language/lens switching, modals, road aging (`disused_connections`), and inspector village cycling. |
 | **11** | `_test_nonblocking_async_decision_and_smooth_panning` | Asserts `check_ollama_status(true)` completes in $< 15\text{ ms}$ on the main thread and verifies late-game 16-deme async evaluation and camera panning. |

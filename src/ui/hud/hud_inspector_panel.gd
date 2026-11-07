@@ -1,6 +1,19 @@
 class_name EvoHudInspectorPanel
 extends RefCounted
 
+var _hud: Control = null
+var deme_strategy_label: Label
+var deme_selector_option: OptionButton
+
+
+func _init(p_hud: Control = null) -> void:
+	_hud = p_hud
+
+
+func _refresh_deme_selector() -> void:
+	if _hud != null:
+		EvoHudInspectorPanel.rebuild_villages_list(_hud)
+
 
 static func build_right_scroll_inspector(hud: Control) -> void:
 	hud._inspector_frame = PanelContainer.new()
@@ -55,6 +68,10 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 	hud._village_selector_opt.item_selected.connect(hud._on_village_selector_item_selected)
 	village_sel_row.add_child(hud._village_selector_opt)
 
+	hud.deme_selector_option = hud._village_selector_opt
+	if hud.inspector_panel != null:
+		hud.inspector_panel.deme_selector_option = hud._village_selector_opt
+
 	hud._village_next_btn = Button.new()
 	hud._village_next_btn.text = "▶"
 	hud._village_next_btn.custom_minimum_size = Vector2(24, 24)
@@ -94,6 +111,22 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 	hud._inspector_header_hl_btn.add_theme_font_size_override("font_size", 10)
 	hud._inspector_header_hl_btn.pressed.connect(hud._on_header_highlight_pressed)
 	h_top.add_child(hud._inspector_header_hl_btn)
+
+	# Row 3: Prominent Village Strategy Badge
+	hud._strategy_badge_panel = PanelContainer.new()
+	hud._strategy_badge_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._strategy_badge_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_badge_style(Color("#271306"), Color("#10B981")))
+	header_vbox.add_child(hud._strategy_badge_panel)
+
+	hud.deme_strategy_label = Label.new()
+	hud.deme_strategy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hud.deme_strategy_label.clip_text = true
+	hud.deme_strategy_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	hud.deme_strategy_label.add_theme_font_size_override("font_size", 11)
+	hud.deme_strategy_label.add_theme_color_override("font_color", Color("#10B981"))
+	hud._strategy_badge_panel.add_child(hud.deme_strategy_label)
+	if hud.inspector_panel != null:
+		hud.inspector_panel.deme_strategy_label = hud.deme_strategy_label
 
 	# Collapsible Scroll Body (3 Tabs + Cream Parchment Content)
 	hud._inspector_body_vbox = VBoxContainer.new()
@@ -189,17 +222,26 @@ static func rebuild_villages_list(hud: Control) -> void:
 
 	var selected_idx := -1
 	var total_count := deme_list.size()
+	var pop_unit := "pop." if hud._lang == "en" else "hab."
 	for i in range(total_count):
 		var d := deme_list[i]
-		var status_key := d.get_vital_status()
-		var heart := EvoUiStyle.get_vital_status_heart(status_key)
-		var item_lbl := "%s [%d/%d] %s" % [heart, i + 1, total_count, _format_deme_with_hex(d)]
+		var strat_icon := _resolve_deme_strategy_icon(hud._world_state, d)
+		var item_lbl := "%s %s — %d %s" % [strat_icon, _format_deme_with_hex(d), d.population, pop_unit]
 		hud._village_selector_opt.add_item(item_lbl, i)
 		hud._village_selector_opt.set_item_metadata(i, d.id)
 		if d.id == hud._selected_deme_id:
 			selected_idx = i
 
 	hud._village_selector_opt.select(selected_idx)
+
+
+static func _resolve_deme_strategy_icon(state: EvoTypes.WorldState, d: EvoTypes.Deme) -> String:
+	var strat_id := d.strategy_id
+	if strat_id == "" and state.lineage_tree.has(d.lineage_id):
+		strat_id = (state.lineage_tree[d.lineage_id] as EvoTypes.LineageNode).strategy_id
+	if state.strategies_catalog.has(strat_id):
+		return (state.strategies_catalog[strat_id] as EvoTypes.StrategyDef).icon
+	return "🛡️"
 
 
 static func rebuild_deme_sheet(hud: Control) -> void:
@@ -216,6 +258,10 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		hud._inspector_header_title.text = EvoUiStyle.tr_text(hud._lang, "Hex (%s)" % hud._selected_hex_id, "Hex (%s)" % hud._selected_hex_id)
 		hud._inspector_model_badge_lbl.text = EvoUiStyle.tr_text(hud._lang, "🌿 Sin aldea seleccionada", "🌿 No village selected")
 		hud._inspector_header_hl_btn.visible = false
+		if hud._strategy_badge_panel != null:
+			hud._strategy_badge_panel.visible = false
+		if hud.deme_strategy_label != null:
+			hud.deme_strategy_label.text = ""
 		var empty_lbl := Label.new()
 		empty_lbl.text = EvoUiStyle.tr_text(
 			hud._lang,
@@ -233,6 +279,26 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	var lin_name := d.lineage_id
 	if hud._world_state.lineage_tree.has(d.lineage_id):
 		lin_name = (hud._world_state.lineage_tree[d.lineage_id] as EvoTypes.LineageNode).name
+
+	var strat_id := d.strategy_id
+	if strat_id == "" and hud._world_state.lineage_tree.has(d.lineage_id):
+		strat_id = (hud._world_state.lineage_tree[d.lineage_id] as EvoTypes.LineageNode).strategy_id
+	var strat_icon := "🛡️"
+	var strat_name := strat_id if strat_id != "" else "—"
+	var strat_color_hex := d.color
+	if hud._world_state.strategies_catalog.has(strat_id):
+		var strat: EvoTypes.StrategyDef = hud._world_state.strategies_catalog[strat_id]
+		strat_icon = strat.icon
+		strat_name = EvoI18n.strategy_name(hud._lang, strat)
+		strat_color_hex = strat.color
+
+	var strat_col := Color.from_string(strat_color_hex, Color("#10B981"))
+	if hud._strategy_badge_panel != null:
+		hud._strategy_badge_panel.visible = true
+		hud._strategy_badge_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_badge_style(Color("#271306"), strat_col))
+	if hud.deme_strategy_label != null:
+		hud.deme_strategy_label.text = "🛡️ %s: %s %s" % [EvoI18n.t(hud._lang, "insp_strategy"), strat_icon, strat_name]
+		hud.deme_strategy_label.add_theme_color_override("font_color", strat_col)
 
 	# Update Scroll Header
 	hud._inspector_header_swatch.color = Color.from_string(d.color, Color("#E07A5F"))
@@ -428,6 +494,8 @@ static func rebuild_hex_sheet(hud: Control) -> void:
 		hud._inspector_header_title.text = "%s (%d, %d)" % [EvoUiStyle.get_biome_label(cell.biome, hud._lang), cell.q, cell.r]
 		hud._inspector_model_badge_lbl.text = EvoUiStyle.tr_text(hud._lang, "🌿 Parcela sin aldeas · 📍 (%s)" % hud._selected_hex_id, "🌿 Uninhabited parcel · 📍 (%s)" % hud._selected_hex_id)
 		hud._inspector_header_hl_btn.visible = false
+		if hud._strategy_badge_panel != null:
+			hud._strategy_badge_panel.visible = false
 
 	var bio_row := HBoxContainer.new()
 	bio_row.add_theme_constant_override("separation", 8)

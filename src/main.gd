@@ -3,6 +3,8 @@ extends Node2D
 
 const NORMAL_STEP_INTERVAL: float = 1.50
 const FAST_STEP_INTERVAL: float = 0.30
+const SLOT_A_DEME_IDS: Array[String] = ["deme-rift-west", "deme-darwin-founder", "deme-island-1"]
+const SLOT_B_DEME_IDS: Array[String] = ["deme-rift-east", "deme-darwin-rival", "deme-island-2"]
 
 var world_state: EvoTypes.WorldState
 var camera: EvoCameraController
@@ -11,6 +13,16 @@ var ui_layer: CanvasLayer
 var hud: EvoMainHud
 
 var lang: String = "es"
+var current_lang: String:
+	get:
+		return lang
+	set(value):
+		lang = value
+
+var lab_modal: EvoLabModal:
+	get:
+		return hud.lab_modal if hud != null else null
+
 var is_playing: bool = false
 var is_fast: bool = false
 var quit_on_close_enabled: bool = true
@@ -40,6 +52,8 @@ func _ready() -> void:
 	hud = EvoMainHud.new()
 	hud.name = "MainHud"
 	ui_layer.add_child(hud)
+	if hud._preset_option == null:
+		hud._ready()
 
 	_connect_signals()
 	load_preset("preset-rift-savanna")
@@ -114,7 +128,9 @@ func _connect_signals() -> void:
 	world_renderer.hex_dragged.connect(_on_world_hex_dragged)
 	world_renderer.deme_clicked.connect(_on_world_deme_clicked)
 
-	hud.preset_selected.connect(load_preset)
+	hud.preset_selected.connect(func(pid: String) -> void: load_preset(pid))
+	hud.matchup_changed.connect(_on_matchup_changed)
+	hud.matchup_reset_requested.connect(reset_matchup)
 	hud.state_imported.connect(_on_state_imported)
 	hud.play_pause_toggled.connect(_on_play_pause_toggled)
 	hud.step_generation_requested.connect(step_generation)
@@ -133,12 +149,65 @@ func _connect_signals() -> void:
 	hud.catalog_item_saved.connect(_on_catalog_item_saved)
 	hud.quit_requested.connect(_on_quit_requested)
 
+	if hud.lab_modal != null:
+		if hud.lab_modal.has_signal("strategy_saved"):
+			hud.lab_modal.connect("strategy_saved", _on_strategy_saved)
+		if hud.lab_modal.has_signal("strategy_assigned"):
+			hud.lab_modal.connect("strategy_assigned", _on_strategy_assigned)
 
-func load_preset(preset_id: String) -> void:
+
+func load_preset(preset_id: String, strategy_a_id: String = "", strategy_b_id: String = "") -> void:
 	is_playing = false
 	_play_timer = 0.0
 	EvoOllamaClient.clear_cache()
-	world_state = EvoCatalog.create_preset_world(preset_id, lang)
+
+	var preserved_traits: Dictionary = {}
+	var preserved_decisions: Dictionary = {}
+	var preserved_strategies: Dictionary = {}
+	if world_state != null:
+		for tid in world_state.traits_catalog.keys():
+			var tr: EvoTypes.TraitDef = world_state.traits_catalog[tid]
+			if tr.origin in ["user", "custom"]:
+				preserved_traits[tid] = tr.duplicate_trait()
+		for did in world_state.decisions_catalog.keys():
+			var dec: EvoTypes.DecisionDef = world_state.decisions_catalog[did]
+			if dec.origin in ["user", "custom"]:
+				preserved_decisions[did] = dec.duplicate_decision()
+		for sid in world_state.strategies_catalog.keys():
+			var strat: EvoTypes.StrategyDef = world_state.strategies_catalog[sid]
+			if strat.origin in ["user", "custom"]:
+				preserved_strategies[sid] = strat.duplicate_strategy()
+
+	var strat_a := strategy_a_id
+	if strat_a == "":
+		strat_a = world_state.strategy_a_id if world_state != null and world_state.strategy_a_id != "" else EvoCatalog.DEFAULT_STRATEGY_A_ID
+	var strat_b := strategy_b_id
+	if strat_b == "":
+		strat_b = world_state.strategy_b_id if world_state != null and world_state.strategy_b_id != "" else EvoCatalog.DEFAULT_STRATEGY_B_ID
+
+	world_state = EvoCatalog.create_preset_world(preset_id, lang, strat_a, strat_b)
+
+	var needs_reapply := false
+	for tid in preserved_traits.keys():
+		if not world_state.traits_catalog.has(tid):
+			world_state.traits_catalog[tid] = preserved_traits[tid]
+	for did in preserved_decisions.keys():
+		if not world_state.decisions_catalog.has(did):
+			world_state.decisions_catalog[did] = preserved_decisions[did]
+	for sid in preserved_strategies.keys():
+		if not world_state.strategies_catalog.has(sid):
+			world_state.strategies_catalog[sid] = preserved_strategies[sid]
+
+	if world_state.strategies_catalog.has(strat_a) and world_state.strategy_a_id != strat_a:
+		world_state.strategy_a_id = strat_a
+		needs_reapply = true
+	if world_state.strategies_catalog.has(strat_b) and world_state.strategy_b_id != strat_b:
+		world_state.strategy_b_id = strat_b
+		needs_reapply = true
+
+	if needs_reapply:
+		_reapply_starting_strategies()
+
 	camera.reset_camera()
 	world_renderer.highlighted_lineage_id = ""
 	world_renderer.set_world_state(world_state)
@@ -155,6 +224,70 @@ func load_preset(preset_id: String) -> void:
 	hud.set_playing_state(false)
 	hud.setup(world_state, lang)
 	world_renderer.refresh()
+
+
+func set_matchup_strategies(strategy_a_id: String, strategy_b_id: String) -> void:
+	var target_preset := world_state.preset_id if world_state != null and world_state.preset_id != "" else "preset-rift-savanna"
+	load_preset(target_preset, strategy_a_id, strategy_b_id)
+
+
+func reset_matchup() -> void:
+	if world_state == null:
+		load_preset("preset-rift-savanna")
+		return
+	load_preset(world_state.preset_id, world_state.strategy_a_id, world_state.strategy_b_id)
+
+
+func _on_matchup_changed(strategy_a_id: String, strategy_b_id: String) -> void:
+	set_matchup_strategies(strategy_a_id, strategy_b_id)
+
+
+func _reapply_starting_strategies() -> void:
+	if world_state == null:
+		return
+	for did in SLOT_A_DEME_IDS:
+		if world_state.demes.has(did):
+			EvoCatalog.apply_strategy_to_deme(world_state, world_state.demes[did], world_state.strategy_a_id, lang)
+	for did in SLOT_B_DEME_IDS:
+		if world_state.demes.has(did):
+			EvoCatalog.apply_strategy_to_deme(world_state, world_state.demes[did], world_state.strategy_b_id, lang)
+	EvoDecisionModel.evaluate_all_demes(world_state, lang)
+
+
+func _on_strategy_saved(strategy_id: String) -> void:
+	if world_state == null:
+		return
+	EvoUserSettings.save_user_catalog(world_state)
+	if world_state.generation == 0 and (strategy_id == world_state.strategy_a_id or strategy_id == world_state.strategy_b_id):
+		if strategy_id == world_state.strategy_a_id:
+			for did in SLOT_A_DEME_IDS:
+				if world_state.demes.has(did):
+					EvoCatalog.apply_strategy_to_deme(world_state, world_state.demes[did], strategy_id, lang)
+		if strategy_id == world_state.strategy_b_id:
+			for did in SLOT_B_DEME_IDS:
+				if world_state.demes.has(did):
+					EvoCatalog.apply_strategy_to_deme(world_state, world_state.demes[did], strategy_id, lang)
+		for did in world_state.demes.keys():
+			var d: EvoTypes.Deme = world_state.demes[did]
+			if d.strategy_id == strategy_id:
+				EvoCatalog.apply_strategy_to_deme(world_state, d, strategy_id, lang)
+		EvoDecisionModel.evaluate_all_demes(world_state, lang)
+	EvoOllamaClient.clear_cache()
+	EvoDecisionModel.prefetch_for_state(world_state)
+	hud.refresh(world_state)
+	world_renderer.refresh()
+
+
+func _on_strategy_assigned(slot: String, strategy_id: String) -> void:
+	if world_state == null or strategy_id == "":
+		return
+	var strat_a := world_state.strategy_a_id
+	var strat_b := world_state.strategy_b_id
+	if slot.to_lower() == "a":
+		strat_a = strategy_id
+	elif slot.to_lower() == "b":
+		strat_b = strategy_id
+	set_matchup_strategies(strat_a, strat_b)
 
 
 func _sync_selection_after_world_mutation() -> void:
@@ -298,17 +431,7 @@ func _on_speed_changed(p_fast: bool) -> void:
 func _on_language_changed(new_lang: String) -> void:
 	lang = new_lang
 	if world_state != null:
-		world_state.world_name = EvoI18n.preset_title(lang, world_state.preset_id)
-		for tr_id in world_state.traits_catalog.keys():
-			var tr: EvoTypes.TraitDef = world_state.traits_catalog[tr_id]
-			if tr.origin == "catalog":
-				tr.name = EvoI18n.trait_name(lang, tr)
-				tr.description = EvoI18n.trait_description(lang, tr)
-		for dec_id in world_state.decisions_catalog.keys():
-			var dec: EvoTypes.DecisionDef = world_state.decisions_catalog[dec_id]
-			if dec.origin == "catalog":
-				dec.name = EvoI18n.decision_name(lang, dec)
-				dec.description = EvoI18n.decision_description(lang, dec)
+		EvoI18n.localize_world_state(world_state, lang)
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 		if hud != null and hud._lang != lang:
 			hud.set_language(lang)
@@ -393,8 +516,12 @@ func _on_inject_trait_requested(_deme_id: String, _trait_id: String) -> void:
 	world_renderer.refresh()
 
 
-func _on_catalog_item_saved(_item_type: String, _item_data: Variant = null) -> void:
+func _on_catalog_item_saved(item_type: String, item_data: Variant = null) -> void:
 	if world_state != null:
+		EvoUserSettings.save_user_catalog(world_state)
+		if item_type == "strategy" and item_data is Dictionary and (item_data as Dictionary).has("id"):
+			_on_strategy_saved(str((item_data as Dictionary)["id"]))
+			return
 		EvoOllamaClient.clear_cache()
 		EvoDecisionModel.evaluate_all_demes(world_state, hud._lang if hud != null else lang)
 		EvoDecisionModel.prefetch_for_state(world_state)

@@ -230,6 +230,7 @@ static func run_demography_and_migration_phase(
 		daughter.id = daughter_id
 		daughter.name = daughter_name
 		daughter.lineage_id = deme.lineage_id
+		daughter.strategy_id = deme.strategy_id
 		daughter.color = deme.color
 		daughter.hex_id = target_cell.id
 		daughter.population = migrants

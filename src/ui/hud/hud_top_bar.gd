@@ -1,11 +1,33 @@
 class_name EvoHudTopBar
 extends RefCounted
 
+signal matchup_changed(strategy_a_id: String, strategy_b_id: String)
+signal matchup_reset_requested()
+
 const PRESET_LIST: Array[String] = [
 	"preset-rift-savanna",
 	"preset-darwin-archipelago",
 	"preset-finite-island"
 ]
+
+const BASE_STRATEGY_ORDER: Array[String] = [
+	"strat-cooperation",
+	"strat-expansion",
+	"strat-trade",
+	"strat-war",
+	"strat-innovation"
+]
+
+var _hud: Control = null
+var _suppress_preset_signal: bool = false
+var _suppress_strategy_signal: bool = false
+
+var strategy_a_swatch: ColorRect
+var strategy_a_option: OptionButton
+var matchup_vs_label: Label
+var strategy_b_swatch: ColorRect
+var strategy_b_option: OptionButton
+var matchup_reset_button: Button
 
 
 class SeasonTidePortrait extends Control:
@@ -97,6 +119,31 @@ class SeasonTidePortrait extends Control:
 			draw_rect(Rect2(corner, Vector2(2, 2)), EvoUiStyle.COLOR_GOLD_BRIGHT, true)
 
 
+func _init(p_hud: Control = null) -> void:
+	_hud = p_hud
+
+
+func refresh_strategies(state: EvoTypes.WorldState, lang: String = "es") -> void:
+	if _hud != null:
+		EvoHudTopBar.refresh_strategies_for_hud(_hud, state, lang)
+
+
+func refresh(state: EvoTypes.WorldState, is_playing: bool = false) -> void:
+	if _hud != null:
+		_hud._is_playing = is_playing
+		refresh_strategies(state, _hud._lang)
+		EvoHudTopBar.update_static_labels(_hud)
+		EvoHudTopBar.update_top_bar_state(_hud)
+
+
+func set_language(lang: String) -> void:
+	if _hud != null:
+		_hud._lang = lang
+		refresh_strategies(_hud._world_state, lang)
+		EvoHudTopBar.update_static_labels(_hud)
+		EvoHudTopBar.update_top_bar_state(_hud)
+
+
 static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 	var sign_frame := PanelContainer.new()
 	sign_frame.anchor_left = 0.0
@@ -104,14 +151,14 @@ static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 	sign_frame.anchor_top = 0.0
 	sign_frame.anchor_bottom = 0.0
 	sign_frame.offset_left = 10
-	sign_frame.offset_right = 376
+	sign_frame.offset_right = 420
 	sign_frame.offset_top = 10
-	sign_frame.offset_bottom = 122
-	sign_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
+	sign_frame.offset_bottom = 156
+	sign_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(6))
 	hud.add_child(sign_frame)
 
 	var sign_vbox := VBoxContainer.new()
-	sign_vbox.add_theme_constant_override("separation", 5)
+	sign_vbox.add_theme_constant_override("separation", 4)
 	sign_frame.add_child(sign_vbox)
 
 	# Row 1: World Preset Selector + Compact Save/Load Buttons
@@ -127,16 +174,82 @@ static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 	preset_row.add_child(hud._preset_option)
 
 	hud._export_btn = Button.new()
-	hud._export_btn.custom_minimum_size = Vector2(32, 28)
+	hud._export_btn.custom_minimum_size = Vector2(30, 26)
 	hud._export_btn.pressed.connect(hud._on_export_pressed)
 	preset_row.add_child(hud._export_btn)
 
 	hud._import_btn = Button.new()
-	hud._import_btn.custom_minimum_size = Vector2(32, 28)
+	hud._import_btn.custom_minimum_size = Vector2(30, 26)
 	hud._import_btn.pressed.connect(hud._on_import_pressed)
 	preset_row.add_child(hud._import_btn)
 
-	# Row 2: 3 Artifact Buttons (Diario, Linajes, Forja)
+	# Row 2: 1v1 Strategy Matchup Selector Panel (Estrategia A ⚔️ Estrategia B [🔄])
+	var matchup_card := PanelContainer.new()
+	matchup_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_PARCHMENT_ALT, EvoUiStyle.COLOR_GOLD_BEVEL, 4))
+	sign_vbox.add_child(matchup_card)
+
+	var matchup_row := HBoxContainer.new()
+	matchup_row.add_theme_constant_override("separation", 4)
+	matchup_card.add_child(matchup_row)
+
+	var sw_a := ColorRect.new()
+	sw_a.custom_minimum_size = Vector2(14, 14)
+	sw_a.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sw_a.color = Color("#10B981")
+	matchup_row.add_child(sw_a)
+
+	var opt_a := OptionButton.new()
+	opt_a.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	opt_a.fit_to_longest_item = false
+	opt_a.clip_text = true
+	opt_a.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	opt_a.add_theme_font_size_override("font_size", 11)
+	opt_a.item_selected.connect(hud._on_strategy_option_selected)
+	matchup_row.add_child(opt_a)
+
+	var vs_lbl := Label.new()
+	vs_lbl.text = "⚔️"
+	vs_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	vs_lbl.add_theme_font_size_override("font_size", 11)
+	matchup_row.add_child(vs_lbl)
+
+	var sw_b := ColorRect.new()
+	sw_b.custom_minimum_size = Vector2(14, 14)
+	sw_b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sw_b.color = Color("#EF4444")
+	matchup_row.add_child(sw_b)
+
+	var opt_b := OptionButton.new()
+	opt_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	opt_b.fit_to_longest_item = false
+	opt_b.clip_text = true
+	opt_b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	opt_b.add_theme_font_size_override("font_size", 11)
+	opt_b.item_selected.connect(hud._on_strategy_option_selected)
+	matchup_row.add_child(opt_b)
+
+	var reset_btn := Button.new()
+	reset_btn.text = "🔄"
+	reset_btn.custom_minimum_size = Vector2(28, 24)
+	reset_btn.add_theme_font_size_override("font_size", 11)
+	reset_btn.pressed.connect(hud._on_matchup_reset_pressed)
+	matchup_row.add_child(reset_btn)
+
+	hud.strategy_a_swatch = sw_a
+	hud.strategy_a_option = opt_a
+	hud.matchup_vs_label = vs_lbl
+	hud.strategy_b_swatch = sw_b
+	hud.strategy_b_option = opt_b
+	hud.matchup_reset_button = reset_btn
+	if hud.top_bar != null:
+		hud.top_bar.strategy_a_swatch = sw_a
+		hud.top_bar.strategy_a_option = opt_a
+		hud.top_bar.matchup_vs_label = vs_lbl
+		hud.top_bar.strategy_b_swatch = sw_b
+		hud.top_bar.strategy_b_option = opt_b
+		hud.top_bar.matchup_reset_button = reset_btn
+
+	# Row 3: 3 Artifact Buttons (Diario, Linajes, Forja)
 	var artifacts_row := HBoxContainer.new()
 	artifacts_row.add_theme_constant_override("separation", 4)
 	sign_vbox.add_child(artifacts_row)
@@ -156,7 +269,7 @@ static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 	hud._lab_btn.pressed.connect(hud.open_lab_modal)
 	artifacts_row.add_child(hud._lab_btn)
 
-	# Row 3: Compact Lens Pills + Map Legend Toggle
+	# Row 4: Compact Lens Pills + Map Legend Toggle
 	hud._lens_strip_panel = PanelContainer.new()
 	hud._lens_strip_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_PARCHMENT, EvoUiStyle.COLOR_GOLD_BEVEL, 4))
 	sign_vbox.add_child(hud._lens_strip_panel)
@@ -471,6 +584,93 @@ static func build_settings_popup(hud: Control) -> void:
 	cam_flow.add_child(reset_cam_btn)
 
 
+static func refresh_strategies_for_hud(hud: Control, state: EvoTypes.WorldState, lang: String = "es") -> void:
+	if hud.strategy_a_option == null or hud.strategy_b_option == null:
+		return
+
+	hud.matchup_vs_label.text = EvoI18n.t(lang, "hud_matchup_vs")
+	hud.matchup_reset_button.text = EvoI18n.t(lang, "hud_matchup_reset")
+	hud.matchup_reset_button.tooltip_text = EvoI18n.t(lang, "hud_matchup_reset_tip")
+
+	if state == null or state.strategies_catalog.is_empty():
+		return
+
+	var ordered_ids: Array[String] = []
+	for base_id in BASE_STRATEGY_ORDER:
+		if state.strategies_catalog.has(base_id):
+			ordered_ids.append(base_id)
+
+	var extra_ids: Array[String] = []
+	for sid in state.strategies_catalog.keys():
+		var s_str := str(sid)
+		if not ordered_ids.has(s_str):
+			extra_ids.append(s_str)
+	extra_ids.sort()
+	for extra_id in extra_ids:
+		ordered_ids.append(extra_id)
+
+	hud._suppress_strategy_signal = true
+	if hud.top_bar != null:
+		hud.top_bar._suppress_strategy_signal = true
+
+	hud.strategy_a_option.clear()
+	hud.strategy_b_option.clear()
+
+	var idx_a := 0
+	var idx_b := mini(1, ordered_ids.size() - 1)
+	for i in range(ordered_ids.size()):
+		var sid := ordered_ids[i]
+		var strat: EvoTypes.StrategyDef = state.strategies_catalog[sid]
+		var item_lbl := "%s %s" % [strat.icon, EvoI18n.strategy_name(lang, strat)]
+		hud.strategy_a_option.add_item(item_lbl, i)
+		hud.strategy_a_option.set_item_metadata(i, sid)
+		hud.strategy_b_option.add_item(item_lbl, i)
+		hud.strategy_b_option.set_item_metadata(i, sid)
+		if sid == state.strategy_a_id:
+			idx_a = i
+		if sid == state.strategy_b_id:
+			idx_b = i
+
+	hud.strategy_a_option.select(idx_a)
+	hud.strategy_b_option.select(idx_b)
+
+	hud._suppress_strategy_signal = false
+	if hud.top_bar != null:
+		hud.top_bar._suppress_strategy_signal = false
+
+	var strat_a_id := ordered_ids[idx_a]
+	var strat_b_id := ordered_ids[idx_b]
+	var strat_a: EvoTypes.StrategyDef = state.strategies_catalog[strat_a_id]
+	var strat_b: EvoTypes.StrategyDef = state.strategies_catalog[strat_b_id]
+
+	hud.strategy_a_swatch.color = Color.from_string(strat_a.color, Color("#10B981"))
+	hud.strategy_b_swatch.color = Color.from_string(strat_b.color, Color("#EF4444"))
+	hud.strategy_a_option.tooltip_text = _build_strategy_tooltip(state, strat_a, lang)
+	hud.strategy_b_option.tooltip_text = _build_strategy_tooltip(state, strat_b, lang)
+
+
+static func _build_strategy_tooltip(state: EvoTypes.WorldState, strat: EvoTypes.StrategyDef, lang: String) -> String:
+	var s_name := EvoI18n.strategy_name(lang, strat)
+	var s_desc := EvoI18n.strategy_description(lang, strat)
+	var trait_names: Array[String] = []
+	for tid in strat.biological_trait_ids:
+		if state.traits_catalog.has(tid):
+			trait_names.append(EvoI18n.trait_name(lang, state.traits_catalog[tid]))
+	for tid in strat.cultural_trait_ids:
+		if state.traits_catalog.has(tid):
+			trait_names.append(EvoI18n.trait_name(lang, state.traits_catalog[tid]))
+	var traits_line := ", ".join(trait_names)
+	if traits_line == "":
+		return "%s %s\n%s" % [strat.icon, s_name, s_desc]
+	return "%s %s\n%s\n%s: %s" % [
+		strat.icon,
+		s_name,
+		s_desc,
+		EvoI18n.t(lang, "lab_strat_traits"),
+		traits_line
+	]
+
+
 static func update_static_labels(hud: Control) -> void:
 	if hud._preset_option == null:
 		return
@@ -497,6 +697,8 @@ static func update_static_labels(hud: Control) -> void:
 			hud._preset_option.select(idx)
 	elif prev_sel < hud._preset_option.item_count:
 		hud._preset_option.select(prev_sel)
+
+	refresh_strategies_for_hud(hud, hud._world_state, hud._lang)
 
 	hud._export_btn.text = "💾"
 	hud._export_btn.tooltip_text = EvoUiStyle.tr_text(hud._lang, "Exportar Mundo (JSON)", "Export World (JSON)")
@@ -569,6 +771,7 @@ static func update_static_labels(hud: Control) -> void:
 static func update_top_bar_state(hud: Control) -> void:
 	if hud._world_state == null:
 		return
+	refresh_strategies_for_hud(hud, hud._world_state, hud._lang)
 	var year_num := int(hud._world_state.generation / 2) + 1
 	hud._gen_label.text = EvoUiStyle.tr_text(
 		hud._lang,

@@ -8,6 +8,7 @@ func _init() -> void:
 	print("=== EVOLUTION GODOT 4 CORE SIMULATION TEST SUITE ===")
 	_test_thermodynamics()
 	_test_catalog_and_presets()
+	_test_strategies_duel_and_persistence()
 	_test_decision_model_and_normalization()
 	_test_hawk_dove_and_symbiosis()
 	_test_tragedy_of_the_commons()

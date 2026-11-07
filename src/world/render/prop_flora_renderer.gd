@@ -54,6 +54,7 @@ class Prop:
 	var texture: Texture2D
 	var rect: Rect2
 	var modulate: Color
+	var trim_color: Color = Color.TRANSPARENT
 	var sways: bool = false
 	var sway_phase: float = 0.0
 
@@ -70,6 +71,14 @@ class Prop:
 
 	func project(ground: Transform2D, lift: float) -> void:
 		set_foot(ground * world_xy + Vector2(0.0, -top_z * lift) + screen_offset)
+
+
+static func resolve_deme_strategy_color(world_state: EvoTypes.WorldState, deme: EvoTypes.Deme) -> Color:
+	var fallback := Color.from_string(deme.color, Color(0.88, 0.48, 0.37))
+	if world_state != null and world_state.strategies_catalog.has(deme.strategy_id):
+		var strategy: EvoTypes.StrategyDef = world_state.strategies_catalog[deme.strategy_id]
+		return Color.from_string(strategy.color, fallback)
+	return fallback
 
 
 static func get_villager_textures_for_color(r: Node2D, tunic_col: Color) -> Array[ImageTexture]:
@@ -110,12 +119,15 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 			var v_world := world_xy + HexMath.compute_village_sector_offset(idx, count, HexMath.HEX_SIZE)
 			var is_dimmed: bool = r.highlighted_lineage_id != "" and deme.lineage_id != r.highlighted_lineage_id
 			var tier := deme.get_village_tier()
+			var strat_color := resolve_deme_strategy_color(state, deme)
 
-			var bb_offset := Vector2(0.0, 32.0)
-			var sub_text := "%d" % deme.population
+			var bb_offset := Vector2(0.0, -54.0)
+			var sub_text := "%d hab" % deme.population
 			var sub_size := font.get_string_size(sub_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
-			var box_size := Vector2(maxf(38.0, sub_size.x + 20.0), 16.0)
+			var box_size := Vector2(114.0, 30.0)
 			var v_pos: Vector2 = r._project(v_world, top_z)
+			var vital_status := deme.get_vital_status()
+			var status_col: Color = STATUS_COLORS[vital_status] if STATUS_COLORS.has(vital_status) else Color("#38bdf8")
 
 			villages.append({
 				"deme": deme,
@@ -129,9 +141,10 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 				"is_dimmed": is_dimmed,
 				"tier": tier,
 				"archetype": get_deme_dominant_archetype(r, deme),
-				"status_col": STATUS_COLORS.get(deme.get_vital_status(), Color("#38bdf8")),
+				"status_col": status_col,
+				"strat_color": strat_color,
 				"villager_count": clampi(2 + tier + int(deme.population / 110), 3, 7),
-				"villager_textures": get_villager_textures_for_color(r, Color(deme.color)),
+				"villager_textures": get_villager_textures_for_color(r, strat_color),
 				"bb_offset": bb_offset * scale_factor,
 				"sub_text": sub_text,
 				"label_text": sub_text,
@@ -175,6 +188,10 @@ static func get_village_building_layout(
 
 
 static func draw_village_plaza(r: Node2D, village: Dictionary) -> void:
+	_draw_village(r, village)
+
+
+static func _draw_village(r: Node2D, village: Dictionary) -> void:
 	var ci: Node2D = r._network_layer
 	var deme: EvoTypes.Deme = village["deme"]
 	var sf: float = village["sf"]
@@ -182,6 +199,8 @@ static func draw_village_plaza(r: Node2D, village: Dictionary) -> void:
 	var status_col: Color = village["status_col"]
 	var v_pos: Vector2 = village["pos"]
 	var plaza_center: Vector2 = v_pos + Vector2(0, 8.0 * sf)
+	var strat_color := resolve_deme_strategy_color(r.world_state, deme)
+	var strat_hi := strat_color.lightened(0.25)
 
 	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, v_pos + Vector2(0, -4.0 * sf), 86.0 * sf, 50.0 * sf, Color(0.36, 0.25, 0.16, 0.34) * modulate_col)
 	var layout := get_village_building_layout(
@@ -202,10 +221,65 @@ static func draw_village_plaza(r: Node2D, village: Dictionary) -> void:
 	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, plaza_center, plinth_r, plinth_r * 0.58, Color("#c2a378") * modulate_col)
 	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, plaza_center, plinth_r * 0.74, plinth_r * 0.74 * 0.58, Color("#d9be96") * modulate_col)
 
+	# Inner Strategy Mosaic / Carpet Ring
+	var mosaic_outer_r := plinth_r * 0.52
+	var mosaic_inner_r := plinth_r * 0.36
+	EvoWorldOverlayRenderer.draw_ellipse_filled(
+		ci,
+		plaza_center,
+		mosaic_outer_r,
+		mosaic_outer_r * 0.58,
+		strat_color.darkened(0.22) * modulate_col
+	)
+	EvoWorldOverlayRenderer.draw_ellipse_filled(
+		ci,
+		plaza_center,
+		mosaic_inner_r,
+		mosaic_inner_r * 0.58,
+		strat_color * modulate_col
+	)
+	EvoWorldOverlayRenderer.draw_ellipse_outline(
+		ci,
+		plaza_center,
+		mosaic_outer_r,
+		mosaic_outer_r * 0.58,
+		strat_hi * modulate_col,
+		2.2 * sf
+	)
+	EvoWorldOverlayRenderer.draw_ellipse_filled(
+		ci,
+		plaza_center,
+		plinth_r * 0.14,
+		plinth_r * 0.14 * 0.58,
+		Color("#fef3c7") * modulate_col
+	)
+
 	for c_i in range(14):
 		var c_ang := TAU * float(c_i) / 14.0
 		var c_pt := plaza_center + Vector2(cos(c_ang) * plinth_r * 0.84, sin(c_ang) * plinth_r * 0.48)
-		ci.draw_circle(c_pt, 4.4 * sf, Color("#a38358") * modulate_col)
+		ci.draw_circle(c_pt, 4.4 * sf, (strat_color.darkened(0.15) if c_i % 2 == 0 else Color("#a38358")) * modulate_col)
+
+	# Village Plaza Wooden Banner Pole / Strategy Totem with Pennant Flag
+	var pole_base := plaza_center + Vector2(-15.0 * sf, -6.0 * sf)
+	var pole_top := pole_base + Vector2(0.0, -26.0 * sf)
+	ci.draw_circle(pole_base + Vector2(0.0, 1.5 * sf), 3.6 * sf, Color(0.0, 0.0, 0.0, 0.32) * modulate_col)
+	ci.draw_line(pole_base, pole_top, Color("#5c3317") * modulate_col, 3.2 * sf)
+	ci.draw_line(pole_base + Vector2(-0.6 * sf, 0.0), pole_top + Vector2(-0.6 * sf, 0.0), Color("#8c5230") * modulate_col, 1.4 * sf)
+	ci.draw_circle(pole_top, 2.5 * sf, Color("#fbbf24") * modulate_col)
+
+	var wave := sin(r._anim_time * 4.2 + v_pos.x * 0.04) * 2.0 * sf
+	var flag_pts := PackedVector2Array([
+		pole_top + Vector2(1.0 * sf, 1.0 * sf),
+		pole_top + Vector2(19.0 * sf, 4.5 * sf + wave),
+		pole_top + Vector2(1.0 * sf, 11.0 * sf)
+	])
+	ci.draw_colored_polygon(flag_pts, strat_color * modulate_col)
+	var flag_hi_pts := PackedVector2Array([
+		pole_top + Vector2(1.0 * sf, 1.0 * sf),
+		pole_top + Vector2(13.5 * sf, 3.5 * sf + wave * 0.65),
+		pole_top + Vector2(1.0 * sf, 5.5 * sf)
+	])
+	ci.draw_colored_polygon(flag_hi_pts, strat_hi * modulate_col)
 
 	var ring_r := plinth_r + 4.5 * sf
 	EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, ring_r, ring_r * 0.58, status_col * modulate_col, 3.4)
@@ -359,7 +433,7 @@ static func collect_cell_flora_props(
 		prop_count = clampi(prop_count - v_count, 5, 10)
 
 	var road_corridors := get_cell_road_corridors_local(r, cell, village_local_centers)
-	var palette_sprites: Array = BIOME_FLORA_PALETTES.get(cell.biome, DEFAULT_FLORA_PALETTE)
+	var palette_sprites: Array = BIOME_FLORA_PALETTES[cell.biome] if BIOME_FLORA_PALETTES.has(cell.biome) else DEFAULT_FLORA_PALETTE
 	var placed_offsets: Array[Vector2] = []
 	var village_clear_r := 118.0 if v_count == 1 else 88.0
 	var inner_count: int = 0 if v_count > 0 else maxi(2, prop_count / 3)
@@ -480,6 +554,12 @@ static func draw_prop(r: Node2D, prop: Prop) -> void:
 	if prop.sways:
 		rect.position.x += sin(r._anim_time * 2.1 + prop.sway_phase) * 1.15
 	r._anim_layer.draw_texture_rect(prop.texture, rect, false, prop.modulate)
+	if prop.trim_color.a > 0.0:
+		var trim_rect := Rect2(
+			rect.position + Vector2(rect.size.x * 0.30, rect.size.y * 0.44),
+			Vector2(rect.size.x * 0.40, maxf(2.0, rect.size.y * 0.06))
+		)
+		r._anim_layer.draw_rect(trim_rect, prop.trim_color, true)
 
 
 static func acquire_moving_prop(
@@ -503,6 +583,7 @@ static func acquire_moving_prop(
 	prop.rect = Rect2(foot - prop.anchor_offset, sz)
 	prop.y = foot.y
 	prop.modulate = modulate_col
+	prop.trim_color = Color.TRANSPARENT
 	prop.sways = false
 	return prop
 
@@ -517,30 +598,35 @@ static func collect_moving_props(r: Node2D) -> Array[Prop]:
 		var v_pos: Vector2 = village["pos"]
 		if not vis_rect.has_point(v_pos):
 			continue
+		var deme: EvoTypes.Deme = village["deme"]
 		var sf: float = village["sf"]
 		var m: Color = village["modulate"]
+		var strat_color := resolve_deme_strategy_color(r.world_state, deme)
+		var cape_trim := strat_color.lightened(0.25) * m
 		if int(village["tier"]) == 1:
 			var fire_sprite := "tier1_campfire" if int(anim_time * 5.0) % 2 == 0 else "tier1_campfire_2"
 			props.append(acquire_moving_prop(r, EvoPixelArtGen.get_texture(fire_sprite), v_pos + Vector2(4, 8) * sf, 2.42 * sf, 0.78, m))
 
 		var villager_count: int = village["villager_count"]
-		var v_textures: Array[ImageTexture] = village["villager_textures"]
+		var v_textures: Array[ImageTexture] = get_villager_textures_for_color(r, strat_color)
 		for v_idx in range(villager_count):
 			var orbit_angle := anim_time * (0.95 + float(v_idx % 3) * 0.22) + float(v_idx) * (TAU / float(villager_count))
 			var orbit_r := (28.0 + float(v_idx % 3) * 9.0) * sf
 			var foot := v_pos + Vector2(cos(orbit_angle) * orbit_r, sin(orbit_angle) * (orbit_r * 0.56) + 9.0 * sf)
 			var frame := int((anim_time * 6.0) + float(v_idx)) % 3
-			props.append(acquire_moving_prop(r, v_textures[frame], foot, 2.60 * sf, 0.85, m))
+			var v_prop := acquire_moving_prop(r, v_textures[frame], foot, 2.60 * sf, 0.85, m)
+			v_prop.trim_color = cape_trim
+			props.append(v_prop)
 
 	for r_idx in range(r._roads.size()):
 		var road: Dictionary = r._roads[r_idx]
-		if not TRAVELER_ROAD_KINDS.has(road["kind"]) or not bool(road.get("show_traffic", true)):
+		if not TRAVELER_ROAD_KINDS.has(road["kind"]) or not road["show_traffic"]:
 			continue
 		var p_a: Vector2 = road["p_a"]
 		var p_b: Vector2 = road["p_b"]
 		if not vis_rect.has_point(p_a) and not vis_rect.has_point(p_b):
 			continue
-		var curve_f: float = float(road.get("curve_factor", 0.045))
+		var curve_f: float = float(road["curve_factor"])
 		var r_textures: Array[ImageTexture] = road["villager_textures"]
 		for traveler_i in range(2):
 			var raw_walk := fposmod(anim_time * 0.24 + float(r_idx) * 0.31 + float(traveler_i) * 0.48, 1.0)

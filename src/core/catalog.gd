@@ -7,6 +7,9 @@ const PRESET_IDS: Array[String] = [
 	"preset-finite-island"
 ]
 
+const DEFAULT_STRATEGY_A_ID: String = "strat-cooperation"
+const DEFAULT_STRATEGY_B_ID: String = "strat-war"
+
 
 static func _make_trait(
 	p_id: String,
@@ -92,6 +95,100 @@ static func create_base_decisions_catalog(lang: String = "es") -> Dictionary:
 	return catalog
 
 
+static func _make_strategy(
+	p_id: String,
+	p_icon: String,
+	p_color: String,
+	p_bio: Array[String],
+	p_cul: Array[String],
+	lang: String
+) -> EvoTypes.StrategyDef:
+	var s := EvoTypes.StrategyDef.new()
+	s.id = p_id
+	s.name = EvoI18n.strategy_text(p_id, "name", p_id, lang)
+	s.description = EvoI18n.strategy_text(p_id, "desc", "", lang)
+	s.icon = p_icon
+	s.color = p_color
+	s.origin = "base"
+	s.biological_trait_ids = p_bio.duplicate()
+	s.cultural_trait_ids = p_cul.duplicate()
+	return s
+
+
+static func create_base_strategies_catalog(lang: String = "es") -> Dictionary:
+	var strategies: Array[EvoTypes.StrategyDef] = [
+		_make_strategy("strat-cooperation", "🤝", "#10B981", ["bio-k-strategy", "bio-social-instinct"], ["cul-communal-conservation"], lang),
+		_make_strategy("strat-expansion", "🧭", "#3B82F6", ["bio-r-strategy", "bio-thermal-tolerance", "bio-social-instinct"], ["cul-fire-processing"], lang),
+		_make_strategy("strat-trade", "⚖️", "#F59E0B", ["bio-k-strategy", "bio-encephalization"], ["cul-interdeme-barter"], lang),
+		_make_strategy("strat-war", "⚔️", "#EF4444", ["bio-r-strategy", "bio-social-instinct"], ["cul-warrior-expansion", "cul-extraction-tools"], lang),
+		_make_strategy("strat-innovation", "🔬", "#A855F7", ["bio-encephalization", "bio-digestive-spec"], ["cul-fire-processing", "cul-extraction-tools"], lang)
+	]
+	var catalog: Dictionary = {}
+	for s in strategies:
+		catalog[s.id] = s
+	return catalog
+
+
+static func compute_strategy_vector(strategy: EvoTypes.StrategyDef, traits_catalog: Dictionary) -> EvoTypes.BiophysicalVector:
+	var cost: float = 0.0
+	var extract: float = 0.0
+	var eco: float = 0.0
+	var mobility: float = 0.0
+	var cohesion: float = 0.0
+	var threshold: float = 0.0
+	for tid in strategy.biological_trait_ids:
+		if traits_catalog.has(tid):
+			var v := (traits_catalog[tid] as EvoTypes.TraitDef).vector
+			cost += v.metabolic_cost
+			extract += v.extraction_efficiency
+			eco += v.ecological_impact
+			mobility += v.spatial_mobility
+			cohesion += v.social_cohesion
+			threshold += v.transmission_threshold
+	for tid in strategy.cultural_trait_ids:
+		if traits_catalog.has(tid):
+			var v := (traits_catalog[tid] as EvoTypes.TraitDef).vector
+			cost += v.metabolic_cost
+			extract += v.extraction_efficiency
+			eco += v.ecological_impact
+			mobility += v.spatial_mobility
+			cohesion += v.social_cohesion
+			threshold += v.transmission_threshold
+	return EvoThermodynamics.clamp_vector(
+		EvoTypes.BiophysicalVector.new(cost, extract, eco, mobility, cohesion, threshold)
+	)
+
+
+static func apply_strategy_to_deme(
+	state: EvoTypes.WorldState,
+	deme: EvoTypes.Deme,
+	strategy_id: String,
+	_lang: String = "es"
+) -> void:
+	if not state.strategies_catalog.has(strategy_id):
+		return
+	var strategy: EvoTypes.StrategyDef = state.strategies_catalog[strategy_id]
+	deme.strategy_id = strategy.id
+	deme.color = strategy.color
+	deme.biological_trait_ids = strategy.biological_trait_ids.duplicate()
+	if deme_has_cultural_capacity(deme, state.traits_catalog):
+		deme.cultural_trait_ids = strategy.cultural_trait_ids.duplicate()
+	else:
+		deme.cultural_trait_ids = []
+
+	if state.lineage_tree.has(deme.lineage_id):
+		var lin: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id]
+		lin.strategy_id = strategy.id
+		lin.color = strategy.color
+		lin.biological_trait_ids = deme.biological_trait_ids.duplicate()
+		lin.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
+		var acq: Array[String] = deme.biological_trait_ids.duplicate()
+		for cid in deme.cultural_trait_ids:
+			if not acq.has(cid):
+				acq.append(cid)
+		lin.acquired_trait_ids = acq
+
+
 static func deme_has_cultural_capacity(deme: EvoTypes.Deme, traits_catalog: Dictionary) -> bool:
 	for tid in deme.biological_trait_ids:
 		if traits_catalog.has(tid):
@@ -156,10 +253,15 @@ static func inject_trait_into_deme(
 	return true
 
 
-static func create_preset_world(preset_id: String, lang: String = "es") -> EvoTypes.WorldState:
+static func create_preset_world(
+	preset_id: String,
+	lang: String = "es",
+	strategy_a_id: String = DEFAULT_STRATEGY_A_ID,
+	strategy_b_id: String = DEFAULT_STRATEGY_B_ID
+) -> EvoTypes.WorldState:
 	return EvoPresets.create_preset_world(
 		preset_id,
 		lang,
-		create_base_traits_catalog(lang),
-		create_base_decisions_catalog(lang)
+		strategy_a_id,
+		strategy_b_id
 	)

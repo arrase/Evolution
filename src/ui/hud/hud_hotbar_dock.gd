@@ -14,6 +14,17 @@ const HOTBAR_SLOTS_DEF: Array[Dictionary] = [
 	{"slot": 9, "key": "0", "tool": "sea_level", "sub": "sea_level", "icon": "slot_sealevel", "cost": 25}
 ]
 
+var _hud: Control = null
+
+
+func _init(p_hud: Control = null) -> void:
+	_hud = p_hud
+
+
+func refresh_legend(state: EvoTypes.WorldState, lang: String = "es") -> void:
+	if _hud != null:
+		EvoHudHotbarDock.refresh_legend_for_hud(_hud, state, lang)
+
 
 static func build_bottom_hotbar(hud: Control) -> void:
 	# 1. Floating Sub-Options Bar (appears right above the hotbar when Sea Level / extra biomes active)
@@ -160,10 +171,10 @@ static func build_legend_panel(hud: Control) -> void:
 	hud._legend_panel.anchor_right = 0.0
 	hud._legend_panel.anchor_top = 0.0
 	hud._legend_panel.anchor_bottom = 0.0
-	hud._legend_panel.offset_left = 382
-	hud._legend_panel.offset_right = 656
+	hud._legend_panel.offset_left = 428
+	hud._legend_panel.offset_right = 736
 	hud._legend_panel.offset_top = 10
-	hud._legend_panel.offset_bottom = 290
+	hud._legend_panel.offset_bottom = 356
 	hud._legend_panel.z_index = 22
 	hud._legend_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
 	hud.add_child(hud._legend_panel)
@@ -296,13 +307,79 @@ static func rebuild_sub_tool_options(hud: Control) -> void:
 
 
 static func rebuild_legend_content(hud: Control) -> void:
+	refresh_legend_for_hud(hud, hud._world_state, hud._lang)
+
+
+static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lang: String = "es") -> void:
 	if hud._legend_vbox == null:
 		return
 	for child in hud._legend_vbox.get_children():
 		child.queue_free()
 
+	if state != null and not state.strategies_catalog.is_empty():
+		var strat_header := Label.new()
+		strat_header.text = "⚔️ %s" % EvoI18n.t(lang, "legend_strategies")
+		strat_header.add_theme_font_size_override("font_size", 13)
+		strat_header.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
+		hud._legend_vbox.add_child(strat_header)
+
+		var active_strat_ids: Array[String] = []
+		if state.strategy_a_id != "" and state.strategies_catalog.has(state.strategy_a_id):
+			active_strat_ids.append(state.strategy_a_id)
+		if state.strategy_b_id != "" and state.strategies_catalog.has(state.strategy_b_id) and not active_strat_ids.has(state.strategy_b_id):
+			active_strat_ids.append(state.strategy_b_id)
+
+		for d_id in state.demes.keys():
+			var d: EvoTypes.Deme = state.demes[d_id]
+			var sid := d.strategy_id
+			if sid == "" and state.lineage_tree.has(d.lineage_id):
+				sid = (state.lineage_tree[d.lineage_id] as EvoTypes.LineageNode).strategy_id
+			if sid != "" and state.strategies_catalog.has(sid) and not active_strat_ids.has(sid):
+				active_strat_ids.append(sid)
+
+		for sid in active_strat_ids:
+			var strat: EvoTypes.StrategyDef = state.strategies_catalog[sid]
+			var v_count := 0
+			var total_pop := 0
+			for d_id in state.demes.keys():
+				var d: EvoTypes.Deme = state.demes[d_id]
+				var d_sid := d.strategy_id
+				if d_sid == "" and state.lineage_tree.has(d.lineage_id):
+					d_sid = (state.lineage_tree[d.lineage_id] as EvoTypes.LineageNode).strategy_id
+				if d_sid == sid:
+					v_count += 1
+					total_pop += d.population
+
+			var s_row := HBoxContainer.new()
+			s_row.add_theme_constant_override("separation", 6)
+			hud._legend_vbox.add_child(s_row)
+
+			var s_sw := ColorRect.new()
+			s_sw.custom_minimum_size = Vector2(12, 12)
+			s_sw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			s_sw.color = Color.from_string(strat.color, Color("#10B981"))
+			s_row.add_child(s_sw)
+
+			var s_name := EvoI18n.strategy_name(lang, strat)
+			var s_lbl_text := ""
+			if lang == "en":
+				var v_word := "village" if v_count == 1 else "villages"
+				s_lbl_text = "%s %s (%d %s · %d pop.)" % [strat.icon, s_name, v_count, v_word, total_pop]
+			else:
+				var v_word := "aldea" if v_count == 1 else "aldeas"
+				s_lbl_text = "%s %s (%d %s · %d hab.)" % [strat.icon, s_name, v_count, v_word, total_pop]
+
+			var s_lbl := Label.new()
+			s_lbl.text = s_lbl_text
+			s_lbl.add_theme_font_size_override("font_size", 11)
+			s_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
+			s_row.add_child(s_lbl)
+
+		var sep := HSeparator.new()
+		hud._legend_vbox.add_child(sep)
+
 	var title := Label.new()
-	title.text = EvoUiStyle.tr_text(hud._lang, "🗺️ Leyenda del Valle", "🗺️ Valley Legend")
+	title.text = EvoUiStyle.tr_text(lang, "🗺️ Leyenda del Valle", "🗺️ Valley Legend")
 	title.add_theme_font_size_override("font_size", 13)
 	title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._legend_vbox.add_child(title)
@@ -318,13 +395,13 @@ static func rebuild_legend_content(hud: Control) -> void:
 		row.add_child(sw)
 
 		var lbl := Label.new()
-		lbl.text = EvoUiStyle.get_biome_label(b_id, hud._lang)
+		lbl.text = EvoUiStyle.get_biome_label(b_id, lang)
 		lbl.add_theme_font_size_override("font_size", 11)
 		row.add_child(lbl)
 
 	var tier_lbl := Label.new()
 	tier_lbl.text = EvoUiStyle.tr_text(
-		hud._lang,
+		lang,
 		"Aldeas: I Campamento · II Caserío · III Aldea · IV Poblado\nCaminos: 🛣️ Cooperación · ⚔️ Disputa · 🧭 Migración",
 		"Villages: I Camp · II Hamlet · III Village · IV Settlement\nPaths: 🛣️ Cooperation · ⚔️ Dispute · 🧭 Migration"
 	)

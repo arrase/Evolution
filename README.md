@@ -6,7 +6,7 @@
 
 **Evolution** is an interactive bio-cultural and evolutionary population simulator built with **Godot 4.7**, featuring a handcrafted cozy pixel-art aesthetic on an isometric hexagonal ecosystem.
 
-Rather than commanding individual units directly, you act as the **Selective Pressure** and **Evolutionary Architect**—shaping climates, terrain altitude, sea levels, habitat carrying capacity ($K$), and genetic or cultural traits—while local subpopulations (*demes*) autonomously evaluate their surroundings, adapt, migrate, cooperate, innovate, or diverge into new species.
+Rather than commanding individual units directly, you act as the **Selective Pressure** and **Evolutionary Architect**—configuring **1v1 Evolutionary Strategy Duels (`Strategy A ⚔️ Strategy B`)** before pressing Play, forging custom strategies and traits, and shaping climates, terrain altitude, sea levels, and habitat carrying capacity ($K$)—while local subpopulations (*demes*) autonomously evaluate their surroundings, adapt, migrate, cooperate, innovate, or diverge into new species.
 
 ![The Rift Valley — Isometric Hexagonal Ecosystem & HUD](gh-pages/assets/img/screenshot_rift_savanna.png)
 
@@ -14,19 +14,30 @@ Rather than commanding individual units directly, you act as the **Selective Pre
 
 ## Key Features
 
-### 1. Authentic Evolutionary & Socio-Cultural Dynamics
+### 1. 1v1 Evolutionary Strategy Duels (`Strategy A ⚔️ Strategy B`)
+Before launching a simulation at Generation 0, you choose which two **Evolutionary Strategies** (`EvoTypes.StrategyDef`) will face off across the valley—or forge your own in the **Evolutionary Laboratory** (persisted automatically to `~/.config/Evolution/user_catalog.json`). Each strategy bundles compatible biological adaptations and cultural traditions, imbuing its founding lineage and daughter villages with a distinct emblem, color identity, and combined 6-axis biophysical footprint:
+
+| Strategy ID | Emblem & Name (EN / ES) | Color | Bundled Traits (`bio-*` + `cul-*`) | Evolutionary Philosophy |
+| :--- | :--- | :---: | :--- | :--- |
+| `strat-cooperation` | 🤝 **Cooperative Alliance**<br>*Alianza Cooperativa* | `#10B981` | `bio-k-strategy`, `bio-social-instinct` + `cul-communal-conservation` | Fosters social cohesion, communal habitat conservation, and resource buffering. |
+| `strat-expansion` | 🧭 **Expansionist Pioneers**<br>*Pioneros Expansionistas* | `#3B82F6` | `bio-r-strategy`, `bio-thermal-tolerance`, `bio-social-instinct` + `cul-fire-processing` | Fast reproduction, high mobility, and thermal tolerance to colonize new territories. |
+| `strat-trade` | ⚖️ **Merchant League**<br>*Liga Mercantil* | `#F59E0B` | `bio-k-strategy`, `bio-encephalization` + `cul-interdeme-barter` | Drives inter-village barter, commercial symbiosis, and horizontal cultural diffusion. |
+| `strat-war` | ⚔️ **Conquering Horde**<br>*Horda Conquistadora* | `#EF4444` | `bio-r-strategy`, `bio-social-instinct` + `cul-warrior-expansion`, `cul-extraction-tools` | Aggressive martial expansion and intensive extraction to dominate rival territories. |
+| `strat-innovation` | 🔬 **Innovator Technocrats**<br>*Tecnócratas Innovadores* | `#A855F7` | `bio-encephalization`, `bio-digestive-spec` + `cul-fire-processing`, `cul-extraction-tools` | High encephalization, thermal food processing, and specialized extraction toolkits. |
+
+### 2. Authentic Evolutionary & Socio-Cultural Dynamics
 The simulation separates **behavioral intent** (probabilistic decision-making per deme) from **biophysical consequence** (deterministic laws of energy conservation, carrying capacity $K$, metabolic cost, and demography):
 - **$r/K$ Selection Trade-offs:** Prolific dispersal vs. high-longevity carrying-capacity buffering.
 - **The Baldwin Effect (Genetic Assimilation):** Sustained behavioral plasticity under environmental stress consolidates into heritable biological adaptations.
 - **Dual Inheritance Theory:** Populations with cognitive or social capacity (*Encephalization* or *Instinctive Sociability*) unlock cumulative cultural traditions, toolmaking, and horizontal cultural transmission across trade routes.
 - **Evolutionary Game Theory:** Cohabiting and neighboring demes navigate *Hawk-Dove* territorial disputes, reciprocal symbiosis, or the *Tragedy of the Commons* when intensive overexploitation degrades $K$ below $60\%$ of $K_{\max}$.
-- **Allopatric Speciation:** Geographic isolation across mountain ridges or flooded glacial land bridges triggers phylogenetic divergence into new lineages.
+- **Allopatric Speciation:** Geographic isolation across mountain ridges or flooded glacial land bridges triggers phylogenetic divergence into new lineages while preserving their founding `strategy_id`.
 
-### 2. Dual-Model System 1 Cognitive Architecture (Ollama)
+### 3. Dual-Model System 1 Cognitive Architecture (Ollama)
 - **System 1 (High-Frequency Turn Scoring — `d3:4b` & `tev1:4b`):** Evaluates each deme and its 6-hex neighborhood every generation, deterministically assigning subpopulations across the primary (`d3:4b`) and secondary (`tev1:4b`) Ollama decision models to compute normalized probability distributions over behavioral archetypes.
 - **Deterministic Milestone Synthesis (`EvoMilestonePhase`):** Synthesizes emergent traits, cultural innovations, allopatric speciation, and natural history chronicle entries within strict thermodynamic bounds.
 
-### 3. Standardized 6-Axis Biophysical Vector & Thermodynamic Conservation
+### 4. Standardized 6-Axis Biophysical Vector & Thermodynamic Conservation
 Every biological trait, cultural tradition, and behavioral decision maps to a bounded 6-axis vector:
 1. `metabolic_cost` ($[-1, +1]$)
 2. `extraction_efficiency` ($[-1, +1]$)
@@ -39,20 +50,22 @@ No trait or decision can violate thermodynamic conservation: high caloric extrac
 
 ---
 
-## Scientific Scenarios & World Presets
+## Scientific Scenarios & 1v1 World Presets
+
+Every scenario initializes a balanced **1v1 Evolutionary Strategy Duel** (`Strategy A` vs. `Strategy B`, defaulting to `strat-cooperation` 🤝 vs. `strat-war` ⚔️) that can be customized at Generation 0 from the top HUD matchup bar:
 
 ### The Rift Valley (`preset-rift-savanna`)
-A tectonic mountain ridge divides a stable western tropical rainforest from a drying eastern savanna-steppe mosaic. Eastern demes under seasonal aridification elevate cooperation, storage, and migration, driving Baldwin assimilation and cultural innovation while western forest populations maintain conservative foraging.
+A tectonic mountain ridge divides a stable western tropical rainforest from a drying eastern savanna-steppe mosaic. **Western Forest Hominids** (`deme-rift-west` at `(-2, 1)`, Strategy A, `pop = 140`) face off across the ridge against **Eastern Savanna Hominids** (`deme-rift-east` at `(2, -1)`, Strategy B, `pop = 140`). Seasonal aridification in the east drives cooperation, storage, migration, Baldwin assimilation, and cultural innovation while western forest populations leverage abundant biomass.
 
 ![Late Simulation in The Rift Valley — Consolidated Settlements & Road Networks](gh-pages/assets/img/screenshot_late_simulation.png)
 
 ### Darwin's Archipelago (`preset-darwin-archipelago`)
-Volcanic islands linked by shallow coastal land bridges that periodically emerge and flood with glacial sea-level cycles. Founders disperse across temporary land bridges during low tides and undergo allopatric speciation when rising seas isolate island populations across tundra, forest, and arid steppe biomes.
+Volcanic islands linked by shallow coastal land bridges (`0,-1`, `0,1`, `2,0`) that periodically emerge and flood with 8-generation glacial sea-level cycles. Two rival island founders—**Western Island Founders** (`deme-darwin-founder` at `(-1, 0)`, Strategy A, `pop = 95`) and **Eastern Island Rivals** (`deme-darwin-rival` at `(1, 0)`, Strategy B, `pop = 95`)—race across temporary land bridges during low tides and undergo allopatric speciation when rising seas isolate colonies across tundra, forest, and arid steppe islands.
 
 ![Darwin's Archipelago — Insular Dispersal & Land Bridges](gh-pages/assets/img/screenshot_darwin_archipelago.png)
 
 ### The Finite Island (`preset-finite-island`)
-A fertile but geographically bounded island surrounded by deep ocean and inhabited by three competing clans equipped with specialized extraction tools. Without communal conservation norms, intensive overexploitation degrades local carrying capacity $K$ and triggers the *Tragedy of the Commons*.
+A fertile but geographically bounded island surrounded by deep ocean where two competing clans—**Northern Quarry Clan** (`deme-island-1` at `(-1, 0)`, Strategy A, `pop = 95`) and **Southern Timber Clan** (`deme-island-2` at `(1, 0)`, Strategy B, `pop = 95`)—share a fragile savanna core ($r_{\text{regen}} = 0.08$). Without communal conservation norms, intensive overexploitation and Hawk-Dove conflict degrade local carrying capacity $K$ below $60\%$ of $K_{\max}$ and trigger the *Tragedy of the Commons*.
 
 ![The Finite Island — Ecological Health Lens & Valley Legend](gh-pages/assets/img/screenshot_finite_island.png)
 
@@ -66,12 +79,12 @@ Tracks every evolutionary milestone (Baldwin Effect, Cultural Innovation, Allopa
 ![Naturalist's Notebook — Evolutionary Chronicle Modal](gh-pages/assets/img/screenshot_notebook_modal.png)
 
 ### Phylo-Cultural Lineage Tree
-Visualizes ancestral and diverged lineages, founding and extinction generations, acquired biological and cultural traits, and active villages, with interactive map lineage highlighting.
+Visualizes ancestral and diverged lineages, founding and extinction generations, inherited `strategy_id`, acquired biological and cultural traits, and active villages, with interactive map lineage highlighting.
 
 ![Phylo-Cultural Lineage Tree Modal](gh-pages/assets/img/screenshot_tree_modal.png)
 
-### Trait & Decision Forge — Evolutionary Laboratory
-An open catalog editor to inspect, tweak, or craft new biological traits, cultural traditions, and behavioral decisions with a live **Thermodynamic Balance Meter** (`Auto-Balance Vector`) and direct trait injection into any active village.
+### Strategy, Trait & Decision Forge — Evolutionary Laboratory
+An open 4-tab catalog editor (`🧬 Biological Traits`, `🔥 Cultural Traditions`, `⚖️ Behavioral Decisions`, and `🛡️ Strategies`) to inspect, tweak, or craft new traits, decisions, and custom evolutionary strategies—complete with a live **Thermodynamic Balance Meter**, combined 6-axis footprint preview, one-click assignment to **Strategy A / Strategy B**, direct trait injection into any active village, and automatic persistence to `~/.config/Evolution/user_catalog.json`.
 
 ![Trait & Decision Forge — Evolutionary Laboratory Modal](gh-pages/assets/img/screenshot_lab_modal.png)
 

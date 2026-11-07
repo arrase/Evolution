@@ -161,11 +161,14 @@ static func run_milestone_phase(
 				new_node.id = new_lin_id
 				new_node.parent_id = old_lineage_id
 				new_node.name = new_trait.name
+				new_node.strategy_id = deme.strategy_id
 				new_node.color = next_color
 				new_node.founded_generation = state.generation
 				new_node.extinct_generation = -1
 				new_node.founder_hex_id = deme.hex_id
 				new_node.divergence_reason = "allopatric_speciation"
+				new_node.biological_trait_ids = deme.biological_trait_ids.duplicate()
+				new_node.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
 				var acq: Array[String] = []
 				for tid in deme.biological_trait_ids:
 					if not acq.has(tid):

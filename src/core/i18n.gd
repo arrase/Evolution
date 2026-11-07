@@ -148,7 +148,69 @@ const STRINGS: Dictionary = {
 		"chronicle.type.tragedy_of_commons": "Tragedia de los Comunes",
 		"chronicle.type.symbiosis": "Simbiosis Cultural",
 		"chronicle.type.single_survivor": "Hegemonía Evolutiva",
-		"chronicle.type.ecological_equilibrium": "Equilibrio Ecológico"
+		"chronicle.type.ecological_equilibrium": "Equilibrio Ecológico",
+		"strategy.strat-cooperation.name": "Alianza Cooperativa",
+		"strategy.strat-cooperation.desc": "Fomenta la cohesión social, la conservación comunal del hábitat y el almacenamiento.",
+		"strategy.strat-expansion.name": "Pioneros Expansionistas",
+		"strategy.strat-expansion.desc": "Reproducción rápida, alta movilidad y tolerancia térmica para colonizar nuevos territorios.",
+		"strategy.strat-trade.name": "Liga Mercantil",
+		"strategy.strat-trade.desc": "Impulsa el trueque inter-tribal, la simbiosis comercial y la difusión cultural.",
+		"strategy.strat-war.name": "Horda Conquistadora",
+		"strategy.strat-war.desc": "Expansión marcial agresiva y extracción intensiva para dominar territorios rivales.",
+		"strategy.strat-innovation.name": "Tecnócratas Innovadores",
+		"strategy.strat-innovation.desc": "Alta encefalización, procesado térmico y herramientas especializadas de extracción.",
+		"lab_tab_strat": "🛡️ Estrategias",
+		"lab_new_strat": "+ Nueva Estrategia",
+		"lab_save_strat": "💾 Guardar Estrategia",
+		"lab_strat_icon": "Emblema",
+		"lab_strat_color": "Color",
+		"lab_strat_traits": "Rasgos de la Estrategia",
+		"lab_strat_vector": "Huella Biofísica Combinada",
+		"lab_use_strat_a": "Usar como Estrategia A",
+		"lab_use_strat_b": "Usar como Estrategia B",
+		"hud_matchup_vs": "⚔️",
+		"hud_matchup_reset": "🔄",
+		"hud_matchup_reset_tip": "Reiniciar duelo en Generación 0 con las estrategias seleccionadas",
+		"insp_strategy": "Estrategia",
+		"legend_strategies": "Duelo de Estrategias",
+		"strategies": {
+			"strat-cooperation": {
+				"name": "Alianza Cooperativa",
+				"desc": "Fomenta la cohesión social, la conservación comunal del hábitat y el almacenamiento."
+			},
+			"strat-expansion": {
+				"name": "Pioneros Expansionistas",
+				"desc": "Reproducción rápida, alta movilidad y tolerancia térmica para colonizar nuevos territorios."
+			},
+			"strat-trade": {
+				"name": "Liga Mercantil",
+				"desc": "Impulsa el trueque inter-tribal, la simbiosis comercial y la difusión cultural."
+			},
+			"strat-war": {
+				"name": "Horda Conquistadora",
+				"desc": "Expansión marcial agresiva y extracción intensiva para dominar territorios rivales."
+			},
+			"strat-innovation": {
+				"name": "Tecnócratas Innovadores",
+				"desc": "Alta encefalización, procesado térmico y herramientas especializadas de extracción."
+			}
+		},
+		"ui": {
+			"lab_tab_strat": "🛡️ Estrategias",
+			"lab_new_strat": "+ Nueva Estrategia",
+			"lab_save_strat": "💾 Guardar Estrategia",
+			"lab_strat_icon": "Emblema",
+			"lab_strat_color": "Color",
+			"lab_strat_traits": "Rasgos de la Estrategia",
+			"lab_strat_vector": "Huella Biofísica Combinada",
+			"lab_use_strat_a": "Usar como Estrategia A",
+			"lab_use_strat_b": "Usar como Estrategia B",
+			"hud_matchup_vs": "⚔️",
+			"hud_matchup_reset": "🔄",
+			"hud_matchup_reset_tip": "Reiniciar duelo en Generación 0 con las estrategias seleccionadas",
+			"insp_strategy": "Estrategia",
+			"legend_strategies": "Duelo de Estrategias"
+		}
 	},
 	"en": {
 		"app.title": "Evolution — Population Evolutionary Simulator",
@@ -296,23 +358,191 @@ const STRINGS: Dictionary = {
 		"chronicle.type.tragedy_of_commons": "Tragedy of the Commons",
 		"chronicle.type.symbiosis": "Cultural Symbiosis",
 		"chronicle.type.single_survivor": "Evolutionary Hegemony",
-		"chronicle.type.ecological_equilibrium": "Ecological Equilibrium"
+		"chronicle.type.ecological_equilibrium": "Ecological Equilibrium",
+		"strategy.strat-cooperation.name": "Cooperative Alliance",
+		"strategy.strat-cooperation.desc": "Fosters social cohesion, communal habitat conservation, and resource buffering.",
+		"strategy.strat-expansion.name": "Expansionist Pioneers",
+		"strategy.strat-expansion.desc": "Fast reproduction, high mobility, and thermal tolerance to colonize new territories.",
+		"strategy.strat-trade.name": "Merchant League",
+		"strategy.strat-trade.desc": "Drives inter-village barter, commercial symbiosis, and cultural diffusion.",
+		"strategy.strat-war.name": "Conquering Horde",
+		"strategy.strat-war.desc": "Aggressive martial expansion and intensive extraction to dominate rival territories.",
+		"strategy.strat-innovation.name": "Innovator Technocrats",
+		"strategy.strat-innovation.desc": "High encephalization, thermal processing, and specialized extraction tools.",
+		"lab_tab_strat": "🛡️ Strategies",
+		"lab_new_strat": "+ New Strategy",
+		"lab_save_strat": "💾 Save Strategy",
+		"lab_strat_icon": "Emblem",
+		"lab_strat_color": "Color",
+		"lab_strat_traits": "Strategy Traits",
+		"lab_strat_vector": "Combined Biophysical Footprint",
+		"lab_use_strat_a": "Set as Strategy A",
+		"lab_use_strat_b": "Set as Strategy B",
+		"hud_matchup_vs": "⚔️",
+		"hud_matchup_reset": "🔄",
+		"hud_matchup_reset_tip": "Reset duel at Generation 0 with the selected strategies",
+		"insp_strategy": "Strategy",
+		"legend_strategies": "Strategy Duel",
+		"strategies": {
+			"strat-cooperation": {
+				"name": "Cooperative Alliance",
+				"desc": "Fosters social cohesion, communal habitat conservation, and resource buffering."
+			},
+			"strat-expansion": {
+				"name": "Expansionist Pioneers",
+				"desc": "Fast reproduction, high mobility, and thermal tolerance to colonize new territories."
+			},
+			"strat-trade": {
+				"name": "Merchant League",
+				"desc": "Drives inter-village barter, commercial symbiosis, and cultural diffusion."
+			},
+			"strat-war": {
+				"name": "Conquering Horde",
+				"desc": "Aggressive martial expansion and intensive extraction to dominate rival territories."
+			},
+			"strat-innovation": {
+				"name": "Innovator Technocrats",
+				"desc": "High encephalization, thermal processing, and specialized extraction tools."
+			}
+		},
+		"ui": {
+			"lab_tab_strat": "🛡️ Strategies",
+			"lab_new_strat": "+ New Strategy",
+			"lab_save_strat": "💾 Save Strategy",
+			"lab_strat_icon": "Emblem",
+			"lab_strat_color": "Color",
+			"lab_strat_traits": "Strategy Traits",
+			"lab_strat_vector": "Combined Biophysical Footprint",
+			"lab_use_strat_a": "Set as Strategy A",
+			"lab_use_strat_b": "Set as Strategy B",
+			"hud_matchup_vs": "⚔️",
+			"hud_matchup_reset": "🔄",
+			"hud_matchup_reset_tip": "Reset duel at Generation 0 with the selected strategies",
+			"insp_strategy": "Strategy",
+			"legend_strategies": "Strategy Duel"
+		}
 	}
 }
+
+const TRANSLATIONS: Dictionary = STRINGS
 
 
 static func resolve_lang(lang: String) -> String:
 	return "en" if lang == "en" else "es"
 
 
-static func t(lang: String, key: String) -> String:
+static func t(lang: String, key: String = "es") -> String:
+	var actual_lang := lang
+	var actual_key := key
+	if lang not in ["es", "en"] and key in ["es", "en"]:
+		actual_lang = key
+		actual_key = lang
+	var table: Dictionary = STRINGS[resolve_lang(actual_lang)]
+	if table.has(actual_key) and table[actual_key] is String:
+		return str(table[actual_key])
+	var ui_table: Dictionary = table["ui"]
+	if ui_table.has(actual_key):
+		return str(ui_table[actual_key])
+	var es_table: Dictionary = STRINGS["es"]
+	if es_table.has(actual_key) and es_table[actual_key] is String:
+		return str(es_table[actual_key])
+	var es_ui: Dictionary = es_table["ui"]
+	if es_ui.has(actual_key):
+		return str(es_ui[actual_key])
+	return actual_key
+
+
+static func ui(key: String, lang: String = "es") -> String:
+	return t(lang, key)
+
+
+static func strategy_text(strategy_id: String, field: String, fallback: String = "", lang: String = "es") -> String:
+	var l := resolve_lang(lang)
+	var strategies: Dictionary = STRINGS[l]["strategies"]
+	if strategies.has(strategy_id):
+		var entry: Dictionary = strategies[strategy_id]
+		if entry.has(field):
+			return str(entry[field])
+		if field == "description" and entry.has("desc"):
+			return str(entry["desc"])
+	return fallback
+
+
+static func strategy_name(lang: String, strat_def: EvoTypes.StrategyDef) -> String:
+	if strat_def is Object and strat_def.get("origin") != null and str(strat_def.get("origin")) not in ["base", "catalog"]:
+		return str(strat_def.name)
+	return strategy_text(strat_def.id, "name", strat_def.name, lang)
+
+
+static func strategy_description(lang: String, strat_def: EvoTypes.StrategyDef) -> String:
+	if strat_def is Object and strat_def.get("origin") != null and str(strat_def.get("origin")) not in ["base", "catalog"]:
+		return str(strat_def.description)
+	return strategy_text(strat_def.id, "desc", strat_def.description, lang)
+
+
+static func trait_text(trait_id: String, field: String, fallback: String = "", lang: String = "es") -> String:
+	var f := "desc" if field == "description" else field
+	var key := "trait." + trait_id + "." + f
 	var table: Dictionary = STRINGS[resolve_lang(lang)]
 	if table.has(key):
 		return str(table[key])
-	var es_table: Dictionary = STRINGS["es"]
-	if es_table.has(key):
-		return str(es_table[key])
-	return key
+	return fallback
+
+
+static func decision_text(decision_id: String, field: String, fallback: String = "", lang: String = "es") -> String:
+	var f := "desc" if field == "description" else field
+	var key := "decision." + decision_id + "." + f
+	var table: Dictionary = STRINGS[resolve_lang(lang)]
+	if table.has(key):
+		return str(table[key])
+	return fallback
+
+
+static func localize_world_state(state: EvoTypes.WorldState, lang: String = "es") -> void:
+	if state == null:
+		return
+	var is_en := resolve_lang(lang) == "en"
+	state.world_name = preset_title(lang, state.preset_id)
+	for tr_id in state.traits_catalog.keys():
+		var tr: EvoTypes.TraitDef = state.traits_catalog[tr_id]
+		if tr.origin in ["catalog", "base"]:
+			tr.name = trait_name(lang, tr)
+			tr.description = trait_description(lang, tr)
+	for dec_id in state.decisions_catalog.keys():
+		var dec: EvoTypes.DecisionDef = state.decisions_catalog[dec_id]
+		if dec.origin in ["catalog", "base"]:
+			dec.name = decision_name(lang, dec)
+			dec.description = decision_description(lang, dec)
+	for strat_id in state.strategies_catalog.keys():
+		var strat: EvoTypes.StrategyDef = state.strategies_catalog[strat_id]
+		if strat.origin in ["base", "catalog"]:
+			strat.name = strategy_text(strat.id, "name", strat.name, lang)
+			strat.description = strategy_text(strat.id, "desc", strat.description, lang)
+
+	var base_deme_names := {
+		"deme-rift-west": "Western Forest Hominids" if is_en else "Homínidos del Bosque Occidental",
+		"deme-rift-east": "Eastern Savanna Hominids" if is_en else "Homínidos de la Sabana Oriental",
+		"deme-darwin-founder": "Western Island Founders" if is_en else "Fundadores Insulares del Oeste",
+		"deme-darwin-west": "Western Island Founders" if is_en else "Fundadores Insulares del Oeste",
+		"deme-darwin-rival": "Eastern Island Rivals" if is_en else "Rivales Insulares del Este",
+		"deme-island-1": "Northern Quarry Clan" if is_en else "Clan de la Cantera Norte",
+		"deme-island-2": "Southern Timber Clan" if is_en else "Clan Maderero del Sur"
+	}
+	for did in state.demes.keys():
+		if base_deme_names.has(did):
+			(state.demes[did] as EvoTypes.Deme).name = str(base_deme_names[did])
+
+	var base_lineage_names := {
+		"lineage-rift-west": "Western Rift Lineage" if is_en else "Linaje Occidental del Rift",
+		"lineage-rift-east": "Eastern Rift Lineage" if is_en else "Linaje Oriental del Rift",
+		"lineage-darwin-a": "Western Archipelago Lineage" if is_en else "Linaje Occidental del Archipiélago",
+		"lineage-darwin-b": "Eastern Archipelago Lineage" if is_en else "Linaje Oriental del Archipiélago",
+		"lineage-island-1": "Northern Quarry Lineage" if is_en else "Linaje de la Cantera Norte",
+		"lineage-island-2": "Southern Timber Lineage" if is_en else "Linaje Maderero del Sur"
+	}
+	for lid in state.lineage_tree.keys():
+		if base_lineage_names.has(lid):
+			(state.lineage_tree[lid] as EvoTypes.LineageNode).name = str(base_lineage_names[lid])
 
 
 static func biome_name(lang: String, biome: String) -> String:

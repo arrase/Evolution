@@ -1,6 +1,36 @@
-# 6-Axis Thermodynamics & Trait Catalog
+# 6-Axis Thermodynamics, Evolutionary Strategies & Trait Catalog
 
-Every biological adaptation, cultural tradition, and behavioral decision in **Evolution** is represented by a standardized **6-Axis Biophysical Vector** (`EvoTypes.BiophysicalVector`). Rather than hardcoding ad-hoc special cases for individual traits, the simulation enforces a universal **Law of Thermodynamic Conservation** (`EvoThermodynamics`): no organism or society can evolve "free" advantages in caloric extraction, mobility, or social cohesion without paying commensurate energetic or ecological costs.
+Every biological adaptation, cultural tradition, behavioral decision, and founding **Evolutionary Strategy** (`EvoTypes.StrategyDef`) in **Evolution** is governed by a standardized **6-Axis Biophysical Vector** (`EvoTypes.BiophysicalVector`). Rather than hardcoding ad-hoc special cases for individual traits, the simulation enforces a universal **Law of Thermodynamic Conservation** (`EvoThermodynamics`): no organism or society can evolve "free" advantages in caloric extraction, mobility, or social cohesion without paying commensurate energetic or ecological costs.
+
+---
+
+## Evolutionary Strategies (`StrategyDef`) & Default Archetypes
+
+An **Evolutionary Strategy** (`EvoTypes.StrategyDef`) defines the founding bio-cultural identity for one side of a **1v1 Strategy Duel** (`state.strategy_a_id` vs. `state.strategy_b_id`). Each strategy bundles a curated set of compatible biological adaptations (`biological_trait_ids`) and cultural traditions (`cultural_trait_ids`) together with a visual emblem (`icon`) and color swatch (`color`).
+
+### 1. Compatibility Rules & Cultural Substrate Enforcement
+When a strategy is constructed in the **Forge (`EvoLabModal`)** or applied to a founding deme via `EvoCatalog.apply_strategy_to_deme(state, deme, strategy_id, lang)`:
+
+* **Bidirectional $r/K$ Mutual Exclusion**: `bio-r-strategy` and `bio-k-strategy` represent opposite life-history poles (`mutually_exclusive_with`) and cannot coexist in the same strategy or deme. Selecting one in the Strategy Builder automatically unchecks the other.
+* **Cultural Capacity Prerequisite (`enables_cultural_transmission`)**: Cultural traditions (`cul-*`) require at least one biological trait with `enables_cultural_transmission == true` (`bio-encephalization` or `bio-social-instinct`). When `apply_strategy_to_deme` assigns traits to a deme, it verifies `EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog)`; if no biological trait enables culture, `deme.cultural_trait_ids` is cleared to `[]`.
+* **Lineage & Deme Synchronization**: Applying a strategy sets `deme.strategy_id`, `deme.color`, `deme.biological_trait_ids`, and `deme.cultural_trait_ids`, and synchronizes the deme's `LineageNode` (`lin.strategy_id`, `lin.color`, `lin.biological_trait_ids`, `lin.cultural_trait_ids`, and `lin.acquired_trait_ids`).
+
+### 2. Combined Strategy Biophysical Footprint (`compute_strategy_vector`)
+A strategy's baseline 6-axis footprint (`EvoCatalog.compute_strategy_vector(strategy, traits_catalog)`) is computed by summing the vectors of all included biological and cultural traits and clamping via `EvoThermodynamics.clamp_vector` (axes 1–5 in $[-1.0, +1.0]$, `transmission_threshold` in $[0.0, +1.0]$):
+
+$$\mathbf{v}_{\text{strat}}(S) = \text{clamp}_{[-1.0, 1.0]}\left(\sum_{b \in S.\text{bio}} \mathbf{v}_b + \sum_{c \in S.\text{cul}} \mathbf{v}_c\right)$$
+
+### 3. The 5 Base Archetypal Strategies (`EvoCatalog.create_base_strategies_catalog`)
+
+By default, every scenario starts with `DEFAULT_STRATEGY_A_ID = "strat-cooperation"` (🤝) vs. `DEFAULT_STRATEGY_B_ID = "strat-war"` (⚔️), and players can mix and match any of the 5 base archetypes or custom user strategies (`origin = "user"` persisted in `~/.config/Evolution/user_catalog.json`):
+
+| Strategy ID | Emblem & Name (EN / ES) | Hex Color | Included Biological Traits (`bio-*`) | Included Cultural Traits (`cul-*`) | Combined Biophysical Footprint<br>`(Cost, Extr, Eco, Mob, Coh, Thr)` | Evolutionary Philosophy & Gameplay Role |
+| :--- | :--- | :---: | :--- | :--- | :---: | :--- |
+| `strat-cooperation` | 🤝 **Cooperative Alliance**<br>*Alianza Cooperativa* | `#10B981` | `bio-k-strategy`<br>`bio-social-instinct` | `cul-communal-conservation` | `(+0.55, +0.70, +0.75, +0.15, +1.00, 1.00)` | **Ecological Stewardship & Stability**: Fosters maximum social cohesion (`+1.00`), communal habitat regeneration (`+0.75` eco), and $K$-selected demographic buffering. |
+| `strat-expansion` | 🧭 **Expansionist Pioneers**<br>*Pioneros Expansionistas* | `#3B82F6` | `bio-r-strategy`<br>`bio-thermal-tolerance`<br>`bio-social-instinct` | `cul-fire-processing` | `(+0.10, +0.95, -0.35, +0.90, +0.70, 1.00)` | **Rapid Dispersal & Barrier Crossing**: Combines $\times 1.35$ $r$-selected fecundity with high mobility (`+0.90`) and cooking efficiency (`+0.10` net cost) to colonize mountains and islands. |
+| `strat-trade` | ⚖️ **Merchant League**<br>*Liga Mercantil* | `#F59E0B` | `bio-k-strategy`<br>`bio-encephalization` | `cul-interdeme-barter` | `(+1.00, +1.00, +0.30, +0.55, +1.00, 1.00)` | **Commercial Symbiosis & Cultural Hub**: High-cognition diplomatic network that unlocks $+20\%$ reciprocal symbiosis surpluses, sustainable ecology (`+0.30`), and rapid horizontal cultural diffusion. |
+| `strat-war` | ⚔️ **Conquering Horde**<br>*Horda Conquistadora* | `#EF4444` | `bio-r-strategy`<br>`bio-social-instinct` | `cul-warrior-expansion`<br>`cul-extraction-tools` | `(+0.75, +1.00, -0.75, +0.90, +1.00, 1.00)` | **Martial Dominance & Intensive Extraction**: Dominates Hawk-Dove disputes and seizes rival resources with maximum extraction (`+1.00`) and mobility (`+0.90`), at severe ecological cost (`-0.75`). |
+| `strat-innovation` | 🔬 **Innovator Technocrats**<br>*Tecnócratas Innovadores* | `#A855F7` | `bio-encephalization`<br>`bio-digestive-spec` | `cul-fire-processing`<br>`cul-extraction-tools` | `(+0.70, +1.00, -0.45, +0.55, +0.80, 1.00)` | **Cognitive & Technological Acceleration**: Pairs neocortical expansion and omnivorous digestion with thermal processing and toolkits to maximize extraction (`+1.00`) and cumulative innovation. |
 
 ---
 
