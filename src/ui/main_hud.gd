@@ -332,6 +332,7 @@ func set_world_state(world_state: EvoTypes.WorldState) -> void:
 		for child in _toast_vbox.get_children():
 			child.queue_free()
 	if _world_state != null:
+		refresh_strategies(_world_state, _lang)
 		_last_seen_chronicle_count = _world_state.chronicle.size()
 		if _selected_deme_id == "" or not _world_state.demes.has(_selected_deme_id):
 			if not _world_state.demes.is_empty():
@@ -368,7 +369,8 @@ func refresh(world_state: EvoTypes.WorldState = null, is_playing_override: Varia
 	_update_top_bar_state()
 	_rebuild_villages_list()
 	_rebuild_active_inspector_sheet()
-	_rebuild_legend_content()
+	if _legend_panel != null and _legend_panel.visible:
+		_rebuild_legend_content()
 	_update_first_steps_labels()
 	_update_hotbar_visuals()
 
@@ -865,6 +867,8 @@ func _on_lens_pressed(lens_id: String) -> void:
 
 func _on_legend_toggle_pressed() -> void:
 	_legend_panel.visible = not _legend_panel.visible
+	if _legend_panel.visible:
+		_rebuild_legend_content()
 	_update_static_labels()
 
 
@@ -897,6 +901,7 @@ func _on_lineage_highlight_from_modal(lineage_id: String) -> void:
 
 
 func _on_lab_item_saved(item_type: String, item_data: Dictionary) -> void:
+	refresh_strategies(_world_state, _lang)
 	refresh(_world_state)
 	catalog_item_saved.emit(item_type, item_data)
 

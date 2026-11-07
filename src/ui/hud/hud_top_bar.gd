@@ -771,7 +771,8 @@ static func update_static_labels(hud: Control) -> void:
 static func update_top_bar_state(hud: Control) -> void:
 	if hud._world_state == null:
 		return
-	refresh_strategies_for_hud(hud, hud._world_state, hud._lang)
+	if hud.strategy_a_option != null and hud.strategy_a_option.item_count != hud._world_state.strategies_catalog.size():
+		refresh_strategies_for_hud(hud, hud._world_state, hud._lang)
 	var year_num := int(hud._world_state.generation / 2) + 1
 	hud._gen_label.text = EvoUiStyle.tr_text(
 		hud._lang,

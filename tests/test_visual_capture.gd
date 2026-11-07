@@ -96,7 +96,10 @@ func _run_captures() -> void:
 		main.step_generation()
 	if main.world_state.demes.has("deme-darwin-founder"):
 		var f_deme: EvoTypes.Deme = main.world_state.demes["deme-darwin-founder"]
+		if main.world_state.cells.has(f_deme.hex_id):
+			(main.world_state.cells[f_deme.hex_id] as EvoTypes.HexCell).deme_ids.erase(f_deme.id)
 		f_deme.hex_id = "0,-2"
+		(main.world_state.cells["0,-2"] as EvoTypes.HexCell).deme_ids.append(f_deme.id)
 		f_deme.isolation_turns = 10
 		EvoMilestonePhase.run_milestone_phase(main.world_state, main.lang)
 	main.hud.open_tree_modal()
