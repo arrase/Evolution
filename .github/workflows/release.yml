@@ -55,8 +55,8 @@ jobs:
           godot --headless --path . --export-release "macOS" release_assets/evolution-macos-universal.zip
 
           # Web (HTML5 / WASM)
-          godot --headless --path . --export-release "Web" build/web/index.html
-          (cd build/web && zip -r ../../release_assets/evolution-web.zip .)
+          # godot --headless --path . --export-release "Web" build/web/index.html
+          # (cd build/web && zip -r ../../release_assets/evolution-web.zip .)
 
       - name: Upload Release Assets
         # zizmor: ignore[superfluous-actions] -- declarative release creation and asset upload on tag push
