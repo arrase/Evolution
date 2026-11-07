@@ -19,6 +19,7 @@ func _init() -> void:
 	_test_25_generations_all_presets()
 	_test_main_scene_and_ui_integration()
 	_test_nonblocking_async_decision_and_smooth_panning()
+	_test_emergent_geopolitics_and_visual_artifacts()
 
 	EvoDecisionModel.wait_for_workers()
 	print("====================================================")
@@ -885,5 +886,269 @@ func _test_nonblocking_async_decision_and_smooth_panning() -> void:
 	for did in state.demes.keys():
 		max_id_len = maxi(max_id_len, str(did).length())
 	_assert(max_id_len < 64, "Deme IDs remain compact and bounded across generations (max len %d)" % max_id_len)
+
+	main.free()
+
+
+func _test_emergent_geopolitics_and_visual_artifacts() -> void:
+	print("-- Testing Emergent Biophysical Geopolitics, Pacts, Raids, Betrayals, War & Visual Artifacts --")
+	# 1. Strategy baseline probability differentiation & environmental weight modulation
+	var state_base := EvoPresets.create_preset_world("preset-rift-savanna", "en")
+	var sample_deme: EvoTypes.Deme = state_base.demes["deme-rift-west"]
+
+	EvoCatalog.apply_strategy_to_deme(state_base, sample_deme, "strat-war", "en")
+	_assert(sample_deme.last_dominant_decision_id == "dec-territorial-dispute", "strat-war baseline dominant decision is dec-territorial-dispute")
+	var war_base_disp := float(sample_deme.last_decision_probabilities.get("dec-territorial-dispute", 0.0))
+
+	EvoCatalog.apply_strategy_to_deme(state_base, sample_deme, "strat-cooperation", "en")
+	_assert(sample_deme.last_dominant_decision_id == "dec-cooperate-store", "strat-cooperation baseline dominant decision is dec-cooperate-store")
+
+	EvoCatalog.apply_strategy_to_deme(state_base, sample_deme, "strat-trade", "en")
+	_assert(sample_deme.last_dominant_decision_id == "dec-exchange-symbiosis", "strat-trade baseline dominant decision is dec-exchange-symbiosis")
+
+	EvoCatalog.apply_strategy_to_deme(state_base, sample_deme, "strat-expansion", "en")
+	_assert(sample_deme.last_dominant_decision_id == "dec-selective-migration", "strat-expansion baseline dominant decision is dec-selective-migration")
+
+	EvoCatalog.apply_strategy_to_deme(state_base, sample_deme, "strat-innovation", "en")
+	_assert(sample_deme.last_dominant_decision_id == "dec-explore-innovate", "strat-innovation baseline dominant decision is dec-explore-innovate")
+	_assert(war_base_disp > float(sample_deme.last_decision_probabilities.get("dec-territorial-dispute", 0.0)), "strat-war has higher baseline dispute weight than strat-innovation")
+
+	# 2. Non-forcing of conflict in ecological abundance vs scarcity modulation
+	var state_ab := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
+	state_ab.season = "wet_warm"
+	var ab_w: EvoTypes.Deme = state_ab.demes["deme-rift-west"]
+	var ab_e: EvoTypes.Deme = state_ab.demes["deme-rift-east"]
+	(state_ab.cells[ab_w.hex_id] as EvoTypes.HexCell).deme_ids.erase(ab_w.id)
+	(state_ab.cells[ab_e.hex_id] as EvoTypes.HexCell).deme_ids.erase(ab_e.id)
+	ab_w.hex_id = "0,0"
+	ab_e.hex_id = "1,0"
+	(state_ab.cells["0,0"] as EvoTypes.HexCell).deme_ids.append(ab_w.id)
+	(state_ab.cells["1,0"] as EvoTypes.HexCell).deme_ids.append(ab_e.id)
+	for cid in ["0,0", "1,0"]:
+		var c_ab: EvoTypes.HexCell = state_ab.cells[cid]
+		c_ab.carrying_capacity = c_ab.carrying_capacity_max
+		c_ab.current_resources = c_ab.carrying_capacity_max
+	ab_w.population = 35
+	ab_e.population = 35
+	ab_w.energy_reserves = 90.0
+	ab_e.energy_reserves = 90.0
+	EvoHeuristicScorer.modulate_deme_probabilities_for_turn(ab_w, state_ab.cells["0,0"], state_ab)
+	EvoHeuristicScorer.modulate_deme_probabilities_for_turn(ab_e, state_ab.cells["1,0"], state_ab)
+	var ab_disp_w := float(ab_w.last_decision_probabilities.get("dec-territorial-dispute", 0.0))
+	_assert(ab_w.last_dominant_decision_id != "dec-territorial-dispute", "In ecological abundance, strat-war does not default to territorial dispute")
+	_assert(ab_e.last_dominant_decision_id in ["dec-conservative-forage", "dec-cooperate-store"], "In ecological abundance, strat-cooperation favors peaceful foraging/storage")
+	EvoBiophysPhase.run_biophysical_phase(state_ab, "en")
+	var ab_conflicts := 0
+	for fl in state_ab.active_flows:
+		if fl.flow_type in ["war", "raid", "betrayal"]:
+			ab_conflicts += 1
+	_assert(ab_conflicts == 0, "Zero wars, raids, or betrayals occur during ecological abundance")
+
+	# Induce scarcity and verify dispute weight rises for martial deme
+	state_ab.season = "dry_cold"
+	(state_ab.cells["0,0"] as EvoTypes.HexCell).current_resources = 20.0
+	ab_w.energy_reserves = 20.0
+	ab_w.population = 75
+	EvoCatalog.compute_strategy_baseline_probabilities(ab_w, state_ab.traits_catalog)
+	EvoHeuristicScorer.modulate_deme_probabilities_for_turn(ab_w, state_ab.cells["0,0"], state_ab)
+	var sc_disp_w := float(ab_w.last_decision_probabilities.get("dec-territorial-dispute", 0.0))
+	_assert(sc_disp_w > ab_disp_w, "Environmental scarcity + surplus neighbor increases martial dispute probability (%.3f > %.3f)" % [sc_disp_w, ab_disp_w])
+
+	# 3. Active Pact (pact) formation, caloric risk-pooling transfer & collective defense bonus
+	var state_pact := EvoPresets.create_preset_world("preset-finite-island", "en", "strat-cooperation", "strat-trade")
+	var p_d1: EvoTypes.Deme = state_pact.demes["deme-island-1"]
+	var p_d2: EvoTypes.Deme = state_pact.demes["deme-island-2"]
+	(state_pact.cells[p_d2.hex_id] as EvoTypes.HexCell).deme_ids.erase(p_d2.id)
+	p_d2.hex_id = "0,-1"
+	(state_pact.cells["0,-1"] as EvoTypes.HexCell).deme_ids.append(p_d2.id)
+	for turn_i in range(2):
+		p_d1.last_decision_probabilities = {"dec-cooperate-store": 0.70, "dec-conservative-forage": 0.30}
+		p_d2.last_decision_probabilities = {"dec-exchange-symbiosis": 0.70, "dec-conservative-forage": 0.30}
+		EvoBiophysPhase.run_biophysical_phase(state_pact, "en")
+	_assert(EvoTypes.is_pact_active(state_pact, p_d1.id, p_d2.id), "Active pact forms after 2 consecutive cooperative/exchange turns")
+	var has_pact_chronicle := false
+	for e in state_pact.chronicle:
+		if e.event_type == "pact":
+			has_pact_chronicle = true
+			break
+	_assert(has_pact_chronicle, "Chronicle logs formal pact event on turn 2")
+	var has_pact_flow := false
+	for fl in state_pact.active_flows:
+		if fl.flow_type == "pact":
+			has_pact_flow = true
+			break
+	_assert(has_pact_flow, "Active pact emits 'pact' HexEdgeFlow")
+	var def_bonus := EvoEcologyInteraction.compute_pact_defense_bonus(p_d1, state_pact)
+	_assert(def_bonus > 0.15, "Active pact provides mutual defense bonus (%.2f)" % def_bonus)
+
+	# Caloric risk-pooling during scarcity
+	state_pact.season = "dry_cold"
+	p_d1.energy_reserves = 20.0
+	p_d2.energy_reserves = 130.0
+	(state_pact.cells[p_d1.hex_id] as EvoTypes.HexCell).current_resources = 30.0
+	(state_pact.cells[p_d2.hex_id] as EvoTypes.HexCell).current_resources = 500.0
+	p_d1.last_decision_probabilities = {"dec-cooperate-store": 0.75, "dec-conservative-forage": 0.25}
+	p_d2.last_decision_probabilities = {"dec-exchange-symbiosis": 0.75, "dec-conservative-forage": 0.25}
+	var pact_vecs := {
+		p_d1.id: EvoEcologyInteraction.compute_effective_vector(p_d1, state_pact),
+		p_d2.id: EvoEcologyInteraction.compute_effective_vector(p_d2, state_pact)
+	}
+	var pact_hawks := {p_d1.id: 1.0, p_d2.id: 1.0}
+	var pact_ext := {p_d1.id: 0.0, p_d2.id: 0.0}
+	var pact_geo_flows: Array[EvoTypes.HexEdgeFlow] = []
+	EvoEcologyInteraction.run_resource_and_symbiosis_phase(state_pact, "en", pact_vecs, pact_hawks, pact_ext, pact_geo_flows)
+	_assert(p_d1.energy_reserves > 20.0 and p_d2.energy_reserves < 130.0, "Pact risk-pooling transfers reserves from wealthy ally to distressed ally (%.1f, %.1f)" % [p_d1.energy_reserves, p_d2.energy_reserves])
+	_assert(not pact_geo_flows.is_empty(), "Ecology phase populates turn_geopolitical_flows")
+
+	# 4. Opportunistic Betrayal (betrayal) under severe environmental stress
+	var state_bet := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-trade")
+	var b_d1: EvoTypes.Deme = state_bet.demes["deme-rift-west"]
+	var b_d2: EvoTypes.Deme = state_bet.demes["deme-rift-east"]
+	(state_bet.cells[b_d1.hex_id] as EvoTypes.HexCell).deme_ids.erase(b_d1.id)
+	(state_bet.cells[b_d2.hex_id] as EvoTypes.HexCell).deme_ids.erase(b_d2.id)
+	b_d1.hex_id = "0,0"
+	b_d2.hex_id = "1,0"
+	(state_bet.cells["0,0"] as EvoTypes.HexCell).deme_ids.append(b_d1.id)
+	(state_bet.cells["1,0"] as EvoTypes.HexCell).deme_ids.append(b_d2.id)
+	var bet_pk := EvoTypes.make_pair_key(b_d1.id, b_d2.id)
+	state_bet.active_pacts[bet_pk] = 3
+	state_bet.season = "dry_cold"
+	(state_bet.cells["0,0"] as EvoTypes.HexCell).current_resources = 12.0
+	(state_bet.cells["0,0"] as EvoTypes.HexCell).carrying_capacity = 75.0
+	b_d1.energy_reserves = 16.0
+	b_d2.energy_reserves = 135.0
+	var b2_pop_before := b_d2.population
+	b_d1.cultural_trait_ids.assign(["cul-warrior-expansion", "cul-extraction-tools"])
+	b_d1.last_decision_probabilities = {
+		"dec-territorial-dispute": 0.50,
+		"dec-intensive-overexploit": 0.35,
+		"dec-conservative-forage": 0.15
+	}
+	b_d2.last_decision_probabilities = {"dec-cooperate-store": 0.70, "dec-conservative-forage": 0.30}
+	var bet_vecs := {
+		b_d1.id: EvoEcologyInteraction.compute_effective_vector(b_d1, state_bet),
+		b_d2.id: EvoEcologyInteraction.compute_effective_vector(b_d2, state_bet)
+	}
+	var bet_hawks := {b_d1.id: 1.0, b_d2.id: 1.0}
+	var bet_ext := {b_d1.id: 0.0, b_d2.id: 0.0}
+	var bet_geo_flows: Array[EvoTypes.HexEdgeFlow] = []
+	EvoEcologyInteraction.run_resource_and_symbiosis_phase(state_bet, "en", bet_vecs, bet_hawks, bet_ext, bet_geo_flows)
+	_assert(not EvoTypes.is_pact_active(state_bet, b_d1.id, b_d2.id), "Betrayal erases active pact from state.active_pacts")
+	_assert(b_d1.energy_reserves > 16.0 and b_d2.energy_reserves < 135.0, "Betrayal plunders surprise loot from victim reserves to betrayer")
+	_assert(b_d2.population < b2_pop_before, "Betrayal inflicts surprise casualties on victim")
+	_assert(not state_bet.disused_connections.is_empty() and int(state_bet.disused_connections[0].get("age", 0)) >= 1, "Betrayal records severed road in state.disused_connections")
+	var has_betrayal_flow := false
+	for fl in state_bet.active_flows:
+		if fl.flow_type == "betrayal":
+			has_betrayal_flow = true
+			break
+	_assert(has_betrayal_flow, "Betrayal emits 'betrayal' HexEdgeFlow")
+	var has_betrayal_chronicle := false
+	for e in state_bet.chronicle:
+		if e.event_type == "betrayal":
+			has_betrayal_chronicle = true
+			break
+	_assert(has_betrayal_chronicle, "Betrayal logs 'betrayal' ChronicleEntry")
+
+	# 5. Cross-border Raid (raid) under resource scarcity against a wealthy neighbor
+	var state_raid := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
+	var r_att: EvoTypes.Deme = state_raid.demes["deme-rift-west"]
+	var r_vic: EvoTypes.Deme = state_raid.demes["deme-rift-east"]
+	(state_raid.cells[r_att.hex_id] as EvoTypes.HexCell).deme_ids.erase(r_att.id)
+	(state_raid.cells[r_vic.hex_id] as EvoTypes.HexCell).deme_ids.erase(r_vic.id)
+	r_att.hex_id = "0,0"
+	r_vic.hex_id = "1,0"
+	(state_raid.cells["0,0"] as EvoTypes.HexCell).deme_ids.append(r_att.id)
+	(state_raid.cells["1,0"] as EvoTypes.HexCell).deme_ids.append(r_vic.id)
+	state_raid.season = "dry_cold"
+	(state_raid.cells["0,0"] as EvoTypes.HexCell).current_resources = 20.0
+	(state_raid.cells["1,0"] as EvoTypes.HexCell).current_resources = 260.0
+	r_att.population = 75
+	r_att.energy_reserves = 24.0
+	r_vic.population = 45
+	r_vic.energy_reserves = 115.0
+	r_att.last_decision_probabilities = {}
+	r_vic.last_decision_probabilities = {}
+	EvoBiophysPhase.run_biophysical_phase(state_raid, "en")
+	var has_raid_flow := false
+	for fl in state_raid.active_flows:
+		if fl.flow_type == "raid":
+			has_raid_flow = true
+			break
+	_assert(has_raid_flow, "Cross-border raid emits 'raid' HexEdgeFlow")
+	_assert(r_att.energy_reserves > 24.0 and r_vic.energy_reserves < 115.0, "Raid steals reserves from wealthy neighbor (raider %.1f, victim %.1f)" % [r_att.energy_reserves, r_vic.energy_reserves])
+	var has_raid_chronicle := false
+	for e in state_raid.chronicle:
+		if e.event_type == "raid":
+			has_raid_chronicle = true
+			break
+	_assert(has_raid_chronicle, "Raid logs 'raid' ChronicleEntry")
+
+	# 6. Conquering Horde (strat-war) real territorial Invasion (war) across hexes in multi-generation simulation
+	var state_war := EvoPresets.create_preset_world("preset-finite-island", "en", "strat-war", "strat-cooperation")
+	var war_events_count := 0
+	var war_flows_seen := 0
+	var warband_created := false
+	for g in range(18):
+		EvoTurnEngine.advance_generation(state_war, "en")
+		for fl in state_war.active_flows:
+			if fl.flow_type == "war":
+				war_flows_seen += 1
+		for did in state_war.demes.keys():
+			if str(did).contains("-w"):
+				warband_created = true
+	for e in state_war.chronicle:
+		if e.event_type == "war":
+			war_events_count += 1
+	_assert(war_events_count >= 1 and war_flows_seen >= 1, "strat-war marches and triggers real territorial invasions ('war' events=%d, flows=%d) in multi-turn simulation" % [war_events_count, war_flows_seen])
+	_assert(warband_created, "Territorial invasion spawns conquering warband demes ('-w') in target hexes")
+
+	# 7. All 8 new procedural pixel-art sprites & UI/renderer integration
+	EvoPixelArtGen.ensure_all_assets(true)
+	var new_sprite_keys: Array[String] = [
+		"prop_war_banner",
+		"prop_raid_loot",
+		"prop_pact_totem",
+		"prop_betrayal_ruin",
+		"icon_war",
+		"icon_raid",
+		"icon_pact",
+		"icon_betrayal"
+	]
+	for skey in new_sprite_keys:
+		var subdir := "villages" if skey.begins_with("prop_") else "ui"
+		var file_path := "res://assets/sprites/%s/%s.png" % [subdir, skey]
+		_assert(FileAccess.file_exists(file_path), "Generated sprite PNG exists on disk: %s" % file_path)
+		var tex := EvoPixelArtGen.get_texture(skey)
+		_assert(tex != null and tex.get_width() >= 16 and tex.get_height() >= 16, "Loaded sprite Texture2D is valid and non-empty: %s" % skey)
+
+	for icon_key in ["war", "raid", "pact", "betrayal"]:
+		var ui_tex := EvoUiStyle.get_pixel_icon(icon_key)
+		_assert(ui_tex != null, "EvoUiStyle.get_pixel_icon('%s') returns valid Texture2D" % icon_key)
+
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var main: EvoMainController = packed.instantiate() as EvoMainController
+	main.quit_on_close_enabled = false
+	root.add_child(main)
+	if main.camera == null:
+		main._ready()
+
+	main.world_state = state_pact
+	main.world_renderer.set_world_state(state_pact)
+	main.hud.set_world_state(state_pact)
+	main.world_renderer._rebuild()
+	main.world_renderer._process(0.016)
+
+	var pact_summary := EvoHudInspectorPanel.format_active_pacts_summary(state_pact, "en", p_d1)
+	_assert(pact_summary.contains("🤝"), "EvoHudInspectorPanel.format_active_pacts_summary displays active pact partner")
+	var pact_rel_lines := EvoHudInspectorPanel.build_deme_relations_lines(state_pact, "en", p_d1)
+	_assert(not pact_rel_lines.is_empty(), "EvoHudInspectorPanel.build_deme_relations_lines includes pact & relation lines")
+
+	main.hud.open_notebook_modal()
+	for f_key in ["war", "raid", "pact", "betrayal"]:
+		_assert(main.hud.notebook_modal._filter_buttons.has(f_key), "EvoNotebookModal has filter button for '%s'" % f_key)
+		main.hud.notebook_modal._on_filter_pressed(f_key)
+		_assert(main.hud.notebook_modal._active_filter == f_key, "EvoNotebookModal switches active filter to '%s'" % f_key)
+	main.hud.notebook_modal.close_modal()
 
 	main.free()

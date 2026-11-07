@@ -31,8 +31,13 @@ static func refresh_ollama_status_async() -> void:
 	EvoOllamaClient.refresh_ollama_status_async()
 
 
-static func is_decision_eligible(deme: EvoTypes.Deme, dec: EvoTypes.DecisionDef, traits_catalog: Dictionary = {}) -> bool:
-	return EvoHeuristicScorer.is_decision_eligible(deme, dec, traits_catalog)
+static func is_decision_eligible(
+	deme: EvoTypes.Deme,
+	dec: EvoTypes.DecisionDef,
+	traits_catalog: Dictionary = {},
+	state: EvoTypes.WorldState = null
+) -> bool:
+	return EvoHeuristicScorer.is_decision_eligible(deme, dec, traits_catalog, state)
 
 
 static func get_eligible_decisions(
@@ -42,6 +47,54 @@ static func get_eligible_decisions(
 	state: EvoTypes.WorldState = null
 ) -> Array[EvoTypes.DecisionDef]:
 	return EvoHeuristicScorer.get_eligible_decisions(deme, decisions_catalog, traits_catalog, state)
+
+
+static func get_eligible_decision_ids(
+	deme: EvoTypes.Deme,
+	decisions_catalog: Dictionary,
+	traits_catalog: Dictionary = {},
+	state: EvoTypes.WorldState = null
+) -> Array[String]:
+	return EvoHeuristicScorer.get_eligible_decision_ids(deme, decisions_catalog, traits_catalog, state)
+
+
+static func pick_dominant_decision(probs: Dictionary) -> String:
+	return EvoHeuristicScorer.pick_dominant_decision(probs)
+
+
+static func compute_environmental_decision_weights(
+	deme: EvoTypes.Deme,
+	cell: EvoTypes.HexCell,
+	state: EvoTypes.WorldState
+) -> Dictionary:
+	return EvoHeuristicScorer.compute_environmental_decision_weights(deme, cell, state)
+
+
+static func modulate_deme_probabilities_for_turn(
+	deme: EvoTypes.Deme,
+	cell: EvoTypes.HexCell,
+	state: EvoTypes.WorldState
+) -> void:
+	EvoHeuristicScorer.modulate_deme_probabilities_for_turn(deme, cell, state)
+
+
+static func blend_with_environmental_weights(
+	model_probs: Dictionary,
+	deme: EvoTypes.Deme,
+	cell: EvoTypes.HexCell,
+	state: EvoTypes.WorldState
+) -> Dictionary:
+	var eligible_ids := EvoHeuristicScorer.get_eligible_decision_ids(deme, state.decisions_catalog, state.traits_catalog, state)
+	if eligible_ids.is_empty():
+		return {"probabilities": model_probs.duplicate(), "dominant_decision_id": EvoHeuristicScorer.pick_dominant_decision(model_probs)}
+	var norm_model: Dictionary = EvoHeuristicScorer.normalize_decision_probabilities(model_probs, eligible_ids)["probabilities"]
+	var env_weights := EvoHeuristicScorer.compute_environmental_decision_weights(deme, cell, state)
+	var blended: Dictionary = {}
+	for dec_id in eligible_ids:
+		var m_prob := float(norm_model.get(dec_id, 0.0))
+		var e_weight := float(env_weights.get(dec_id, 0.0))
+		blended[dec_id] = 0.60 * m_prob + 0.40 * e_weight
+	return EvoHeuristicScorer.normalize_decision_probabilities(blended, eligible_ids)
 
 
 static func normalize_decision_probabilities(
@@ -65,6 +118,10 @@ static func build_compact_decision_criteria(eligible_decisions: Array[EvoTypes.D
 
 static func compute_deme_evaluation_signature(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> String:
 	return EvoHeuristicScorer.compute_deme_evaluation_signature(deme, state)
+
+
+static func build_deme_evaluation_signature(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> String:
+	return EvoHeuristicScorer.build_deme_evaluation_signature(deme, state)
 
 
 static func build_contextual_justification(
@@ -103,15 +160,29 @@ static func evaluate_deme(
 			"justification": deme.last_justification
 		}
 
+	var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
+	EvoHeuristicScorer.modulate_deme_probabilities_for_turn(deme, cell, state)
+	var fallback_dom_prob := float(deme.last_decision_probabilities.get(deme.last_dominant_decision_id, 0.5))
+	if deme.last_justification == "":
+		deme.last_justification = build_contextual_justification(
+			deme,
+			cell,
+			state,
+			deme.last_dominant_decision_id,
+			fallback_dom_prob,
+			lang,
+			deme.last_confidence
+		)
+
 	var sig := compute_deme_evaluation_signature(deme, state)
 	deme.set_meta("eval_sig", sig)
 	var cached_entry := EvoOllamaClient.lookup_or_enqueue_single_deme(sig, deme, state)
 	if not cached_entry.is_empty():
-		var probs: Dictionary = cached_entry["probabilities"]
-		var dominant_id: String = str(cached_entry["dominant_decision_id"])
+		var blended := blend_with_environmental_weights(cached_entry["probabilities"], deme, cell, state)
+		var probs: Dictionary = blended["probabilities"]
+		var dominant_id: String = str(blended["dominant_decision_id"])
 		var confidence: float = float(cached_entry["confidence"])
 		var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
-		var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
 		var justification := build_contextual_justification(
 			deme,
 			cell,
@@ -121,7 +192,10 @@ static func evaluate_deme(
 			lang,
 			confidence
 		)
+		deme.last_decision_probabilities = probs.duplicate()
+		deme.last_dominant_decision_id = dominant_id
 		deme.last_confidence = confidence
+		deme.last_justification = justification
 		return {
 			"probabilities": probs.duplicate(),
 			"dominant_decision_id": dominant_id,
@@ -143,6 +217,19 @@ static func evaluate_all_demes(state: EvoTypes.WorldState, lang: String = "es") 
 		var deme: EvoTypes.Deme = state.demes[deme_id]
 		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == EvoUserSettings.primary_model):
 			deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
+		if state.cells.has(deme.hex_id):
+			var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
+			EvoHeuristicScorer.modulate_deme_probabilities_for_turn(deme, cell, state)
+			var dom_p := float(deme.last_decision_probabilities.get(deme.last_dominant_decision_id, 0.5))
+			deme.last_justification = build_contextual_justification(
+				deme,
+				cell,
+				state,
+				deme.last_dominant_decision_id,
+				dom_p,
+				lang,
+				deme.last_confidence
+			)
 		var sig := compute_deme_evaluation_signature(deme, state)
 		deme.set_meta("eval_sig", sig)
 		if buckets.has(sig):
@@ -161,17 +248,18 @@ static func evaluate_all_demes(state: EvoTypes.WorldState, lang: String = "es") 
 		var bucket: Dictionary = buckets[sig]
 		var group: Array = bucket["demes"]
 		var entry: Dictionary = live_results[sig]
-		var probs: Dictionary = entry["probabilities"]
-		var dominant_id: String = str(entry["dominant_decision_id"])
 		var confidence: float = float(entry["confidence"])
-		var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
 		for d in group:
 			var deme: EvoTypes.Deme = d
+			var cell: EvoTypes.HexCell = state.cells[deme.hex_id] if state.cells.has(deme.hex_id) else null
+			var blended := blend_with_environmental_weights(entry["probabilities"], deme, cell, state)
+			var probs: Dictionary = blended["probabilities"]
+			var dominant_id: String = str(blended["dominant_decision_id"])
+			var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
 			deme.last_decision_probabilities = probs.duplicate()
 			deme.last_dominant_decision_id = dominant_id
 			deme.last_confidence = confidence
-			if state.cells.has(deme.hex_id):
-				var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
+			if cell != null:
 				deme.last_justification = build_contextual_justification(
 					deme,
 					cell,
@@ -216,16 +304,17 @@ static func apply_completed_live_results(state: EvoTypes.WorldState, lang: Strin
 		var sig: String = str(deme.get_meta("eval_sig", "")) if deme.has_meta("eval_sig") else compute_deme_evaluation_signature(deme, state)
 		if newly_completed.has(sig):
 			var entry: Dictionary = newly_completed[sig]
-			var probs: Dictionary = entry["probabilities"]
-			var dominant_id: String = str(entry["dominant_decision_id"])
+			var cell: EvoTypes.HexCell = state.cells[deme.hex_id] if state.cells.has(deme.hex_id) else null
+			var blended := blend_with_environmental_weights(entry["probabilities"], deme, cell, state)
+			var probs: Dictionary = blended["probabilities"]
+			var dominant_id: String = str(blended["dominant_decision_id"])
 			var confidence: float = float(entry["confidence"])
 			var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
 			var dom_changed := deme.last_dominant_decision_id != dominant_id
 			deme.last_decision_probabilities = probs.duplicate()
 			deme.last_dominant_decision_id = dominant_id
 			deme.last_confidence = confidence
-			if state.cells.has(deme.hex_id):
-				var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
+			if cell != null:
 				deme.last_justification = build_contextual_justification(
 					deme,
 					cell,

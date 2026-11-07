@@ -54,6 +54,24 @@ static func draw_village_or_ui_sprite(sprite_name: String) -> Image:
 			return _draw_road_block_sign()
 		"road_lantern":
 			return _draw_road_lantern()
+		"prop_war_banner", "act_war":
+			return _draw_prop_war_banner()
+		"prop_raid_loot", "act_raid":
+			return _draw_prop_raid_loot()
+		"prop_pact_totem", "act_pact":
+			return _draw_prop_pact_totem()
+		"prop_betrayal_ruin", "act_betrayal":
+			return _draw_prop_betrayal_ruin()
+		"effect_battle_sparks":
+			return _draw_effect_battle_sparks()
+		"icon_war":
+			return _draw_icon_war()
+		"icon_raid":
+			return _draw_icon_raid()
+		"icon_pact":
+			return _draw_icon_pact()
+		"icon_betrayal":
+			return _draw_icon_betrayal()
 		"villager_idle":
 			return draw_villager(0, Color("#e07a5f"))
 		"villager_walk1":
@@ -465,6 +483,203 @@ static func _draw_road_lantern() -> Image:
 	_rect(img, 13, 10, 2, 3, Color("#fef08a"))
 	_rect(img, 11, 8, 6, 1, Color("#374151"))
 	_rect(img, 12, 14, 4, 1, Color("#374151"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_prop_war_banner() -> Image:
+	var img := _new_canvas(24, 24)
+	_ellipse(img, 12, 21, 7, 2, C_SHADOW)
+	# Crossed war spears behind standard
+	_line(img, 4, 20, 19, 5, Color("#5c3317"))
+	_line(img, 5, 20, 19, 6, Color("#8c5230"))
+	_line(img, 20, 20, 5, 5, Color("#5c3317"))
+	_line(img, 19, 20, 5, 6, Color("#8c5230"))
+	# Steel spearheads
+	_rect(img, 18, 3, 3, 3, Color("#cbd5e1"))
+	_px(img, 20, 2, Color("#f8fafc"))
+	_rect(img, 3, 3, 3, 3, Color("#cbd5e1"))
+	_px(img, 3, 2, Color("#f8fafc"))
+	# Central iron pole & crossbar
+	_rect(img, 11, 3, 2, 18, Color("#475569"))
+	_line(img, 11, 3, 11, 20, Color("#94a3b8"))
+	_rect(img, 6, 6, 12, 2, Color("#d97706"))
+	_line(img, 7, 6, 16, 6, Color("#fde047"))
+	_circle(img, 12, 3, 2, Color("#fbbf24"))
+	# Tattered crimson battle pennant
+	_rect(img, 8, 8, 8, 8, Color("#dc2626"))
+	_rect(img, 9, 8, 6, 7, Color("#ef4444"))
+	_rect(img, 8, 16, 2, 3, Color("#991b1b"))
+	_rect(img, 11, 16, 2, 2, Color("#991b1b"))
+	_rect(img, 14, 16, 2, 3, Color("#991b1b"))
+	# Golden war emblem on banner
+	_circle(img, 12, 11, 2, Color("#fde047"))
+	_px(img, 12, 11, Color("#991b1b"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_prop_raid_loot() -> Image:
+	var img := _new_canvas(24, 24)
+	_ellipse(img, 12, 21, 8, 2, C_SHADOW)
+	# Spilled golden grain / amber reserves
+	_circle(img, 5, 19, 2, Color("#f59e0b"))
+	_px(img, 5, 18, Color("#fde047"))
+	_circle(img, 18, 20, 2, Color("#fbbf24"))
+	_px(img, 15, 21, Color("#fde047"))
+	_px(img, 7, 21, Color("#fde047"))
+	# Raider plunder sack
+	_ellipse(img, 11, 15, 6, 5, Color("#7f4f24"))
+	_ellipse(img, 10, 15, 5, 4, Color("#b07d4f"))
+	_rect(img, 8, 9, 6, 2, Color("#d97706"))
+	_line(img, 8, 10, 13, 10, Color("#fde047"))
+	# Overflowing golden grain at sack mouth
+	_ellipse(img, 11, 8, 4, 2, Color("#f59e0b"))
+	_rect(img, 9, 7, 4, 2, Color("#fde047"))
+	# Burning torch leaning on sack
+	_line(img, 15, 20, 19, 10, Color("#5c3317"))
+	_line(img, 16, 20, 20, 10, Color("#8c5230"))
+	_ellipse(img, 19, 8, 3, 3, Color("#ef4444"))
+	_circle(img, 19, 8, 2, Color("#f97316"))
+	_px(img, 19, 7, Color("#fde047"))
+	_px(img, 20, 5, Color("#fb923c"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_prop_pact_totem() -> Image:
+	var img := _new_canvas(24, 24)
+	_ellipse(img, 12, 21, 8, 2, C_SHADOW)
+	# Stepped stone pedestal
+	_rect(img, 6, 18, 12, 3, Color("#78716c"))
+	_rect(img, 7, 17, 10, 2, Color("#a8a29e"))
+	# Twin emerald/gold banners flanking obelisk
+	_rect(img, 4, 7, 16, 2, Color("#d97706"))
+	_rect(img, 5, 9, 3, 7, Color("#059669"))
+	_line(img, 6, 9, 6, 15, Color("#34d399"))
+	_rect(img, 16, 9, 3, 7, Color("#059669"))
+	_line(img, 17, 9, 17, 15, Color("#34d399"))
+	# Carved stone & gold alliance obelisk
+	_rect(img, 9, 6, 6, 12, Color("#d6d3d1"))
+	_rect(img, 10, 6, 4, 12, Color("#e7e5e4"))
+	for y in range(2, 6):
+		var hw := y - 2
+		_rect(img, 12 - hw, y, hw * 2 + 1, 1, Color("#fbbf24") if y < 5 else Color("#d97706"))
+	# Emerald/cyan harmony bands & golden seal
+	_rect(img, 9, 8, 6, 2, Color("#10b981"))
+	_line(img, 10, 8, 13, 8, Color("#6ee7b7"))
+	_rect(img, 9, 13, 6, 2, Color("#0d9488"))
+	_line(img, 10, 13, 13, 13, Color("#2dd4bf"))
+	_circle(img, 12, 11, 2, Color("#fbbf24"))
+	_px(img, 12, 11, Color("#fde047"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_prop_betrayal_ruin() -> Image:
+	var img := _new_canvas(24, 24)
+	_ellipse(img, 12, 21, 8, 2, C_SHADOW)
+	# Dark purple/charcoal smoke wisps
+	_circle(img, 6, 10, 2, Color("#3b0764"))
+	_circle(img, 7, 6, 2, Color("#4c1d95"))
+	_circle(img, 18, 9, 2, Color("#374151"))
+	_px(img, 5, 4, Color("#6b21a8"))
+	# Shattered alliance pillar base
+	_rect(img, 6, 18, 12, 3, Color("#44403c"))
+	_rect(img, 8, 12, 8, 7, Color("#78716c"))
+	_rect(img, 9, 13, 6, 5, Color("#57534e"))
+	# Broken emerald band & rubble
+	_rect(img, 8, 15, 3, 2, Color("#047857"))
+	_rect(img, 17, 18, 3, 3, Color("#78716c"))
+	# Jagged crimson fracture & piercing dagger
+	_line(img, 9, 12, 14, 18, Color("#be123c"))
+	_line(img, 10, 12, 13, 17, Color("#f43f5e"))
+	_line(img, 17, 4, 11, 14, Color("#e2e8f0"))
+	_line(img, 18, 5, 12, 14, Color("#ef4444"))
+	_line(img, 15, 4, 19, 8, Color("#fbbf24"))
+	_circle(img, 18, 4, 2, Color("#be123c"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_effect_battle_sparks() -> Image:
+	var img := _new_canvas(24, 24)
+	_line(img, 4, 12, 20, 12, Color("#ef4444"))
+	_line(img, 12, 4, 12, 20, Color("#ef4444"))
+	_line(img, 6, 6, 18, 18, Color("#f97316"))
+	_line(img, 18, 6, 6, 18, Color("#f97316"))
+	_circle(img, 12, 12, 4, Color("#fbbf24"))
+	_circle(img, 12, 12, 2, Color("#fef08a"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_icon_war() -> Image:
+	var img := _new_canvas(16, 16)
+	# Crossed war spears in steel
+	_line(img, 2, 13, 13, 2, Color("#94a3b8"))
+	_line(img, 3, 13, 13, 3, Color("#f8fafc"))
+	_line(img, 13, 13, 2, 2, Color("#94a3b8"))
+	_line(img, 12, 13, 2, 3, Color("#f8fafc"))
+	# Vivid crimson & steel battle shield
+	_rect(img, 5, 4, 6, 7, Color("#991b1b"))
+	_rect(img, 6, 5, 4, 5, Color("#ef4444"))
+	_rect(img, 6, 11, 4, 2, Color("#dc2626"))
+	_line(img, 5, 4, 10, 4, Color("#cbd5e1"))
+	_px(img, 8, 8, Color("#fde047"))
+	_px(img, 7, 8, Color("#fde047"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_icon_raid() -> Image:
+	var img := _new_canvas(16, 16)
+	# Plunder loot sack
+	_ellipse(img, 7, 10, 4, 4, Color("#92400e"))
+	_ellipse(img, 7, 10, 3, 3, Color("#d97706"))
+	_rect(img, 5, 6, 4, 2, Color("#b45309"))
+	_line(img, 5, 7, 8, 7, Color("#fde047"))
+	# Amber coins / grain & flame spark
+	_rect(img, 6, 4, 3, 2, Color("#fbbf24"))
+	_px(img, 7, 9, Color("#fde047"))
+	_px(img, 3, 13, Color("#fbbf24"))
+	_px(img, 11, 13, Color("#fde047"))
+	_circle(img, 12, 6, 2, Color("#ef4444"))
+	_px(img, 12, 6, Color("#fde047"))
+	_px(img, 12, 4, Color("#f97316"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_icon_pact() -> Image:
+	var img := _new_canvas(16, 16)
+	# Golden/emerald alliance seal
+	_circle(img, 8, 8, 6, Color("#d97706"))
+	_circle(img, 8, 8, 5, Color("#fbbf24"))
+	_circle(img, 8, 8, 4, Color("#059669"))
+	_circle(img, 8, 8, 3, Color("#10b981"))
+	# Clasped emblem across center
+	_rect(img, 4, 7, 8, 2, Color("#fde047"))
+	_rect(img, 6, 6, 4, 4, Color("#fef08a"))
+	_rect(img, 7, 7, 2, 2, Color("#10b981"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_icon_betrayal() -> Image:
+	var img := _new_canvas(16, 16)
+	# Broken golden ring/seal halves
+	_circle(img, 5, 9, 3, Color("#d97706"))
+	_px(img, 4, 9, Color("#fde047"))
+	_circle(img, 11, 9, 3, Color("#d97706"))
+	_px(img, 12, 9, Color("#fde047"))
+	_rect(img, 7, 6, 2, 7, Color(0, 0, 0, 0))
+	# Jagged crimson dagger breaking the seal
+	_line(img, 12, 2, 5, 13, Color("#be123c"))
+	_line(img, 11, 2, 4, 13, Color("#f8fafc"))
+	_line(img, 11, 3, 6, 11, Color("#ef4444"))
+	_line(img, 9, 2, 13, 6, Color("#fbbf24"))
+	_px(img, 13, 2, Color("#f43f5e"))
 	_apply_soft_outline(img)
 	return img
 

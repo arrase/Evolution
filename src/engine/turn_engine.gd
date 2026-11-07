@@ -14,7 +14,6 @@ static func advance_generation(state: EvoTypes.WorldState, lang: String = "es") 
 	EvoDecisionModel.evaluate_all_demes(state, lang)
 	EvoBiophysPhase.run_biophysical_phase(state, lang)
 	EvoMilestonePhase.run_milestone_phase(state, lang)
-	EvoDecisionModel.prefetch_for_state(state)
 
 	var new_entries: Array[EvoTypes.ChronicleEntry] = []
 	var has_milestone := false

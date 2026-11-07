@@ -2,7 +2,23 @@ class_name EvoEnvPhase
 extends RefCounted
 
 
+static func _prune_stale_pacts(state: EvoTypes.WorldState) -> void:
+	if state.active_pacts.is_empty():
+		return
+	var sep := EvoTypes.make_pair_key("a", "b").trim_prefix("a").trim_suffix("b")
+	var stale_keys: Array[String] = []
+	for pk_var in state.active_pacts.keys():
+		var pk := str(pk_var)
+		var parts := pk.split(sep)
+		if parts.size() != 2 or not state.demes.has(parts[0]) or not state.demes.has(parts[1]):
+			stale_keys.append(pk)
+	for pk in stale_keys:
+		state.active_pacts.erase(pk)
+
+
 static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "es") -> void:
+	_prune_stale_pacts(state)
+
 	var prev_generation := state.generation
 	var next_generation := state.generation + 1
 	state.generation = next_generation
@@ -16,7 +32,7 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 		c_copy["broken_gen"] = int(existing_conn.get("broken_gen", prev_generation))
 		prev_exchange_conns.append(c_copy)
 	for fl in state.active_flows:
-		if fl.flow_type in ["exchange", "cooperate"]:
+		if fl.flow_type in ["exchange", "cooperate", "pact"]:
 			var fa := fl.from_deme_id
 			var fb := fl.to_deme_id
 			var already_saved := false
@@ -131,6 +147,8 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 							break
 					if not has_relatives and state.lineage_tree.has(deme.lineage_id):
 						(state.lineage_tree[deme.lineage_id] as EvoTypes.LineageNode).extinct_generation = next_generation
+
+	_prune_stale_pacts(state)
 
 	var delta_temp: float = 0.04 if state.season == "wet_warm" else -0.04
 	var delta_hum: float = 0.05 if state.season == "wet_warm" else -0.05

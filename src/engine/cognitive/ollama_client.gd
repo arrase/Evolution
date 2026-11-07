@@ -383,6 +383,17 @@ static func _resolve_ollama_model_for_tag(desired: String, status: Dictionary) -
 	return s_tag
 
 
+static func build_compact_system_one_state(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Dictionary:
+	var cell: EvoTypes.HexCell = state.cells[deme.hex_id] if state.cells.has(deme.hex_id) else null
+	var top_prior := EvoHeuristicScorer.build_top_strategy_prior(deme, cell, state)
+	var geo_summary := EvoHeuristicScorer.build_geopolitics_summary(deme, cell, state)
+	return {
+		"briefing": EvoHeuristicScorer.build_compact_system_one_state(deme, state, top_prior, geo_summary),
+		"strategy_traits_prior": top_prior,
+		"geopolitics": geo_summary
+	}
+
+
 static func build_live_job(sig: String, rep: EvoTypes.Deme, state: EvoTypes.WorldState) -> Dictionary:
 	if not state.cells.has(rep.hex_id):
 		return {}
@@ -392,14 +403,30 @@ static func build_live_job(sig: String, rep: EvoTypes.Deme, state: EvoTypes.Worl
 		eligible_ids.append(dec.id)
 	if eligible_ids.is_empty():
 		return {}
+	var cell: EvoTypes.HexCell = state.cells[rep.hex_id]
 	var preferred_tag := rep.decision_model_tag if rep.decision_model_tag != "" else EvoHeuristicScorer.resolve_deme_decision_model_tag(rep.id)
+	var top_prior := EvoHeuristicScorer.build_top_strategy_prior(rep, cell, state)
+	var geo_summary := EvoHeuristicScorer.build_geopolitics_summary(rep, cell, state)
 	return {
 		"sig": sig,
 		"preferred_tag": preferred_tag,
-		"briefing": EvoHeuristicScorer.build_compact_system_one_state(rep, state),
+		"briefing": EvoHeuristicScorer.build_compact_system_one_state(rep, state, top_prior, geo_summary),
+		"strategy_traits_prior": top_prior,
+		"geopolitics": geo_summary,
 		"criteria": EvoHeuristicScorer.build_compact_decision_criteria(eligible_decisions),
 		"eligible_ids": eligible_ids
 	}
+
+
+static func _can_enqueue_locked() -> bool:
+	if _shutdown_requested:
+		return false
+	if not _status_probed:
+		return true
+	return bool(_cached_ollama_status.get("connected", false)) and (
+		bool(_cached_ollama_status.get("primary_ready", false))
+		or bool(_cached_ollama_status.get("secondary_ready", false))
+	)
 
 
 static func lookup_or_enqueue_single_deme(
@@ -412,7 +439,7 @@ static func lookup_or_enqueue_single_deme(
 	_mutex.lock()
 	if _live_signature_cache.has(sig):
 		cached_entry = (_live_signature_cache[sig] as Dictionary).duplicate(true)
-	elif not _pending_jobs_by_sig.has(sig) and not _shutdown_requested:
+	elif not _pending_jobs_by_sig.has(sig) and _can_enqueue_locked():
 		need_enqueue = true
 	_mutex.unlock()
 
@@ -442,13 +469,14 @@ static func sync_and_enqueue_batch(buckets: Dictionary, state: EvoTypes.WorldSta
 	var missing_sigs: Array[String] = []
 	if not buckets.is_empty():
 		_mutex.lock()
+		var can_enq := _can_enqueue_locked()
 		for pending_sig in _pending_jobs_by_sig.keys():
 			if not buckets.has(pending_sig):
 				_pending_jobs_by_sig.erase(pending_sig)
 		for sig in buckets.keys():
 			if _live_signature_cache.has(sig):
 				live_results[sig] = (_live_signature_cache[sig] as Dictionary).duplicate(true)
-			elif not _pending_jobs_by_sig.has(sig) and not _shutdown_requested:
+			elif can_enq and not _pending_jobs_by_sig.has(sig):
 				missing_sigs.append(str(sig))
 		_mutex.unlock()
 
@@ -474,10 +502,11 @@ static func sync_and_enqueue_batch(buckets: Dictionary, state: EvoTypes.WorldSta
 static func prefetch_for_reps(reps_by_sig: Dictionary, state: EvoTypes.WorldState) -> void:
 	var missing_sigs: Array[String] = []
 	_mutex.lock()
+	var can_enq := _can_enqueue_locked()
 	for pending_sig in _pending_jobs_by_sig.keys():
 		if not reps_by_sig.has(pending_sig):
 			_pending_jobs_by_sig.erase(pending_sig)
-	if not _shutdown_requested:
+	if can_enq:
 		for sig in reps_by_sig.keys():
 			if not _live_signature_cache.has(sig) and not _pending_jobs_by_sig.has(sig):
 				missing_sigs.append(str(sig))
@@ -609,7 +638,9 @@ static func _evaluate_job_batch_with_ollama(
 				"num_ctx": ctx_len
 			},
 			"state": {
-				"briefing": str(item["briefing"])
+				"briefing": str(item["briefing"]),
+				"strategy_traits_prior": item.get("strategy_traits_prior", {}),
+				"geopolitics": item.get("geopolitics", {})
 			},
 			"questions": {
 				"decision": {

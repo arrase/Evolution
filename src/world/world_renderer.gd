@@ -309,10 +309,11 @@ func _rebuild() -> void:
 	_lift = camera.height_scale()
 	_brush_hexes = _compute_brush_hexes()
 	_rebuild_cell_topology()
+	_layout_columns()
 	_villages = EvoPropFloraRenderer.collect_villages(self)
 	_roads = EvoRoadNetworkRenderer.collect_roads(self)
 	_static_props = EvoPropFloraRenderer.collect_static_props(self)
-	_reproject()
+	_network_layer.queue_redraw()
 	queue_redraw()
 
 
@@ -335,6 +336,13 @@ func _reproject() -> void:
 
 
 func _rebuild_cell_topology() -> void:
+	var topo_sig: Array = [snappedf(world_state.sea_level, 0.001), world_state.cells.size()]
+	for hex_id in world_state.cells:
+		var c: EvoTypes.HexCell = world_state.cells[hex_id]
+		topo_sig.append(c.biome if not _is_water(c) else "ocean")
+	if _cell_flora_cache.has("__topo_sig__") and (_cell_flora_cache["__topo_sig__"] as Array) == topo_sig:
+		return
+	_cell_flora_cache["__topo_sig__"] = topo_sig
 	_animated_fx_ids.clear()
 	_ocean_ids.clear()
 	for hex_id in world_state.cells:

@@ -159,6 +159,117 @@ static func compute_strategy_vector(strategy: EvoTypes.StrategyDef, traits_catal
 	)
 
 
+static func compute_deme_vector(deme: EvoTypes.Deme, traits_catalog: Dictionary) -> EvoTypes.BiophysicalVector:
+	var cost: float = 0.0
+	var extract: float = 0.0
+	var eco: float = 0.0
+	var mobility: float = 0.0
+	var cohesion: float = 0.0
+	var threshold: float = 0.0
+	for tid in deme.biological_trait_ids:
+		if traits_catalog.has(tid):
+			var v := (traits_catalog[tid] as EvoTypes.TraitDef).vector
+			cost += v.metabolic_cost
+			extract += v.extraction_efficiency
+			eco += v.ecological_impact
+			mobility += v.spatial_mobility
+			cohesion += v.social_cohesion
+			threshold += v.transmission_threshold
+	for tid in deme.cultural_trait_ids:
+		if traits_catalog.has(tid):
+			var v := (traits_catalog[tid] as EvoTypes.TraitDef).vector
+			cost += v.metabolic_cost
+			extract += v.extraction_efficiency
+			eco += v.ecological_impact
+			mobility += v.spatial_mobility
+			cohesion += v.social_cohesion
+			threshold += v.transmission_threshold
+	return EvoThermodynamics.clamp_vector(
+		EvoTypes.BiophysicalVector.new(cost, extract, eco, mobility, cohesion, threshold)
+	)
+
+
+static func deme_has_trait(deme: EvoTypes.Deme, trait_id: String) -> bool:
+	return deme.biological_trait_ids.has(trait_id) or deme.cultural_trait_ids.has(trait_id)
+
+
+static func compute_baseline_decision_weights(deme: EvoTypes.Deme, traits_catalog: Dictionary = {}) -> Dictionary:
+	var effective_traits := traits_catalog if not traits_catalog.is_empty() else create_base_traits_catalog()
+	var vec := compute_deme_vector(deme, effective_traits)
+	var has_cultural_cap := deme_has_cultural_capacity(deme, effective_traits) or deme_has_trait(deme, "bio-encephalization") or deme_has_trait(deme, "bio-social-instinct")
+	var has_warrior := deme_has_trait(deme, "cul-warrior-expansion")
+	var has_r_strat := deme_has_trait(deme, "bio-r-strategy")
+	var coop_cohesion := 0.0 if has_warrior else maxf(0.0, vec.social_cohesion) * (0.18 if has_r_strat else 0.45)
+
+	var raw_scores := {
+		"dec-conservative-forage": (
+			0.22
+			+ maxf(0.0, vec.ecological_impact) * 0.45
+			+ (0.20 if deme_has_trait(deme, "cul-communal-conservation") else 0.0)
+		),
+		"dec-intensive-overexploit": (
+			0.08
+			+ maxf(0.0, vec.extraction_efficiency) * 0.35
+			+ maxf(0.0, -vec.ecological_impact) * 0.30
+			+ (0.18 if deme_has_trait(deme, "cul-extraction-tools") else 0.0)
+			+ (0.12 if has_r_strat else 0.0)
+		),
+		"dec-selective-migration": (
+			0.10
+			+ maxf(0.0, vec.spatial_mobility) * 0.45
+			+ (0.28 if (deme_has_trait(deme, "bio-thermal-tolerance") or deme_has_trait(deme, "bio-endurance-locomotion")) else 0.0)
+			+ (0.16 if (has_warrior or has_r_strat) else 0.0)
+		),
+		"dec-cooperate-store": (
+			0.12
+			+ coop_cohesion
+			+ (0.25 if (deme_has_trait(deme, "cul-communal-conservation") or deme_has_trait(deme, "cul-cooperative-networks")) else 0.0)
+			+ (0.15 if (deme_has_trait(deme, "bio-social-instinct") and not has_warrior and not has_r_strat) else 0.0)
+		),
+		"dec-exchange-symbiosis": (
+			0.08
+			+ (0.0 if has_warrior else maxf(0.0, vec.social_cohesion) * 0.25)
+			+ maxf(0.0, vec.spatial_mobility) * 0.25
+			+ (0.48 if deme_has_trait(deme, "cul-interdeme-barter") else 0.0)
+		) if has_cultural_cap else 0.0,
+		"dec-territorial-dispute": (
+			0.04
+			+ maxf(0.0, vec.extraction_efficiency) * 0.25
+			+ maxf(0.0, -vec.ecological_impact) * 0.25
+			+ maxf(0.0, -vec.social_cohesion) * 0.40
+			+ (0.55 if has_warrior else 0.0)
+			+ (0.12 if has_r_strat else 0.0)
+		),
+		"dec-explore-innovate": (
+			0.08
+			+ maxf(0.0, vec.transmission_threshold) * 0.50
+			+ (0.35 if (deme_has_trait(deme, "cul-fire-processing") or deme_has_trait(deme, "cul-symbolic-archive")) else 0.0)
+			+ (0.30 if (deme_has_trait(deme, "bio-encephalization") or deme_has_trait(deme, "bio-neural-plasticity")) else 0.0)
+		) if has_cultural_cap else 0.0
+	}
+
+	var eligible_ids: Array[String] = [
+		"dec-conservative-forage",
+		"dec-intensive-overexploit",
+		"dec-selective-migration",
+		"dec-cooperate-store",
+		"dec-territorial-dispute"
+	]
+	if has_cultural_cap:
+		eligible_ids.append("dec-exchange-symbiosis")
+		eligible_ids.append("dec-explore-innovate")
+
+	return EvoHeuristicScorer.normalize_decision_probabilities(raw_scores, eligible_ids)
+
+
+static func compute_strategy_baseline_probabilities(deme: EvoTypes.Deme, traits_catalog: Dictionary = {}) -> Dictionary:
+	var norm := compute_baseline_decision_weights(deme, traits_catalog)
+	var probs: Dictionary = norm["probabilities"]
+	deme.last_decision_probabilities = probs.duplicate()
+	deme.last_dominant_decision_id = str(norm["dominant_decision_id"])
+	return probs
+
+
 static func apply_strategy_to_deme(
 	state: EvoTypes.WorldState,
 	deme: EvoTypes.Deme,
@@ -175,6 +286,8 @@ static func apply_strategy_to_deme(
 		deme.cultural_trait_ids = strategy.cultural_trait_ids.duplicate()
 	else:
 		deme.cultural_trait_ids = []
+
+	compute_strategy_baseline_probabilities(deme, state.traits_catalog)
 
 	if state.lineage_tree.has(deme.lineage_id):
 		var lin: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id]

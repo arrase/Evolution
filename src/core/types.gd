@@ -51,6 +51,11 @@ class BiophysicalVector extends RefCounted:
 	var spatial_mobility: float = 0.0
 	var social_cohesion: float = 0.0
 	var transmission_threshold: float = 0.0
+	var cognitive_plasticity: float:
+		get:
+			return transmission_threshold
+		set(value):
+			transmission_threshold = value
 
 	func _init(
 		p_cost: float = 0.0,
@@ -259,6 +264,11 @@ class HexCell extends RefCounted:
 	var current_resources: float = 300.0
 	var carrying_capacity: float = 400.0
 	var carrying_capacity_max: float = 450.0
+	var max_carrying_capacity: float:
+		get:
+			return carrying_capacity_max
+		set(value):
+			carrying_capacity_max = value
 	var seasonal_regen_rate: float = 0.18
 	var deme_ids: Array[String] = []
 
@@ -533,9 +543,19 @@ class LineageNode extends RefCounted:
 class ChronicleEntry extends RefCounted:
 	var id: String = ""
 	var generation: int = 0
-	var event_type: String = "" # "baldwin_trait" | "cultural_innovation" | "allopatric_speciation" | "extinction" | "tragedy_of_commons" | "symbiosis" | "cultural_loss"
+	var event_type: String = "" # "baldwin_trait" | "cultural_innovation" | "allopatric_speciation" | "extinction" | "tragedy_of_commons" | "symbiosis" | "cultural_loss" | "war" | "raid" | "pact" | "betrayal"
+	var type: String: # "baldwin_trait" | "cultural_innovation" | "allopatric_speciation" | "extinction" | "tragedy_of_commons" | "symbiosis" | "cultural_loss" | "war" | "raid" | "pact" | "betrayal"
+		get:
+			return event_type
+		set(value):
+			event_type = value
 	var title: String = ""
 	var causal_explanation: String = ""
+	var description: String:
+		get:
+			return causal_explanation
+		set(value):
+			causal_explanation = value
 	var hex_id: String = "0,0"
 	var deme_id: String = ""
 	var lineage_id: String = ""
@@ -559,8 +579,10 @@ class ChronicleEntry extends RefCounted:
 			"id": id,
 			"generation": generation,
 			"eventType": event_type,
+			"type": event_type,
 			"title": title,
 			"causalExplanation": causal_explanation,
+			"description": causal_explanation,
 			"hexId": hex_id,
 			"demeId": deme_id,
 			"lineageId": lineage_id,
@@ -571,9 +593,9 @@ class ChronicleEntry extends RefCounted:
 		var e := ChronicleEntry.new()
 		e.id = str(d["id"])
 		e.generation = int(d["generation"])
-		e.event_type = str(d["eventType"])
+		e.event_type = str(d["eventType"]) if d.has("eventType") else (str(d["type"]) if d.has("type") else "")
 		e.title = str(d["title"])
-		e.causal_explanation = str(d["causalExplanation"])
+		e.causal_explanation = str(d["causalExplanation"]) if d.has("causalExplanation") else (str(d["description"]) if d.has("description") else "")
 		e.hex_id = str(d["hexId"])
 		e.deme_id = str(d["demeId"]) if d.has("demeId") else ""
 		e.lineage_id = str(d["lineageId"]) if d.has("lineageId") else ""
@@ -584,7 +606,7 @@ class ChronicleEntry extends RefCounted:
 class HexEdgeFlow extends RefCounted:
 	var from_hex_id: String = "0,0"
 	var to_hex_id: String = "0,0"
-	var flow_type: String = "migration" # "migration" | "exchange" | "dispute" | "merge"
+	var flow_type: String = "migration" # "migration" | "exchange" | "dispute" | "merge" | "war" | "raid" | "pact" | "betrayal"
 	var intensity: float = 0.5
 	var from_deme_id: String = ""
 	var to_deme_id: String = ""
@@ -604,6 +626,7 @@ class HexEdgeFlow extends RefCounted:
 			"fromHexId": from_hex_id,
 			"toHexId": to_hex_id,
 			"type": flow_type,
+			"flowType": flow_type,
 			"intensity": intensity,
 			"fromDemeId": from_deme_id,
 			"toDemeId": to_deme_id
@@ -613,7 +636,7 @@ class HexEdgeFlow extends RefCounted:
 		var f := HexEdgeFlow.new()
 		f.from_hex_id = str(d["fromHexId"])
 		f.to_hex_id = str(d["toHexId"])
-		f.flow_type = str(d["type"])
+		f.flow_type = str(d["type"]) if d.has("type") else (str(d["flowType"]) if d.has("flowType") else "migration")
 		f.intensity = float(d["intensity"])
 		f.from_deme_id = str(d["fromDemeId"]) if d.has("fromDemeId") else ""
 		f.to_deme_id = str(d["toDemeId"]) if d.has("toDemeId") else ""
@@ -648,6 +671,7 @@ class WorldState extends RefCounted:
 			lineage_tree = value
 	var chronicle: Array[ChronicleEntry] = []
 	var active_flows: Array[HexEdgeFlow] = []
+	var active_pacts: Dictionary = {} # pair_key ("idA__idB" sorted) -> int (consecutive turns of mutual cooperation/exchange; >= 2 means formal active pact)
 	var recent_extinction_hexes: Array[String] = [] # hex_ids that had real extinction this turn
 	var disused_connections: Array[Dictionary] = [] # previous turn roads/bridges
 	var quiet_turns: int = 0
@@ -688,6 +712,7 @@ class WorldState extends RefCounted:
 			s.chronicle.append(entry.duplicate_entry())
 		for fl in active_flows:
 			s.active_flows.append(fl.duplicate_flow())
+		s.active_pacts = active_pacts.duplicate()
 		s.recent_extinction_hexes = recent_extinction_hexes.duplicate()
 		s.disused_connections = disused_connections.duplicate(true)
 		s.quiet_turns = quiet_turns
@@ -748,6 +773,8 @@ class WorldState extends RefCounted:
 			"lineageTree": lineage_dict,
 			"chronicle": chron_arr,
 			"activeFlows": flows_arr,
+			"activePacts": active_pacts.duplicate(),
+			"active_pacts": active_pacts.duplicate(),
 			"recentExtinctionHexes": recent_extinction_hexes.duplicate(),
 			"disusedConnections": disused_connections.duplicate(true),
 			"quietTurns": quiet_turns,
@@ -796,6 +823,10 @@ class WorldState extends RefCounted:
 			s.chronicle.append(ChronicleEntry.from_dict(item))
 		for item in d["activeFlows"]:
 			s.active_flows.append(HexEdgeFlow.from_dict(item))
+		s.active_pacts = {}
+		var raw_pacts: Dictionary = d["activePacts"] if d.has("activePacts") else (d["active_pacts"] if d.has("active_pacts") else {})
+		for k in raw_pacts.keys():
+			s.active_pacts[str(k)] = int(raw_pacts[k])
 		s.recent_extinction_hexes = []
 		if d.has("recentExtinctionHexes"):
 			for item in d["recentExtinctionHexes"]:
@@ -818,3 +849,11 @@ class WorldState extends RefCounted:
 		s.macro_outcome_title = str(d["macroOutcomeTitle"]) if d.has("macroOutcomeTitle") else ""
 		s.macro_outcome_summary = str(d["macroOutcomeSummary"]) if d.has("macroOutcomeSummary") else ""
 		return s
+
+
+static func make_pair_key(id_a: String, id_b: String) -> String:
+	return "%s__%s" % [id_a, id_b] if id_a < id_b else "%s__%s" % [id_b, id_a]
+
+
+static func is_pact_active(state: WorldState, id_a: String, id_b: String) -> bool:
+	return int(state.active_pacts.get(make_pair_key(id_a, id_b), 0)) >= 2

@@ -64,9 +64,11 @@ static func create_preset_world(
 	else:
 		_build_rift_savanna(state, lang, is_en)
 
-	EvoDecisionModel.evaluate_all_demes(state, lang)
 	for did in state.demes.keys():
-		state.previous_populations[did] = (state.demes[did] as EvoTypes.Deme).population
+		var d: EvoTypes.Deme = state.demes[did]
+		EvoCatalog.compute_strategy_baseline_probabilities(d, state.traits_catalog)
+		state.previous_populations[did] = d.population
+	EvoDecisionModel.evaluate_all_demes(state, lang)
 	return state
 
 

@@ -176,6 +176,104 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	hud._missing_models_download_btn.pressed.connect(hud._on_missing_models_download_pressed)
 	mm_btns.add_child(hud._missing_models_download_btn)
 
+	build_legend_panel(hud)
+
+
+static func build_legend_panel(hud: Control) -> void:
+	var legend_panel := PanelContainer.new()
+	legend_panel.anchor_left = 0.0
+	legend_panel.anchor_right = 0.0
+	legend_panel.anchor_top = 0.0
+	legend_panel.anchor_bottom = 0.0
+	legend_panel.offset_left = 10
+	legend_panel.offset_right = 236
+	legend_panel.offset_top = 132
+	legend_panel.offset_bottom = 262
+	legend_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(5))
+	hud.add_child(legend_panel)
+
+	var outer_vbox := VBoxContainer.new()
+	outer_vbox.add_theme_constant_override("separation", 3)
+	legend_panel.add_child(outer_vbox)
+
+	var header_row := HBoxContainer.new()
+	header_row.add_theme_constant_override("separation", 4)
+	outer_vbox.add_child(header_row)
+
+	var title_lbl := Label.new()
+	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_lbl.add_theme_font_size_override("font_size", 11)
+	title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
+	header_row.add_child(title_lbl)
+
+	var body_card := PanelContainer.new()
+	body_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(6, false))
+	outer_vbox.add_child(body_card)
+
+	var toggle_btn := Button.new()
+	toggle_btn.text = "▾"
+	toggle_btn.custom_minimum_size = Vector2(20, 20)
+	toggle_btn.add_theme_font_size_override("font_size", 10)
+	toggle_btn.pressed.connect(func() -> void:
+		body_card.visible = not body_card.visible
+		toggle_btn.text = "▾" if body_card.visible else "▸"
+	)
+	header_row.add_child(toggle_btn)
+
+	var items_vbox := VBoxContainer.new()
+	items_vbox.add_theme_constant_override("separation", 3)
+	body_card.add_child(items_vbox)
+
+	var legend_defs := [
+		{"key": "legend_flow_pact", "icon": "icon_pact", "color": Color("#10b981")},
+		{"key": "legend_flow_war", "icon": "icon_war", "color": Color("#ef4444")},
+		{"key": "legend_flow_raid", "icon": "icon_raid", "color": Color("#f97316")},
+		{"key": "legend_flow_betrayal", "icon": "icon_betrayal", "color": Color("#be123c")}
+	]
+	var legend_labels: Dictionary = {}
+	for def in legend_defs:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 6)
+		items_vbox.add_child(row)
+
+		var swatch := ColorRect.new()
+		swatch.custom_minimum_size = Vector2(4, 14)
+		swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		swatch.color = def["color"]
+		row.add_child(swatch)
+
+		var icon_rect := TextureRect.new()
+		icon_rect.custom_minimum_size = Vector2(14, 14)
+		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon_rect.texture = EvoUiStyle.get_pixel_icon(str(def["icon"]))
+		row.add_child(icon_rect)
+
+		var lbl := Label.new()
+		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		lbl.clip_text = true
+		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		lbl.add_theme_font_size_override("font_size", 10)
+		lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
+		row.add_child(lbl)
+		legend_labels[str(def["key"])] = lbl
+
+	hud.set_meta("_legend_title_lbl", title_lbl)
+	hud.set_meta("_legend_labels", legend_labels)
+	refresh_legend_texts(hud)
+
+
+static func refresh_legend_texts(hud: Control) -> void:
+	if not hud.has_meta("_legend_title_lbl") or not hud.has_meta("_legend_labels"):
+		return
+	var title_lbl := hud.get_meta("_legend_title_lbl") as Label
+	title_lbl.text = EvoUiStyle.tr_text(hud._lang, "🗺️ Leyenda Geopolítica", "🗺️ Geopolitical Legend")
+	var legend_labels: Dictionary = hud.get_meta("_legend_labels")
+	for k in legend_labels.keys():
+		var lbl := legend_labels[k] as Label
+		lbl.text = EvoI18n.t(hud._lang, str(k))
+
 
 static func show_ollama_offline_popup(hud: Control) -> void:
 	if hud._missing_models_modal == null:
@@ -342,3 +440,4 @@ static func update_first_steps_labels(hud: Control) -> void:
 	hud._step1_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT if hud._step_1_done else EvoUiStyle.COLOR_CREAM_TEXT)
 	hud._step2_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT if hud._step_2_done else EvoUiStyle.COLOR_CREAM_TEXT)
 	hud._step3_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT if hud._step_3_done else EvoUiStyle.COLOR_CREAM_TEXT)
+	refresh_legend_texts(hud)

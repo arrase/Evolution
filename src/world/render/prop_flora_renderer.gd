@@ -12,7 +12,7 @@ const STATUS_COLORS: Dictionary = {
 
 const NON_SWAYING_SPRITES: Array[String] = ["mossy_rock", "fallen_log", "rock_mountain", "tree_stump", "soil_crack"]
 const VILLAGER_POSES: Array[String] = ["villager_idle", "villager_walk1", "villager_walk2"]
-const TRAVELER_ROAD_KINDS: Array[String] = ["collab", "bridge"]
+const TRAVELER_ROAD_KINDS: Array[String] = ["collab", "bridge", "pact"]
 
 const BIOME_FLORA_PALETTES: Dictionary = {
 	"tropical_forest": [
@@ -96,7 +96,6 @@ static func get_villager_textures_for_color(r: Node2D, tunic_col: Color) -> Arra
 
 static func collect_villages(r: Node2D) -> Array[Dictionary]:
 	var villages: Array[Dictionary] = []
-	var font := ThemeDB.fallback_font
 	var state: EvoTypes.WorldState = r.world_state
 	for hex_id in state.cells:
 		var cell: EvoTypes.HexCell = state.cells[hex_id]
@@ -123,11 +122,11 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 
 			var bb_offset := Vector2(0.0, -54.0)
 			var sub_text := "%d hab" % deme.population
-			var sub_size := font.get_string_size(sub_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
 			var box_size := Vector2(114.0, 30.0)
 			var v_pos: Vector2 = r._project(v_world, top_z)
 			var vital_status := deme.get_vital_status()
 			var status_col: Color = STATUS_COLORS[vital_status] if STATUS_COLORS.has(vital_status) else Color("#38bdf8")
+			var geo := resolve_deme_geopolitics(state, deme)
 
 			villages.append({
 				"deme": deme,
@@ -141,6 +140,11 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 				"is_dimmed": is_dimmed,
 				"tier": tier,
 				"archetype": get_deme_dominant_archetype(r, deme),
+				"has_pact": geo["has_pact"],
+				"in_war": geo["in_war"],
+				"in_raid": geo["in_raid"],
+				"in_betrayal": geo["in_betrayal"],
+				"geo_icons": geo["geo_icons"],
 				"status_col": status_col,
 				"strat_color": strat_color,
 				"villager_count": clampi(2 + tier + int(deme.population / 110), 3, 7),
@@ -148,7 +152,6 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 				"bb_offset": bb_offset * scale_factor,
 				"sub_text": sub_text,
 				"label_text": sub_text,
-				"sub_size": sub_size,
 				"box_size": box_size,
 				"pill_w": box_size.x,
 				"hit_rect": Rect2(v_pos - Vector2(74, 76) * scale_factor, Vector2(148, 116) * scale_factor)
@@ -294,7 +297,6 @@ static func _draw_village(r: Node2D, village: Dictionary) -> void:
 
 static func compute_cell_flora_key(r: Node2D, cell: EvoTypes.HexCell, top_z: float) -> Array:
 	var state: EvoTypes.WorldState = r.world_state
-	var r_ratio: float = clampf(cell.current_resources / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
 	var k_ratio: float = clampf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
 	var base_count := 8
 	if cell.biome == "tropical_forest":
@@ -305,7 +307,7 @@ static func compute_cell_flora_key(r: Node2D, cell: EvoTypes.HexCell, top_z: flo
 		base_count = 9
 	elif cell.biome == "coastal_shallows":
 		base_count = 7
-	var prop_count: int = clampi(int(round(float(base_count) * (0.55 + 0.45 * r_ratio))), 6, 13)
+	var prop_count: int = clampi(int(round(float(base_count) * (0.55 + 0.45 * k_ratio))), 6, 13)
 	var v_count := cell.deme_ids.size()
 	if v_count > 0:
 		prop_count = clampi(prop_count - v_count, 5, 10)
@@ -316,39 +318,85 @@ static func compute_cell_flora_key(r: Node2D, cell: EvoTypes.HexCell, top_z: flo
 		for n_idx in range(n_ids.size()):
 			var n_id := n_ids[n_idx]
 			var ncell: EvoTypes.HexCell = state.cells[n_id]
-			var has_link := not ncell.deme_ids.is_empty() or (ncell.biome == "coastal_shallows" and ncell.altitude >= state.sea_level)
-			if not has_link:
-				for flow in state.active_flows:
-					if (flow.from_hex_id == cell.id and flow.to_hex_id == n_id) or (flow.from_hex_id == n_id and flow.to_hex_id == cell.id):
-						has_link = true
-						break
-			if has_link:
+			if not ncell.deme_ids.is_empty() or (ncell.biome == "coastal_shallows" and ncell.altitude >= state.sea_level):
 				link_mask |= (1 << n_idx)
-	return [cell.biome, top_z, prop_count, v_count, k_band, link_mask]
+	return [cell.biome, top_z, prop_count, v_count, k_band, link_mask, r._built_yaw, r._built_pitch]
 
 
 static func collect_static_props(r: Node2D) -> Array[Prop]:
-	var props: Array[Prop] = []
 	var state: EvoTypes.WorldState = r.world_state
-	for hex_id in state.cells:
+	var hex_list: Array = r._sorted_hex_ids if not r._sorted_hex_ids.is_empty() else state.cells.keys()
+	var any_flora_changed: bool = not r._cell_flora_cache.has("__sorted_flora__")
+	for hex_id in hex_list:
 		var cell: EvoTypes.HexCell = state.cells[hex_id]
 		if r._is_water(cell):
 			continue
-		var world_xy := HexMath.axial_to_world(cell.q, cell.r)
 		var top_z: float = r._get_cell_top_z(cell)
 		var flora_key := compute_cell_flora_key(r, cell, top_z)
-		if r._cell_flora_cache.has(hex_id) and (r._cell_flora_cache[hex_id]["key"] as Array) == flora_key:
-			props.append_array(r._cell_flora_cache[hex_id]["props"] as Array[Prop])
-		else:
+		if not r._cell_flora_cache.has(hex_id) or (r._cell_flora_cache[hex_id]["key"] as Array) != flora_key:
+			any_flora_changed = true
+			var world_xy := HexMath.axial_to_world(cell.q, cell.r)
 			var cell_props: Array[Prop] = []
 			collect_cell_flora_props(r, cell, world_xy, top_z, cell_props)
+			for cp in cell_props:
+				cp.project(r._ground, r._lift)
+			cell_props.sort_custom(func(a: Prop, b: Prop) -> bool: return a.y < b.y)
 			r._cell_flora_cache[hex_id] = {"key": flora_key, "props": cell_props}
-			props.append_array(cell_props)
-		if state.recent_extinction_hexes.has(hex_id):
-			props.append(world_prop("ruins", world_xy + Vector2(0, 12), top_z, Vector2.ZERO, 2.20, Color.WHITE))
+
+	var flora_sorted: Array[Prop] = []
+	if any_flora_changed:
+		for hex_id in hex_list:
+			var cell: EvoTypes.HexCell = state.cells[hex_id]
+			if r._is_water(cell):
+				continue
+			if r._cell_flora_cache.has(hex_id):
+				flora_sorted.append_array(r._cell_flora_cache[hex_id]["props"] as Array[Prop])
+		for i in range(1, flora_sorted.size()):
+			var key_prop: Prop = flora_sorted[i]
+			var key_y: float = key_prop.y
+			var j: int = i - 1
+			while j >= 0 and flora_sorted[j].y > key_y:
+				flora_sorted[j + 1] = flora_sorted[j]
+				j -= 1
+			flora_sorted[j + 1] = key_prop
+		r._cell_flora_cache["__sorted_flora__"] = flora_sorted
+	else:
+		flora_sorted = r._cell_flora_cache["__sorted_flora__"] as Array[Prop]
+
+	var dyn_props: Array[Prop] = []
+	for hex_id in state.recent_extinction_hexes:
+		if state.cells.has(hex_id):
+			var cell: EvoTypes.HexCell = state.cells[hex_id]
+			if not r._is_water(cell):
+				var world_xy := HexMath.axial_to_world(cell.q, cell.r)
+				var r_prop := world_prop("ruins", world_xy + Vector2(0, 12), r._get_cell_top_z(cell), Vector2.ZERO, 2.20, Color.WHITE)
+				r_prop.project(r._ground, r._lift)
+				dyn_props.append(r_prop)
 
 	for village in r._villages:
-		collect_village_building_props(village, props)
+		collect_village_building_props(village, dyn_props)
+	for dp in dyn_props:
+		dp.project(r._ground, r._lift)
+	dyn_props.sort_custom(func(a: Prop, b: Prop) -> bool: return a.y < b.y)
+
+	var props: Array[Prop] = []
+	var f_idx := 0
+	var d_idx := 0
+	var f_len := flora_sorted.size()
+	var d_len := dyn_props.size()
+	while f_idx < f_len and d_idx < d_len:
+		if flora_sorted[f_idx].y <= dyn_props[d_idx].y:
+			props.append(flora_sorted[f_idx])
+			f_idx += 1
+		else:
+			props.append(dyn_props[d_idx])
+			d_idx += 1
+	while f_idx < f_len:
+		props.append(flora_sorted[f_idx])
+		f_idx += 1
+	while d_idx < d_len:
+		props.append(dyn_props[d_idx])
+		d_idx += 1
 
 	return props
 
@@ -369,6 +417,65 @@ static func collect_village_building_props(village: Dictionary, props: Array[Pro
 	)
 	for b_item in layout:
 		props.append(world_prop(str(b_item["sprite"]), v_world, top_z, b_item["offset"], float(b_item["scale"]), m))
+	_draw_settlement_props(village, props)
+
+
+static func _draw_settlement_props(village: Dictionary, props: Array[Prop]) -> void:
+	var v_world: Vector2 = village["world_xy"]
+	var top_z: float = village["top_z"]
+	var sf: float = village["sf"]
+	var m: Color = village["modulate"]
+	if bool(village.get("has_pact", false)):
+		props.append(world_prop("prop_pact_totem", v_world, top_z, Vector2(0, 34) * sf, 2.15 * sf, m))
+	if bool(village.get("in_war", false)):
+		props.append(world_prop("prop_war_banner", v_world, top_z, Vector2(-58, 12) * sf, 2.25 * sf, m))
+	if bool(village.get("in_raid", false)):
+		props.append(world_prop("prop_raid_loot", v_world, top_z, Vector2(58, 12) * sf, 2.15 * sf, m))
+	if bool(village.get("in_betrayal", false)):
+		props.append(world_prop("prop_betrayal_ruin", v_world, top_z, Vector2(0, -28) * sf, 2.20 * sf, m))
+
+
+static func resolve_deme_geopolitics(state: EvoTypes.WorldState, deme: EvoTypes.Deme) -> Dictionary:
+	var has_pact := false
+	var in_war := false
+	var in_raid := false
+	var in_betrayal := false
+	if not state.active_pacts.is_empty():
+		for other_id in state.demes.keys():
+			if other_id != deme.id and EvoTypes.is_pact_active(state, deme.id, other_id):
+				has_pact = true
+				break
+	for flow in state.active_flows:
+		var touches_deme: bool = (flow.from_deme_id == deme.id or flow.to_deme_id == deme.id)
+		if not touches_deme and flow.from_deme_id == "" and flow.to_deme_id == "":
+			touches_deme = (flow.from_hex_id == deme.hex_id or flow.to_hex_id == deme.hex_id)
+		if not touches_deme:
+			continue
+		match flow.flow_type:
+			"war":
+				in_war = true
+			"raid":
+				in_raid = true
+			"betrayal":
+				in_betrayal = true
+			"pact":
+				has_pact = true
+	var geo_icons: Array[String] = []
+	if in_war:
+		geo_icons.append("war")
+	if in_betrayal:
+		geo_icons.append("betrayal")
+	if in_raid:
+		geo_icons.append("raid")
+	if has_pact:
+		geo_icons.append("pact")
+	return {
+		"has_pact": has_pact,
+		"in_war": in_war,
+		"in_raid": in_raid,
+		"in_betrayal": in_betrayal,
+		"geo_icons": geo_icons
+	}
 
 
 static func get_cell_road_corridors_local(
@@ -390,11 +497,6 @@ static func get_cell_road_corridors_local(
 	for n_id in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
 		var ncell: EvoTypes.HexCell = state.cells[n_id]
 		var has_link := not ncell.deme_ids.is_empty() or (ncell.biome == "coastal_shallows" and ncell.altitude >= state.sea_level)
-		if not has_link:
-			for flow in state.active_flows:
-				if (flow.from_hex_id == cell.id and flow.to_hex_id == n_id) or (flow.from_hex_id == n_id and flow.to_hex_id == cell.id):
-					has_link = true
-					break
 		if has_link:
 			var n_local := HexMath.axial_to_world(ncell.q, ncell.r) - cell_world
 			for vc in village_local_centers:
@@ -409,7 +511,6 @@ static func collect_cell_flora_props(
 	top_z: float,
 	props: Array[Prop]
 ) -> void:
-	var r_ratio: float = clampf(cell.current_resources / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
 	var k_ratio: float = clampf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
 
 	var base_count := 8
@@ -422,7 +523,7 @@ static func collect_cell_flora_props(
 	elif cell.biome == "coastal_shallows":
 		base_count = 7
 
-	var prop_count: int = clampi(int(round(float(base_count) * (0.55 + 0.45 * r_ratio))), 6, 13)
+	var prop_count: int = clampi(int(round(float(base_count) * (0.55 + 0.45 * k_ratio))), 6, 13)
 
 	var village_local_centers: Array[Vector2] = []
 	var v_count := cell.deme_ids.size()
@@ -518,6 +619,14 @@ static func get_deme_dominant_archetype(r: Node2D, deme: EvoTypes.Deme) -> Strin
 	if catalog.has(deme.last_dominant_decision_id):
 		var dec: EvoTypes.DecisionDef = catalog[deme.last_dominant_decision_id]
 		return dec.archetype
+	if deme.last_dominant_decision_id.contains("war"):
+		return "war"
+	if deme.last_dominant_decision_id.contains("raid"):
+		return "raid"
+	if deme.last_dominant_decision_id.contains("pact"):
+		return "pact"
+	if deme.last_dominant_decision_id.contains("betrayal"):
+		return "betrayal"
 	if deme.last_dominant_decision_id.contains("overexploit"):
 		return "overexploit"
 	if deme.last_dominant_decision_id.contains("migration"):

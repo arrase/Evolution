@@ -407,6 +407,11 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		EvoUiStyle.tr_text(hud._lang, "⚡ Balance Turno:", "⚡ Turn Balance:"),
 		"%+.1f · %s %s" % [d.last_energy_delta, heart_icon, v_label]
 	)
+	_add_sheet_kv(
+		m_vbox,
+		"🤝 " + EvoI18n.t(hud._lang, "inspector_pacts") + ":",
+		format_active_pacts_summary(hud._world_state, hud._lang, d)
+	)
 
 	# Decision Model Intention Section (Top 3 probabilities, dominant marked with ★)
 	var dec_title := Label.new()
@@ -545,12 +550,39 @@ static func rebuild_hex_sheet(hud: Control) -> void:
 	)
 
 
+static func format_active_pacts_summary(world_state: EvoTypes.WorldState, lang: String, d: EvoTypes.Deme) -> String:
+	var allies: Array[String] = []
+	for other_id in world_state.demes.keys():
+		if other_id == d.id:
+			continue
+		var od: EvoTypes.Deme = world_state.demes[other_id]
+		if od.population > 0 and EvoTypes.is_pact_active(world_state, d.id, other_id):
+			allies.append("🤝 " + _format_short_deme_label(od))
+	if allies.is_empty():
+		return EvoI18n.t(lang, "inspector_no_pacts")
+	return ", ".join(allies)
+
+
 static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: String, d: EvoTypes.Deme) -> Array[String]:
 	var lines: Array[String] = []
 	if world_state == null:
 		return lines
 
 	var mentioned_deme_ids: Dictionary = {}
+	var pact_list: Array[String] = []
+	for other_id in world_state.demes.keys():
+		if other_id == d.id:
+			continue
+		var od_pact: EvoTypes.Deme = world_state.demes[other_id]
+		if od_pact.population > 0 and EvoTypes.is_pact_active(world_state, d.id, other_id):
+			pact_list.append(_format_short_deme_label(od_pact))
+			mentioned_deme_ids[other_id] = true
+	if not pact_list.is_empty():
+		lines.append("🤝 %s: %s" % [EvoI18n.t(lang, "inspector_pact_with"), ", ".join(pact_list)])
+
+	var war_list: Array[String] = []
+	var raid_list: Array[String] = []
+	var betrayal_list: Array[String] = []
 	var coop_full: Array[String] = []
 	var coop_short: Array[String] = []
 	var coop_coord: Array[String] = []
@@ -578,6 +610,18 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 			coord_lbl = "(%s)" % od_flow.hex_id
 			mentioned_deme_ids[other_deme_id] = true
 		match fl.flow_type:
+			"war":
+				if not war_list.has(short_lbl):
+					war_list.append(short_lbl)
+			"raid":
+				if not raid_list.has(short_lbl):
+					raid_list.append(short_lbl)
+			"betrayal":
+				if not betrayal_list.has(short_lbl):
+					betrayal_list.append(short_lbl)
+			"pact":
+				if not pact_list.has(short_lbl):
+					lines.append("🤝 %s: %s" % [EvoI18n.t(lang, "inspector_pact_with"), short_lbl])
 			"exchange", "cooperate", "merge":
 				if not coop_full.has(full_lbl):
 					coop_full.append(full_lbl)
@@ -593,6 +637,13 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 					mig_full.append(coord_lbl)
 					mig_short.append(coord_lbl)
 					mig_coord.append(coord_lbl)
+
+	if not war_list.is_empty():
+		lines.append("⚔️ %s: %s" % [EvoI18n.t(lang, "event_war"), ", ".join(war_list)])
+	if not raid_list.is_empty():
+		lines.append("🔥 %s: %s" % [EvoI18n.t(lang, "event_raid"), ", ".join(raid_list)])
+	if not betrayal_list.is_empty():
+		lines.append("🗡️ %s: %s" % [EvoI18n.t(lang, "event_betrayal"), ", ".join(betrayal_list)])
 
 	var coop_line := _format_relation_category(
 		lang,

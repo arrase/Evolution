@@ -45,7 +45,111 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 		if flow.from_deme_id != "" and flow.to_deme_id != "":
 			handled_deme_pairs[make_pair_key(flow.from_deme_id, flow.to_deme_id)] = true
 
-		match flow.flow_type:
+		var flow_color := Color("#eab308")
+		if flow.from_deme_id != "" and state.demes.has(flow.from_deme_id):
+			flow_color = EvoPropFloraRenderer.resolve_deme_strategy_color(state, state.demes[flow.from_deme_id])
+		elif not cell_a.deme_ids.is_empty() and state.demes.has(cell_a.deme_ids[0]):
+			flow_color = EvoPropFloraRenderer.resolve_deme_strategy_color(state, state.demes[cell_a.deme_ids[0]])
+
+		var effective_type := flow.flow_type
+		if effective_type in ["exchange", "cooperate"] and flow.from_deme_id != "" and flow.to_deme_id != "":
+			if EvoTypes.is_pact_active(state, flow.from_deme_id, flow.to_deme_id):
+				effective_type = "pact"
+
+		match effective_type:
+			"war":
+				var b_pos: Vector2 = r._cell_top_center(cell_a) if is_same_hex else (p_a + p_b) * 0.5
+				var show_badge := register_road_badge(r, b_pos, badge_positions, true)
+				roads.append({
+					"kind": "war",
+					"hex_a": cell_a.id,
+					"hex_b": cell_b.id,
+					"world_a": endpoints["world_a"],
+					"z_a": endpoints["z_a"],
+					"trim_a": trim_a,
+					"world_b": endpoints["world_b"],
+					"z_b": endpoints["z_b"],
+					"trim_b": trim_b,
+					"badge_world": HexMath.axial_to_world(cell_a.q, cell_a.r),
+					"badge_z": r._get_cell_top_z(cell_a),
+					"p_a": p_a,
+					"p_b": p_b,
+					"is_same_hex": is_same_hex,
+					"curve_factor": curve_f,
+					"show_badge": show_badge,
+					"show_traffic": true,
+					"badge_pos": b_pos,
+					"color": flow_color
+				})
+			"raid":
+				var b_pos: Vector2 = r._cell_top_center(cell_a) if is_same_hex else (p_a + p_b) * 0.5
+				var show_badge := register_road_badge(r, b_pos, badge_positions, true)
+				roads.append({
+					"kind": "raid",
+					"hex_a": cell_a.id,
+					"hex_b": cell_b.id,
+					"world_a": endpoints["world_a"],
+					"z_a": endpoints["z_a"],
+					"trim_a": trim_a,
+					"world_b": endpoints["world_b"],
+					"z_b": endpoints["z_b"],
+					"trim_b": trim_b,
+					"badge_world": HexMath.axial_to_world(cell_a.q, cell_a.r),
+					"badge_z": r._get_cell_top_z(cell_a),
+					"p_a": p_a,
+					"p_b": p_b,
+					"is_same_hex": is_same_hex,
+					"curve_factor": curve_f,
+					"show_badge": show_badge,
+					"show_traffic": true,
+					"badge_pos": b_pos,
+					"color": flow_color
+				})
+			"betrayal":
+				var b_pos: Vector2 = r._cell_top_center(cell_a) if is_same_hex else (p_a + p_b) * 0.5
+				var show_badge := register_road_badge(r, b_pos, badge_positions, true)
+				roads.append({
+					"kind": "betrayal",
+					"hex_a": cell_a.id,
+					"hex_b": cell_b.id,
+					"world_a": endpoints["world_a"],
+					"z_a": endpoints["z_a"],
+					"trim_a": trim_a,
+					"world_b": endpoints["world_b"],
+					"z_b": endpoints["z_b"],
+					"trim_b": trim_b,
+					"badge_world": HexMath.axial_to_world(cell_a.q, cell_a.r),
+					"badge_z": r._get_cell_top_z(cell_a),
+					"p_a": p_a,
+					"p_b": p_b,
+					"is_same_hex": is_same_hex,
+					"curve_factor": curve_f,
+					"show_badge": show_badge,
+					"badge_pos": b_pos
+				})
+			"pact":
+				var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, curve_f)
+				var show_badge := register_road_badge(r, b_pos, badge_positions, true)
+				var show_traffic := claim_road_traffic(cell_a.id, cell_b.id, hex_traffic_counts, true)
+				roads.append({
+					"kind": "pact",
+					"hex_a": cell_a.id,
+					"hex_b": cell_b.id,
+					"world_a": endpoints["world_a"],
+					"z_a": endpoints["z_a"],
+					"trim_a": trim_a,
+					"world_b": endpoints["world_b"],
+					"z_b": endpoints["z_b"],
+					"trim_b": trim_b,
+					"p_a": p_a,
+					"p_b": p_b,
+					"is_same_hex": is_same_hex,
+					"curve_factor": curve_f,
+					"show_badge": show_badge,
+					"show_traffic": show_traffic,
+					"badge_pos": b_pos,
+					"color": Color("#10b981")
+				})
 			"dispute":
 				var b_pos: Vector2 = r._cell_top_center(cell_a) if is_same_hex else (p_a + p_b) * 0.5
 				var show_badge := true
@@ -158,6 +262,29 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 				var is_prio: bool = (ca.id == r.selected_hex_id or ca.id == r.hovered_hex_id)
 
 				match classify_village_pair_relation(r, da, db):
+					"pact":
+						var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, 0.035)
+						var show_badge := register_road_badge(r, b_pos, badge_positions, true)
+						var show_traffic := claim_road_traffic(ca.id, ca.id, hex_traffic_counts, true)
+						roads.append({
+							"kind": "pact",
+							"hex_a": ca.id,
+							"hex_b": ca.id,
+							"world_a": world_a,
+							"z_a": z_ca,
+							"trim_a": trim_r,
+							"world_b": world_b,
+							"z_b": z_ca,
+							"trim_b": trim_r,
+							"p_a": p_a,
+							"p_b": p_b,
+							"is_same_hex": true,
+							"curve_factor": 0.035,
+							"show_badge": show_badge,
+							"show_traffic": show_traffic,
+							"badge_pos": b_pos,
+							"color": Color("#10b981")
+						})
 					"dispute_front":
 						var b_pos: Vector2 = r._cell_top_center(ca)
 						var show_badge := not intra_hex_badge_drawn.has(ca.id)
@@ -262,6 +389,29 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 			)
 
 			match classify_village_pair_relation(r, da, db):
+				"pact":
+					var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, 0.045)
+					var show_badge := register_road_badge(r, b_pos, badge_positions, true)
+					var show_traffic := claim_road_traffic(ca.id, cb.id, hex_traffic_counts, true)
+					roads.append({
+						"kind": "pact",
+						"hex_a": ca.id,
+						"hex_b": cb.id,
+						"world_a": world_a,
+						"z_a": z_a,
+						"trim_a": trim_a,
+						"world_b": world_b,
+						"z_b": z_b,
+						"trim_b": trim_b,
+						"p_a": p_a,
+						"p_b": p_b,
+						"is_same_hex": false,
+						"curve_factor": 0.045,
+						"show_badge": show_badge,
+						"show_traffic": show_traffic,
+						"badge_pos": b_pos,
+						"color": Color("#10b981")
+					})
 				"dispute_front":
 					var b_pos := (p_a + p_b) * 0.5
 					var show_badge := register_road_badge(r, b_pos, badge_positions, is_prio)
@@ -516,7 +666,7 @@ static func project_road_entry(r: Node2D, road: Dictionary) -> void:
 	var dist := diff.length()
 	var perp := Vector2(-diff.y, diff.x).normalized() if dist > 0.01 else Vector2.UP
 	road["ctrl"] = (p_a + p_b) * 0.5 + perp * (minf(dist * curve_f, 12.0) * curve_sign)
-	if road.get("kind", "") == "dispute":
+	if road.get("kind", "") in ["dispute", "war", "raid", "betrayal", "pact"]:
 		if bool(road.get("is_same_hex", false)) and road.has("badge_world"):
 			road["badge_pos"] = r._project(road["badge_world"] as Vector2, float(road["badge_z"]))
 		else:
@@ -528,9 +678,21 @@ static func reproject_roads(r: Node2D) -> void:
 		project_road_entry(r, road)
 
 
+static func _draw_road_network(r: Node2D) -> void:
+	draw_network_roads(r)
+
+
 static func draw_network_roads(r: Node2D) -> void:
 	for road in r._roads:
 		match road["kind"]:
+			"pact":
+				draw_pact_highway(r, road)
+			"war":
+				draw_war_corridor(r, road)
+			"raid":
+				draw_raid_trail(r, road)
+			"betrayal":
+				draw_betrayal_road(r, road)
 			"collab":
 				draw_collaboration_route(r, road)
 			"bridge":
@@ -554,6 +716,22 @@ static func draw_animated_roads(r: Node2D) -> void:
 			continue
 		var curve_f: float = float(road.get("curve_factor", 0.14))
 		match road["kind"]:
+			"pact":
+				if bool(road.get("show_traffic", true)):
+					var diff := p_b - p_a
+					var perp := Vector2(-diff.y, diff.x).normalized() if diff.length() > 0.01 else Vector2.UP
+					var raw_t1 := fposmod(anim_time * 0.34 + float(int(p_a.x + p_b.y) % 7) * 0.13, 1.0)
+					var raw_t2 := fposmod(raw_t1 + 0.5, 1.0)
+					var pos_1 := sample_road_curve(p_a, p_b, lerpf(0.18, 0.82, raw_t1), 1.0, curve_f) + perp * 3.2 + Vector2(0, -6.0)
+					var pos_2 := sample_road_curve(p_a, p_b, lerpf(0.82, 0.18, raw_t2), 1.0, curve_f) - perp * 3.2 + Vector2(0, -6.0)
+					EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "caravan_cart", pos_1, 1.55)
+					EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "caravan_cart", pos_2, 1.55)
+			"war":
+				draw_war_animated_invasion(r, road)
+			"raid":
+				draw_raid_animated_plunder(r, road)
+			"betrayal":
+				draw_betrayal_animated_ruin(r, road)
 			"collab":
 				if bool(road.get("show_traffic", true)):
 					var raw_t := fposmod(anim_time * 0.32 + float(int(p_a.x + p_b.y) % 7) * 0.13, 1.0)
@@ -690,6 +868,9 @@ static func get_deme_archetype_prob(r: Node2D, deme: EvoTypes.Deme, target_arch:
 
 
 static func classify_village_pair_relation(r: Node2D, da: EvoTypes.Deme, db: EvoTypes.Deme) -> String:
+	if EvoTypes.is_pact_active(r.world_state, da.id, db.id):
+		return "pact"
+
 	var arch_a: String = r._get_deme_dominant_archetype(da)
 	var arch_b: String = r._get_deme_dominant_archetype(db)
 
@@ -734,6 +915,9 @@ static func find_closest_deme_pair(r: Node2D, cell_a: EvoTypes.HexCell, cell_b: 
 	var best_da: EvoTypes.Deme = null
 	var best_db: EvoTypes.Deme = null
 	var best_dist_sq := INF
+	var pact_da: EvoTypes.Deme = null
+	var pact_db: EvoTypes.Deme = null
+	var pact_dist_sq := INF
 	for id_a in cell_a.deme_ids:
 		if not demes.has(id_a):
 			continue
@@ -745,10 +929,16 @@ static func find_closest_deme_pair(r: Node2D, cell_a: EvoTypes.HexCell, cell_b: 
 			var db: EvoTypes.Deme = demes[id_b]
 			var wb := get_deme_world_pos(cell_b, id_b)
 			var d2 := wa.distance_squared_to(wb)
+			if EvoTypes.is_pact_active(r.world_state, id_a, id_b) and d2 < pact_dist_sq:
+				pact_dist_sq = d2
+				pact_da = da
+				pact_db = db
 			if d2 < best_dist_sq:
 				best_dist_sq = d2
 				best_da = da
 				best_db = db
+	if pact_da != null and pact_db != null:
+		return {"da": pact_da, "db": pact_db}
 	if best_da == null or best_db == null:
 		return {}
 	return {"da": best_da, "db": best_db}
@@ -961,3 +1151,232 @@ static func draw_migration_expedition(r: Node2D, road: Dictionary) -> void:
 		var pt := sample_road_curve(p_a, p_b, float(i) / float(steps), -1.0, curve_f)
 		ci.draw_circle(pt, 4.8, Color("#0369a1"))
 		ci.draw_circle(pt, 3.2, Color("#bae6fd") if i % 2 == 0 else Color("#e0f2fe"))
+
+
+static func draw_pact_highway(r: Node2D, road: Dictionary) -> void:
+	var ci: Node2D = r._network_layer
+	var p_a: Vector2 = road["p_a"]
+	var p_b: Vector2 = road["p_b"]
+	var curve_f: float = float(road.get("curve_factor", 0.045))
+	var show_badge: bool = bool(road.get("show_badge", true))
+
+	var segments := 28
+	var pts := PackedVector2Array()
+	for i in range(segments + 1):
+		pts.append(sample_road_curve(p_a, p_b, float(i) / float(segments), 1.0, curve_f))
+
+	# Subtle golden-emerald border glow & reinforced stone highway
+	ci.draw_polyline(pts, Color(0.06, 0.73, 0.51, 0.36), 22.0)
+	ci.draw_polyline(pts, Color("#f59e0b"), 17.2)
+	ci.draw_polyline(pts, Color("#475569"), 14.0)
+	ci.draw_polyline(pts, Color("#cbd5e1"), 10.2)
+
+	for i in range(1, segments):
+		var pt := pts[i]
+		var dir := (pts[i + 1] - pts[i - 1]).normalized()
+		var perp := Vector2(-dir.y, dir.x)
+		ci.draw_circle(pt + perp * 3.0, 3.2, Color("#f8fafc") if i % 2 == 0 else Color("#94a3b8"))
+		ci.draw_circle(pt - perp * 3.0, 3.0, Color("#e2e8f0") if i % 2 == 1 else Color("#94a3b8"))
+		if i % 3 == 0:
+			ci.draw_circle(pt, 2.2, Color("#10b981") if i % 6 == 0 else Color("#fbbf24"))
+
+	var mid_curve := sample_road_curve(p_a, p_b, 0.5, 1.0, curve_f)
+	var road_len := p_a.distance_to(p_b)
+	if road_len > 90.0:
+		var road_dir := (p_b - p_a) / road_len
+		var road_perp := Vector2(-road_dir.y, road_dir.x)
+		var totem_pt := mid_curve + road_perp * 16.0 + Vector2(0, 2.0)
+		EvoWorldOverlayRenderer.draw_centered_sprite(ci, "prop_pact_totem", totem_pt, 1.45)
+
+	if show_badge:
+		var mid := mid_curve + Vector2(0, -15.0)
+		ci.draw_circle(mid, 12.5, Color("#f59e0b"))
+		ci.draw_circle(mid, 10.5, Color("#064e3b"))
+		EvoWorldOverlayRenderer.draw_centered_sprite(ci, "icon_pact", mid + Vector2(0, 6.5), 1.35)
+
+
+static func draw_war_corridor(r: Node2D, road: Dictionary) -> void:
+	var ci: Node2D = r._network_layer
+	var p_a: Vector2 = road["p_a"]
+	var p_b: Vector2 = road["p_b"]
+	var diff := p_b - p_a
+	var dist := diff.length()
+	var dir := diff / dist if dist > 0.01 else Vector2.RIGHT
+	var perp := Vector2(-dir.y, dir.x)
+	var mid := (p_a + p_b) * 0.5
+
+	# Scorched dark-crimson dirt track
+	ci.draw_line(p_a, p_b, Color(0.50, 0.07, 0.07, 0.42), 20.0)
+	ci.draw_line(p_a, p_b, Color("#2a0a0a"), 14.8)
+	ci.draw_line(p_a, p_b, Color("#5c1919"), 10.4)
+	ci.draw_line(p_a, p_b, Color("#991b1b"), 5.6)
+
+	var scorch_rx := 22.0
+	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, mid, scorch_rx, scorch_rx * 0.58, Color(0.18, 0.04, 0.04, 0.78))
+	ci.draw_line(mid - perp * scorch_rx, mid + perp * scorch_rx, Color("#ef4444"), 3.0)
+
+	# War banners planted near the border clash front
+	EvoWorldOverlayRenderer.draw_centered_sprite(ci, "prop_war_banner", p_a.lerp(p_b, 0.40) + perp * 14.0 + Vector2(0, 3.0), 1.45)
+	EvoWorldOverlayRenderer.draw_centered_sprite(ci, "prop_war_banner", p_a.lerp(p_b, 0.60) - perp * 14.0 + Vector2(0, 3.0), 1.45)
+
+
+static func draw_war_animated_invasion(r: Node2D, road: Dictionary) -> void:
+	var anim_layer: Node2D = r._anim_layer
+	var anim_time: float = r._anim_time
+	var p_a: Vector2 = road["p_a"]
+	var p_b: Vector2 = road["p_b"]
+	var diff := p_b - p_a
+	var dist := diff.length()
+	var dir := diff / dist if dist > 0.01 else Vector2.RIGHT
+	var perp := Vector2(-dir.y, dir.x)
+	var mid := road.get("badge_pos", (p_a + p_b) * 0.5) as Vector2
+
+	# Pulsing red tactical vector
+	var pulse := 0.55 + 0.45 * sin(anim_time * 7.5)
+	anim_layer.draw_line(p_a, p_b, Color(0.94, 0.27, 0.27, 0.52 * pulse), 4.2)
+	for c_i in range(3):
+		var t_chev := fposmod(anim_time * 0.55 + float(c_i) * 0.33, 1.0)
+		var c_pos := p_a.lerp(p_b, lerpf(0.15, 0.85, t_chev))
+		var tip := c_pos + dir * 6.0
+		var wing_l := c_pos - dir * 5.0 + perp * 6.0
+		var wing_r := c_pos - dir * 5.0 - perp * 6.0
+		anim_layer.draw_line(wing_l, tip, Color("#fca5a5"), 2.4)
+		anim_layer.draw_line(wing_r, tip, Color("#fca5a5"), 2.4)
+
+	# Column of marching warriors advancing from origin_hex (p_a) toward target_hex (p_b)
+	var v_textures: Array = road.get("villager_textures", [])
+	var atk_col: Color = road.get("color", Color("#ef4444"))
+	for w_i in range(3):
+		var raw_w := fposmod(anim_time * 0.38 + float(w_i) * 0.28, 1.0)
+		var w_pos := p_a.lerp(p_b, lerpf(0.14, 0.72, raw_w)) + perp * (float(w_i - 1) * 4.5)
+		if v_textures.size() >= 3:
+			var frame := 1 + (int(anim_time * 7.0 + float(w_i)) % 2)
+			var tex: ImageTexture = v_textures[frame]
+			var sz := tex.get_size() * 2.45
+			anim_layer.draw_texture_rect(tex, Rect2(w_pos - Vector2(sz.x * 0.5, sz.y * 0.85), sz), false)
+		# Spear & shield accents on each marching warrior
+		var spear_base := w_pos + Vector2(-4.0, -6.0)
+		var spear_tip := spear_base + dir * 14.0 + Vector2(0, -10.0)
+		anim_layer.draw_line(spear_base, spear_tip, Color("#cbd5e1"), 2.0)
+		anim_layer.draw_circle(spear_tip, 2.2, Color("#fde047"))
+		var shield_pos := w_pos + Vector2(5.0, -11.0)
+		anim_layer.draw_circle(shield_pos, 4.5, Color("#cbd5e1"))
+		anim_layer.draw_circle(shield_pos, 3.2, atk_col)
+
+	# Clash front battle sparks & icon_war
+	EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "effect_battle_sparks", mid + Vector2(0, 4.0), 1.15 + 0.20 * pulse)
+	for s_i in range(5):
+		var ang := anim_time * 6.0 + float(s_i) * (TAU * 0.20)
+		var spark_pos := mid + Vector2(cos(ang) * 13.0, sin(ang) * 7.5 - 6.0)
+		anim_layer.draw_circle(spark_pos, 3.2, Color("#fde047") if s_i % 2 == 0 else Color("#ef4444"))
+
+	if bool(road.get("show_badge", true)):
+		var badge_pos := mid + Vector2(0, -18.0)
+		anim_layer.draw_circle(badge_pos, 14.5 * (0.92 + 0.16 * pulse), Color(0.94, 0.20, 0.20, 0.42))
+		anim_layer.draw_circle(badge_pos, 10.5, Color("#7f1d1d"))
+		EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "icon_war", badge_pos + Vector2(0, 6.5), 1.35)
+
+
+static func draw_raid_trail(r: Node2D, road: Dictionary) -> void:
+	var ci: Node2D = r._network_layer
+	var p_a: Vector2 = road["p_a"]
+	var p_b: Vector2 = road["p_b"]
+	var show_badge: bool = bool(road.get("show_badge", true))
+	var diff := p_b - p_a
+	var dist := diff.length()
+	var dir := diff / dist if dist > 0.01 else Vector2.RIGHT
+	var perp := Vector2(-dir.y, dir.x)
+
+	# Fast, jagged amber-scarlet raiding trail with dashed stealth/plunder tracks
+	var steps := 14
+	var prev_pt := p_a
+	for i in range(1, steps + 1):
+		var t := float(i) / float(steps)
+		var jag := 0.0 if i == steps else (5.5 if i % 2 == 1 else -5.5)
+		var next_pt := p_a.lerp(p_b, t) + perp * jag
+		if i % 2 == 1:
+			ci.draw_line(prev_pt, next_pt, Color("#431407"), 8.5)
+			ci.draw_line(prev_pt, next_pt, Color("#ef4444"), 5.5)
+			ci.draw_line(prev_pt, next_pt, Color("#f97316"), 3.2)
+		else:
+			ci.draw_circle((prev_pt + next_pt) * 0.5, 3.2, Color("#fb923c"))
+		prev_pt = next_pt
+
+	if show_badge:
+		var mid := (p_a + p_b) * 0.5 + Vector2(0, -14.0)
+		ci.draw_circle(mid, 11.5, Color("#7c2d12"))
+		ci.draw_circle(mid, 9.5, Color("#f97316"))
+		EvoWorldOverlayRenderer.draw_centered_sprite(ci, "icon_raid", mid + Vector2(0, 6.2), 1.35)
+
+
+static func draw_raid_animated_plunder(r: Node2D, road: Dictionary) -> void:
+	var anim_layer: Node2D = r._anim_layer
+	var anim_time: float = r._anim_time
+	var p_a: Vector2 = road["p_a"]
+	var p_b: Vector2 = road["p_b"]
+	var v_textures: Array = road.get("villager_textures", [])
+
+	# Fast-moving raider figures carrying prop_raid_loot back from target_hex (p_b) toward origin_hex (p_a)
+	for r_i in range(2):
+		var raw_r := fposmod(anim_time * 0.62 + float(r_i) * 0.48, 1.0)
+		var r_pos := p_b.lerp(p_a, lerpf(0.14, 0.86, raw_r))
+		if v_textures.size() >= 3:
+			var frame := 1 + (int(anim_time * 9.0 + float(r_i)) % 2)
+			var tex: ImageTexture = v_textures[frame]
+			var sz := tex.get_size() * 2.45
+			anim_layer.draw_texture_rect(tex, Rect2(r_pos - Vector2(sz.x * 0.5, sz.y * 0.85), sz), false)
+		EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "prop_raid_loot", r_pos + Vector2(7.0, -5.0), 1.05)
+
+
+static func draw_betrayal_road(r: Node2D, road: Dictionary) -> void:
+	var ci: Node2D = r._network_layer
+	var p_a: Vector2 = road["p_a"]
+	var p_b: Vector2 = road["p_b"]
+	var diff := p_b - p_a
+	var dist := diff.length()
+	var dir := diff / dist if dist > 0.01 else Vector2.RIGHT
+	var perp := Vector2(-dir.y, dir.x)
+	var mid := (p_a + p_b) * 0.5
+
+	# Shattered alliance road stubs
+	var stop_a := p_a.lerp(p_b, 0.36)
+	var stop_b := p_b.lerp(p_a, 0.36)
+	ci.draw_line(p_a, stop_a, Color("#334155"), 14.0)
+	ci.draw_line(p_a, stop_a, Color("#94a3b8"), 9.2)
+	ci.draw_line(p_b, stop_b, Color("#334155"), 14.0)
+	ci.draw_line(p_b, stop_b, Color("#94a3b8"), 9.2)
+
+	# Scorched dark violet/crimson crater & jagged fracture lines
+	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, mid, 22.0, 13.0, Color(0.18, 0.04, 0.22, 0.78))
+	var f1 := mid - perp * 18.0 - dir * 6.0
+	var f2 := mid - perp * 5.0 + dir * 7.0
+	var f3 := mid + perp * 7.0 - dir * 6.0
+	var f4 := mid + perp * 18.0 + dir * 5.0
+	var fracture_pts := PackedVector2Array([f1, f2, f3, f4])
+	ci.draw_polyline(fracture_pts, Color("#7e22ce"), 5.2)
+	ci.draw_polyline(fracture_pts, Color("#be123c"), 3.0)
+	ci.draw_polyline(fracture_pts, Color("#fda4af"), 1.4)
+
+	EvoWorldOverlayRenderer.draw_centered_sprite(ci, "prop_betrayal_ruin", mid + Vector2(0, 4.0), 1.50)
+
+
+static func draw_betrayal_animated_ruin(r: Node2D, road: Dictionary) -> void:
+	var anim_layer: Node2D = r._anim_layer
+	var anim_time: float = r._anim_time
+	var p_a: Vector2 = road["p_a"]
+	var p_b: Vector2 = road["p_b"]
+	var mid := road.get("badge_pos", (p_a + p_b) * 0.5) as Vector2
+	var pulse := 1.0 + 0.22 * sin(anim_time * 7.0)
+
+	# Dark purple/charcoal smoke particles rising from shattered pact
+	for s_i in range(4):
+		var phase := fposmod(anim_time * 0.45 + float(s_i) * 0.25, 1.0)
+		var smoke_pos := mid + Vector2(sin(anim_time * 2.5 + float(s_i) * 1.7) * 10.0, -phase * 26.0 - 2.0)
+		var smoke_col := Color(0.29, 0.08, 0.42, (1.0 - phase) * 0.68) if s_i % 2 == 0 else Color(0.20, 0.20, 0.24, (1.0 - phase) * 0.62)
+		anim_layer.draw_circle(smoke_pos, lerpf(3.5, 6.5, phase), smoke_col)
+
+	if bool(road.get("show_badge", true)):
+		var badge_pos := mid + Vector2(0, -19.0)
+		anim_layer.draw_circle(badge_pos, 14.0 * pulse, Color(0.75, 0.07, 0.24, 0.42))
+		anim_layer.draw_circle(badge_pos, 10.0, Color("#4c0519"))
+		EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "icon_betrayal", badge_pos + Vector2(0, 6.5), 1.35 * (0.95 + 0.08 * sin(anim_time * 7.0)))

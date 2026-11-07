@@ -149,6 +149,35 @@ const STRINGS: Dictionary = {
 		"chronicle.type.symbiosis": "Simbiosis Cultural",
 		"chronicle.type.single_survivor": "Hegemonía Evolutiva",
 		"chronicle.type.ecological_equilibrium": "Equilibrio Ecológico",
+		"chronicle.type.war": "Guerra de Conquista",
+		"chronicle.type.raid": "Incursión de Saqueo",
+		"chronicle.type.pact": "Pacto Formal",
+		"chronicle.type.betrayal": "Traición de Pacto",
+		"filter_war": "Guerra",
+		"filter_raid": "Saqueo",
+		"filter_pact": "Pactos",
+		"filter_betrayal": "Traición",
+		"event_war": "Guerra de Conquista",
+		"event_raid": "Incursión de Saqueo",
+		"event_pact": "Pacto Formal",
+		"event_betrayal": "Traición de Pacto",
+		"inspector_pacts": "Pactos y Alianzas",
+		"inspector_no_pacts": "Sin pactos activos",
+		"inspector_pact_with": "Pacto activo con {partner}",
+		"legend_flow_war": "Guerra / Invasión",
+		"legend_flow_raid": "Saqueo / Incursión",
+		"legend_flow_pact": "Pacto / Alianza",
+		"legend_flow_betrayal": "Traición",
+		"chronicle_war_victory_title": "Conquista Militar en ({hex})",
+		"chronicle_war_victory_desc": "{attacker} derrotó a {defender} en el hexágono ({hex}), causando {casualties} bajas y capturando {loot} reservas energéticas.",
+		"chronicle_war_repelled_title": "Invasión Repelida en ({hex})",
+		"chronicle_war_repelled_desc": "{defender} repelió la ofensiva de {attacker} en ({hex}), infligiendo {casualties} bajas a los atacantes.",
+		"chronicle_raid_title": "Incursión de Saqueo en ({hex})",
+		"chronicle_raid_desc": "{raider} saqueó a {victim} en ({hex}), arrebatando {loot} unidades de reservas calóricas.",
+		"chronicle_pact_title": "Pacto de Alianza en ({hex})",
+		"chronicle_pact_desc": "{deme_a} y {deme_b} consolidaron un pacto formal de cooperación e intercambio mutuo en ({hex}).",
+		"chronicle_betrayal_title": "Traición de Pacto en ({hex})",
+		"chronicle_betrayal_desc": "{betrayer} rompió su alianza y atacó por sorpresa a {victim} en ({hex}), saqueando {loot} reservas energéticas.",
 		"strategy.strat-cooperation.name": "Alianza Cooperativa",
 		"strategy.strat-cooperation.desc": "Fomenta la cohesión social, la conservación comunal del hábitat y el almacenamiento.",
 		"strategy.strat-expansion.name": "Pioneros Expansionistas",
@@ -209,7 +238,32 @@ const STRINGS: Dictionary = {
 			"hud_matchup_reset": "🔄",
 			"hud_matchup_reset_tip": "Reiniciar duelo en Generación 0 con las estrategias seleccionadas",
 			"insp_strategy": "Estrategia",
-			"legend_strategies": "Duelo de Estrategias"
+			"legend_strategies": "Duelo de Estrategias",
+			"filter_war": "Guerra",
+			"filter_raid": "Saqueo",
+			"filter_pact": "Pactos",
+			"filter_betrayal": "Traición",
+			"event_war": "Guerra de Conquista",
+			"event_raid": "Incursión de Saqueo",
+			"event_pact": "Pacto Formal",
+			"event_betrayal": "Traición de Pacto",
+			"inspector_pacts": "Pactos y Alianzas",
+			"inspector_no_pacts": "Sin pactos activos",
+			"inspector_pact_with": "Pacto activo con {partner}",
+			"legend_flow_war": "Guerra / Invasión",
+			"legend_flow_raid": "Saqueo / Incursión",
+			"legend_flow_pact": "Pacto / Alianza",
+			"legend_flow_betrayal": "Traición",
+			"chronicle_war_victory_title": "Conquista Militar en ({hex})",
+			"chronicle_war_victory_desc": "{attacker} derrotó a {defender} en el hexágono ({hex}), causando {casualties} bajas y capturando {loot} reservas energéticas.",
+			"chronicle_war_repelled_title": "Invasión Repelida en ({hex})",
+			"chronicle_war_repelled_desc": "{defender} repelió la ofensiva de {attacker} en ({hex}), infligiendo {casualties} bajas a los atacantes.",
+			"chronicle_raid_title": "Incursión de Saqueo en ({hex})",
+			"chronicle_raid_desc": "{raider} saqueó a {victim} en ({hex}), arrebatando {loot} unidades de reservas calóricas.",
+			"chronicle_pact_title": "Pacto de Alianza en ({hex})",
+			"chronicle_pact_desc": "{deme_a} y {deme_b} consolidaron un pacto formal de cooperación e intercambio mutuo en ({hex}).",
+			"chronicle_betrayal_title": "Traición de Pacto en ({hex})",
+			"chronicle_betrayal_desc": "{betrayer} rompió su alianza y atacó por sorpresa a {victim} en ({hex}), saqueando {loot} reservas energéticas."
 		}
 	},
 	"en": {
@@ -359,6 +413,35 @@ const STRINGS: Dictionary = {
 		"chronicle.type.symbiosis": "Cultural Symbiosis",
 		"chronicle.type.single_survivor": "Evolutionary Hegemony",
 		"chronicle.type.ecological_equilibrium": "Ecological Equilibrium",
+		"chronicle.type.war": "War of Conquest",
+		"chronicle.type.raid": "Plunder Raid",
+		"chronicle.type.pact": "Formal Pact",
+		"chronicle.type.betrayal": "Pact Betrayal",
+		"filter_war": "War",
+		"filter_raid": "Raid",
+		"filter_pact": "Pacts",
+		"filter_betrayal": "Betrayal",
+		"event_war": "War of Conquest",
+		"event_raid": "Plunder Raid",
+		"event_pact": "Formal Pact",
+		"event_betrayal": "Pact Betrayal",
+		"inspector_pacts": "Pacts & Alliances",
+		"inspector_no_pacts": "No active pacts",
+		"inspector_pact_with": "Active pact with {partner}",
+		"legend_flow_war": "War / Invasion",
+		"legend_flow_raid": "Raid / Plunder",
+		"legend_flow_pact": "Pact / Alliance",
+		"legend_flow_betrayal": "Betrayal",
+		"chronicle_war_victory_title": "Military Conquest at ({hex})",
+		"chronicle_war_victory_desc": "{attacker} defeated {defender} at hex ({hex}), inflicting {casualties} casualties and seizing {loot} energy reserves.",
+		"chronicle_war_repelled_title": "Invasion Repelled at ({hex})",
+		"chronicle_war_repelled_desc": "{defender} repelled the assault by {attacker} at ({hex}), inflicting {casualties} casualties on the attackers.",
+		"chronicle_raid_title": "Plunder Raid at ({hex})",
+		"chronicle_raid_desc": "{raider} raided {victim} at ({hex}), plundering {loot} caloric reserve units.",
+		"chronicle_pact_title": "Alliance Pact at ({hex})",
+		"chronicle_pact_desc": "{deme_a} and {deme_b} forged a formal pact of mutual cooperation and exchange at ({hex}).",
+		"chronicle_betrayal_title": "Pact Betrayal at ({hex})",
+		"chronicle_betrayal_desc": "{betrayer} broke their alliance and ambushed {victim} at ({hex}), plundering {loot} energy reserves.",
 		"strategy.strat-cooperation.name": "Cooperative Alliance",
 		"strategy.strat-cooperation.desc": "Fosters social cohesion, communal habitat conservation, and resource buffering.",
 		"strategy.strat-expansion.name": "Expansionist Pioneers",
@@ -419,7 +502,32 @@ const STRINGS: Dictionary = {
 			"hud_matchup_reset": "🔄",
 			"hud_matchup_reset_tip": "Reset duel at Generation 0 with the selected strategies",
 			"insp_strategy": "Strategy",
-			"legend_strategies": "Strategy Duel"
+			"legend_strategies": "Strategy Duel",
+			"filter_war": "War",
+			"filter_raid": "Raid",
+			"filter_pact": "Pacts",
+			"filter_betrayal": "Betrayal",
+			"event_war": "War of Conquest",
+			"event_raid": "Plunder Raid",
+			"event_pact": "Formal Pact",
+			"event_betrayal": "Pact Betrayal",
+			"inspector_pacts": "Pacts & Alliances",
+			"inspector_no_pacts": "No active pacts",
+			"inspector_pact_with": "Active pact with {partner}",
+			"legend_flow_war": "War / Invasion",
+			"legend_flow_raid": "Raid / Plunder",
+			"legend_flow_pact": "Pact / Alliance",
+			"legend_flow_betrayal": "Betrayal",
+			"chronicle_war_victory_title": "Military Conquest at ({hex})",
+			"chronicle_war_victory_desc": "{attacker} defeated {defender} at hex ({hex}), inflicting {casualties} casualties and seizing {loot} energy reserves.",
+			"chronicle_war_repelled_title": "Invasion Repelled at ({hex})",
+			"chronicle_war_repelled_desc": "{defender} repelled the assault by {attacker} at ({hex}), inflicting {casualties} casualties on the attackers.",
+			"chronicle_raid_title": "Plunder Raid at ({hex})",
+			"chronicle_raid_desc": "{raider} raided {victim} at ({hex}), plundering {loot} caloric reserve units.",
+			"chronicle_pact_title": "Alliance Pact at ({hex})",
+			"chronicle_pact_desc": "{deme_a} and {deme_b} forged a formal pact of mutual cooperation and exchange at ({hex}).",
+			"chronicle_betrayal_title": "Pact Betrayal at ({hex})",
+			"chronicle_betrayal_desc": "{betrayer} broke their alliance and ambushed {victim} at ({hex}), plundering {loot} energy reserves."
 		}
 	}
 }
@@ -431,29 +539,29 @@ static func resolve_lang(lang: String) -> String:
 	return "en" if lang == "en" else "es"
 
 
-static func t(lang: String, key: String = "es") -> String:
+static func t(lang: String, key: String = "es", params: Dictionary = {}) -> String:
 	var actual_lang := lang
 	var actual_key := key
 	if lang not in ["es", "en"] and key in ["es", "en"]:
 		actual_lang = key
 		actual_key = lang
+	var res := actual_key
 	var table: Dictionary = STRINGS[resolve_lang(actual_lang)]
 	if table.has(actual_key) and table[actual_key] is String:
-		return str(table[actual_key])
-	var ui_table: Dictionary = table["ui"]
-	if ui_table.has(actual_key):
-		return str(ui_table[actual_key])
-	var es_table: Dictionary = STRINGS["es"]
-	if es_table.has(actual_key) and es_table[actual_key] is String:
-		return str(es_table[actual_key])
-	var es_ui: Dictionary = es_table["ui"]
-	if es_ui.has(actual_key):
-		return str(es_ui[actual_key])
-	return actual_key
+		res = str(table[actual_key])
+	elif (table["ui"] as Dictionary).has(actual_key):
+		res = str((table["ui"] as Dictionary)[actual_key])
+	else:
+		var es_table: Dictionary = STRINGS["es"]
+		if es_table.has(actual_key) and es_table[actual_key] is String:
+			res = str(es_table[actual_key])
+		elif (es_table["ui"] as Dictionary).has(actual_key):
+			res = str((es_table["ui"] as Dictionary)[actual_key])
+	return res.format(params) if not params.is_empty() else res
 
 
-static func ui(key: String, lang: String = "es") -> String:
-	return t(lang, key)
+static func ui(key: String, lang: String = "es", params: Dictionary = {}) -> String:
+	return t(lang, key, params)
 
 
 static func strategy_text(strategy_id: String, field: String, fallback: String = "", lang: String = "es") -> String:

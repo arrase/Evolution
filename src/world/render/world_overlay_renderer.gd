@@ -114,6 +114,10 @@ static func draw_overlay(r: Node2D) -> void:
 	draw_seasonal_particles(r)
 
 
+static func _draw_billboards(r: Node2D) -> void:
+	_draw_deme_billboards(r)
+
+
 static func _draw_deme_billboards(r: Node2D) -> void:
 	var to_screen: Transform2D = r._world_layer.transform
 	var vp_size := r.get_viewport_rect().size if r.is_inside_tree() else Vector2(1600.0, 960.0)
@@ -269,6 +273,27 @@ static func draw_village_billboard(r: Node2D, village: Dictionary, pos: Vector2)
 		false,
 		Color(1.0, 1.0, 1.0, alpha)
 	)
+
+	var geo_icons: Array = village.get("geo_icons", [])
+	for g_idx in range(geo_icons.size()):
+		var g_type := str(geo_icons[g_idx])
+		var pill_rect := Rect2(
+			Vector2(rect.end.x + 3.0 + float(g_idx) * 20.0, rect.position.y + 6.0),
+			Vector2(18.0, 18.0)
+		)
+		var g_col := EvoUiStyle.get_event_type_color(g_type)
+		var pill_bg := Color(0.11, 0.07, 0.04, 0.94 * alpha)
+		ci.draw_rect(pill_rect, pill_bg, true)
+		var g_tex: ImageTexture = EvoPixelArtGen.get_texture("icon_" + g_type)
+		ci.draw_texture_rect(
+			g_tex,
+			Rect2(pill_rect.position + Vector2(1.0, 1.0), Vector2(16.0, 16.0)),
+			false,
+			Color(1.0, 1.0, 1.0, alpha)
+		)
+		var pill_border := g_col.lightened(0.12)
+		pill_border.a = alpha
+		ci.draw_rect(pill_rect, pill_border, false, 1.5)
 
 	var border_col := (
 		C_SELECTION

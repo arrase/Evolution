@@ -62,6 +62,10 @@ const VILLAGE_SPRITES: Array[String] = [
 	"barricade_spikes",
 	"road_block_sign",
 	"road_lantern",
+	"prop_war_banner",
+	"prop_raid_loot",
+	"prop_pact_totem",
+	"prop_betrayal_ruin",
 	"villager_idle",
 	"villager_walk1",
 	"villager_walk2"
@@ -87,6 +91,10 @@ const UI_SPRITES: Array[String] = [
 	"icon_dispute",
 	"icon_innovate",
 	"icon_custom",
+	"icon_war",
+	"icon_raid",
+	"icon_pact",
+	"icon_betrayal",
 	"icon_coop_link",
 	"icon_conflict_swords",
 	"icon_broken_link",
@@ -94,8 +102,8 @@ const UI_SPRITES: Array[String] = [
 ]
 
 
-static func ensure_all_assets() -> void:
-	if _initialized:
+static func ensure_all_assets(force_rebuild: bool = false) -> void:
+	if _initialized and not force_rebuild:
 		return
 	_initialized = true
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://assets/sprites/terrain"))
@@ -103,13 +111,13 @@ static func ensure_all_assets() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://assets/sprites/ui"))
 
 	for s_name in HEX_TILE_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/terrain/%s.png" % s_name)
+		_generate_and_register(s_name, "res://assets/sprites/terrain/%s.png" % s_name, force_rebuild)
 	for s_name in TERRAIN_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/terrain/%s.png" % s_name)
+		_generate_and_register(s_name, "res://assets/sprites/terrain/%s.png" % s_name, force_rebuild)
 	for s_name in VILLAGE_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/villages/%s.png" % s_name)
+		_generate_and_register(s_name, "res://assets/sprites/villages/%s.png" % s_name, force_rebuild)
 	for s_name in UI_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/ui/%s.png" % s_name)
+		_generate_and_register(s_name, "res://assets/sprites/ui/%s.png" % s_name, force_rebuild)
 
 
 static func get_texture(sprite_name: String) -> ImageTexture:
@@ -150,10 +158,10 @@ static func get_villager_texture(pose: String, tunic_color: Color) -> ImageTextu
 	return tex
 
 
-static func _generate_and_register(sprite_name: String, file_path: String) -> void:
+static func _generate_and_register(sprite_name: String, file_path: String, force_rebuild: bool = false) -> void:
 	var abs_path := ProjectSettings.globalize_path(file_path)
 	var img: Image
-	if FileAccess.file_exists(abs_path):
+	if not force_rebuild and FileAccess.file_exists(abs_path):
 		img = Image.load_from_file(abs_path)
 		if sprite_name.begins_with("hex_tile_") and img.get_width() < 224:
 			img = _build_sprite_image(sprite_name)

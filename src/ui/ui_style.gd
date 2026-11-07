@@ -352,8 +352,24 @@ static func style_progress_bar(bar: ProgressBar, fill_color: Color) -> void:
 	bar.add_theme_stylebox_override("fill", make_progress_fill(fill_color))
 
 
+static func event_color(ev_type: String) -> Color:
+	return get_event_type_color(ev_type)
+
+
+static func event_label(ev_type: String, lang: String = "es") -> String:
+	return get_event_type_label(ev_type, lang)
+
+
 static func get_event_type_color(event_type: String) -> Color:
 	match event_type:
+		"war":
+			return Color("ef4444")
+		"raid":
+			return Color("f97316")
+		"pact":
+			return Color("10b981")
+		"betrayal":
+			return Color("be123c")
 		"baldwin_trait":
 			return Color("#0d9488")
 		"cultural_innovation":
@@ -379,6 +395,14 @@ static func get_event_type_label(event_type: String, lang: String = "es") -> Str
 	match event_type:
 		"all":
 			return tr_text(lang, "Todos", "All")
+		"war":
+			return EvoI18n.t(lang, "event_war")
+		"raid":
+			return EvoI18n.t(lang, "event_raid")
+		"pact":
+			return EvoI18n.t(lang, "event_pact")
+		"betrayal":
+			return EvoI18n.t(lang, "event_betrayal")
 		"baldwin_trait":
 			return tr_text(lang, "Efecto Baldwin", "Baldwin Effect")
 		"cultural_innovation":
@@ -488,6 +512,14 @@ static func get_decision_icon_key(decision_id: String, state: EvoTypes.WorldStat
 		arch = "overexploit"
 	elif "innovate" in decision_id:
 		arch = "innovate"
+	elif "war" in decision_id:
+		arch = "war"
+	elif "raid" in decision_id:
+		arch = "raid"
+	elif "pact" in decision_id:
+		arch = "pact"
+	elif "betrayal" in decision_id:
+		arch = "betrayal"
 	return "icon_" + arch
 
 
@@ -592,7 +624,11 @@ static func get_pixel_icon(icon_key: String) -> ImageTexture:
 		"icon_exchange": "icon_exchange",
 		"icon_dispute": "icon_dispute",
 		"icon_innovate": "icon_innovate",
-		"icon_custom": "icon_custom"
+		"icon_custom": "icon_custom",
+		"icon_war": "icon_war",
+		"icon_raid": "icon_raid",
+		"icon_pact": "icon_pact",
+		"icon_betrayal": "icon_betrayal"
 	}
 	if sprite_map.has(icon_key):
 		var tex_from_gen := EvoPixelArtGen.get_texture(str(sprite_map[icon_key]))
