@@ -868,7 +868,7 @@ func _test_nonblocking_async_decision_and_smooth_panning() -> void:
 	_assert(not main.world_renderer._cell_flora_cache.is_empty(), "WorldRenderer static flora prop cache populated")
 
 	var max_step_and_frame_ms: float = 0.0
-	for step_i in range(6):
+	for _step_i in range(6):
 		main.camera.pan_offset += Vector2(28.0, -18.0)
 		main.camera._target_pan = main.camera.pan_offset
 		var frame_t0 := Time.get_ticks_usec()
@@ -1160,6 +1160,9 @@ func _test_emergent_geopolitics_and_visual_artifacts() -> void:
 	_assert(pact_summary.contains("🤝"), "EvoHudInspectorPanel.format_active_pacts_summary displays active pact partner")
 	var pact_rel_lines := EvoHudInspectorPanel.build_deme_relations_lines(state_pact, "en", p_d1)
 	_assert(not pact_rel_lines.is_empty(), "EvoHudInspectorPanel.build_deme_relations_lines includes pact & relation lines")
+	_assert(not ("\n".join(pact_rel_lines)).contains("{partner}"), "EvoHudInspectorPanel.build_deme_relations_lines substitutes {partner} placeholder in English")
+	var pact_rel_lines_es := EvoHudInspectorPanel.build_deme_relations_lines(state_pact, "es", p_d1)
+	_assert(not ("\n".join(pact_rel_lines_es)).contains("{partner}") and ("\n".join(pact_rel_lines_es)).contains("Pacto activo con "), "EvoHudInspectorPanel.build_deme_relations_lines substitutes {partner} placeholder in Spanish")
 
 	main.hud.open_notebook_modal()
 	for f_key in ["war", "raid", "pact", "betrayal"]:

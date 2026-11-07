@@ -124,7 +124,7 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 			var strat_color := resolve_deme_strategy_color(state, deme)
 
 			var bb_offset := Vector2(0.0, -54.0)
-			var sub_text := "%d hab" % deme.population
+			var sub_text := "%d pop" % deme.population if r.lang == "en" else "%d hab" % deme.population
 			var box_size := Vector2(114.0, 30.0)
 			var v_pos: Vector2 = r._project(v_world, top_z)
 			var vital_status := deme.get_vital_status()

@@ -644,10 +644,6 @@ static func localize_world_state(state: EvoTypes.WorldState, lang: String = "es"
 		"deme-island-1": "Northern Quarry Clan" if is_en else "Clan de la Cantera Norte",
 		"deme-island-2": "Southern Timber Clan" if is_en else "Clan Maderero del Sur"
 	}
-	for did in state.demes.keys():
-		if base_deme_names.has(did):
-			(state.demes[did] as EvoTypes.Deme).name = str(base_deme_names[did])
-
 	var base_lineage_names := {
 		"lineage-rift-west": "Western Rift Lineage" if is_en else "Linaje Occidental del Rift",
 		"lineage-rift-east": "Eastern Rift Lineage" if is_en else "Linaje Oriental del Rift",
@@ -656,6 +652,18 @@ static func localize_world_state(state: EvoTypes.WorldState, lang: String = "es"
 		"lineage-island-1": "Northern Quarry Lineage" if is_en else "Linaje de la Cantera Norte",
 		"lineage-island-2": "Southern Timber Lineage" if is_en else "Linaje Maderero del Sur"
 	}
+	for did in state.demes.keys():
+		var d: EvoTypes.Deme = state.demes[did]
+		if base_deme_names.has(did):
+			d.name = str(base_deme_names[did])
+		elif base_lineage_names.has(d.lineage_id):
+			var root_id := EvoDemographyMigration._strip_migration_suffix(str(did))
+			if base_deme_names.has(root_id):
+				if str(did).contains("-w"):
+					d.name = "%s · %s (%s)" % [base_deme_names[root_id], "Warband" if is_en else "Horda", d.hex_id]
+				else:
+					d.name = "%s (%s)" % [base_deme_names[root_id], d.hex_id]
+
 	for lid in state.lineage_tree.keys():
 		if base_lineage_names.has(lid):
 			(state.lineage_tree[lid] as EvoTypes.LineageNode).name = str(base_lineage_names[lid])

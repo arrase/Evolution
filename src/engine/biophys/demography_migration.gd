@@ -53,16 +53,7 @@ static func _is_connected_to_founder(
 	for oid in cell.deme_ids:
 		if oid != deme.id and state.demes.has(oid) and (state.demes[oid] as EvoTypes.Deme).lineage_id == deme.lineage_id:
 			return true
-	var target_hexes: Dictionary = {}
-	if founder_hex_id != "" and state.cells.has(founder_hex_id):
-		target_hexes[founder_hex_id] = true
-	for oid in state.demes.keys():
-		var other: EvoTypes.Deme = state.demes[oid]
-		if other.id != deme.id and other.lineage_id == deme.lineage_id and state.cells.has(other.hex_id):
-			target_hexes[other.hex_id] = true
-	if target_hexes.is_empty():
-		return false
-	if target_hexes.has(cell.id):
+	if founder_hex_id != "" and cell.id == founder_hex_id:
 		return true
 	var visited: Dictionary = {cell.id: 0}
 	var queue: Array[String] = [cell.id]
@@ -80,8 +71,11 @@ static func _is_connected_to_founder(
 			var ncell: EvoTypes.HexCell = state.cells[nid]
 			if not is_hex_passable_for_deme(ncell, mobility):
 				continue
-			if target_hexes.has(nid):
+			if nid == founder_hex_id:
 				return true
+			for oid in ncell.deme_ids:
+				if oid != deme.id and state.demes.has(oid) and (state.demes[oid] as EvoTypes.Deme).lineage_id == deme.lineage_id:
+					return true
 			visited[nid] = cur_dist + 1
 			queue.append(nid)
 	return false
@@ -119,26 +113,34 @@ static func _compute_combat_forces(
 static func _min_distance_to_rival(
 	cell: EvoTypes.HexCell,
 	deme: EvoTypes.Deme,
-	state: EvoTypes.WorldState
+	state: EvoTypes.WorldState,
+	cache: Dictionary = {}
 ) -> int:
+	var c_key := (cell.id + "|" + deme.lineage_id) if state.active_pacts.is_empty() else (cell.id + "|" + deme.id)
+	if cache.has(c_key):
+		return int(cache[c_key])
 	var min_dist := 999
+	var visited_hexes: Dictionary = {}
 	for oid in state.demes.keys():
 		var other: EvoTypes.Deme = state.demes[oid]
 		if other.lineage_id == deme.lineage_id or EvoTypes.is_pact_active(state, deme.id, other.id):
 			continue
-		if not state.cells.has(other.hex_id):
+		if visited_hexes.has(other.hex_id) or not state.cells.has(other.hex_id):
 			continue
+		visited_hexes[other.hex_id] = true
 		var ocell: EvoTypes.HexCell = state.cells[other.hex_id]
 		var d := HexMath.hex_distance(cell.q, cell.r, ocell.q, ocell.r)
 		if d < min_dist:
 			min_dist = d
+	cache[c_key] = min_dist
 	return min_dist
 
 
 static func _has_vanguard_closer_to_rival(
 	deme: EvoTypes.Deme,
 	cur_rival_dist: int,
-	state: EvoTypes.WorldState
+	state: EvoTypes.WorldState,
+	cache: Dictionary = {}
 ) -> bool:
 	for oid in state.demes.keys():
 		var other: EvoTypes.Deme = state.demes[oid]
@@ -147,7 +149,7 @@ static func _has_vanguard_closer_to_rival(
 		if other.population < 45 or not state.cells.has(other.hex_id):
 			continue
 		var ocell: EvoTypes.HexCell = state.cells[other.hex_id]
-		if _min_distance_to_rival(ocell, other, state) < cur_rival_dist:
+		if _min_distance_to_rival(ocell, other, state, cache) < cur_rival_dist:
 			return true
 	return false
 
@@ -396,20 +398,33 @@ static func run_demography_and_migration_phase(
 		deme.population = (deme.population - 1) if (effective_delta_e < 0.0 and next_pop >= deme.population) else next_pop
 		pre_fission_pop_by_deme[deme.id] = deme.population
 
+		var p_explore: float = 0.0
+		var p_cooperate: float = 0.0
+		var p_migrate_d: float = 0.0
+		var p_dispute_d: float = 0.0
 		for dec_id in deme.last_decision_probabilities.keys():
 			var prob := float(deme.last_decision_probabilities[dec_id])
 			var arch := (state.decisions_catalog[dec_id] as EvoTypes.DecisionDef).archetype if state.decisions_catalog.has(dec_id) else ""
 			if arch != "forage" and prob >= 0.35:
 				var cur_c: int = int(deme.baldwin_counters[dec_id]) if deme.baldwin_counters.has(dec_id) else 0
 				deme.baldwin_counters[dec_id] = cur_c + 1
+			if arch == "innovate":
+				p_explore += prob
+			elif arch == "cooperate":
+				p_cooperate += prob
+			elif arch == "migrate":
+				p_migrate_d += prob
+			elif arch == "dispute":
+				p_dispute_d += prob
+		deme.set_meta("_turn_p_mig", p_migrate_d)
+		deme.set_meta("_turn_p_disp", p_dispute_d)
 
 		if EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog):
-			var p_explore := EvoEcologyInteraction.get_archetype_prob(deme, state.decisions_catalog, "innovate")
-			var p_cooperate := EvoEcologyInteraction.get_archetype_prob(deme, state.decisions_catalog, "cooperate")
 			var p_innovate := p_explore + 0.35 * p_cooperate
 			deme.innovation_counter = minf(2.0, snappedf(deme.innovation_counter + p_innovate * 0.45, 0.0001))
 
 	var pre_fission_ids := state.demes.keys()
+	var rival_dist_cache: Dictionary = {}
 	for did in pre_fission_ids:
 		if not state.demes.has(did):
 			continue
@@ -418,8 +433,8 @@ static func run_demography_and_migration_phase(
 			continue
 		var current_cell: EvoTypes.HexCell = state.cells[deme.hex_id]
 		var v_eff: EvoTypes.BiophysicalVector = effective_vec_by_deme[deme.id]
-		var p_migrate := EvoEcologyInteraction.get_archetype_prob(deme, state.decisions_catalog, "migrate")
-		var p_dispute := EvoEcologyInteraction.get_archetype_prob(deme, state.decisions_catalog, "dispute")
+		var p_migrate := float(deme.get_meta("_turn_p_mig", 0.0))
+		var p_dispute := float(deme.get_meta("_turn_p_disp", 0.0))
 		var extracted := float(extracted_energy_by_deme.get(deme.id, 0.0))
 		var needed := maxf(1.0, float(deme.population) * 0.42 * (1.0 + 0.55 * v_eff.metabolic_cost))
 		var adequacy := extracted / needed
@@ -485,6 +500,7 @@ static func run_demography_and_migration_phase(
 					pre_fission_pop_by_deme,
 					effective_vec_by_deme
 				)
+				rival_dist_cache.clear()
 				continue
 
 		var is_emergency := (
@@ -513,14 +529,14 @@ static func run_demography_and_migration_phase(
 		if not has_intentional_migration or migrants < 10 or (deme.population - migrants) < 10:
 			continue
 
-		var cur_rival_dist := _min_distance_to_rival(current_cell, deme, state) if is_martial_expander else 999
+		var cur_rival_dist := _min_distance_to_rival(current_cell, deme, state, rival_dist_cache) if is_martial_expander else 999
 		var is_pure_martial_march := (
 			martial_trigger
 			and deme.last_dominant_decision_id != "dec-selective-migration"
 			and current_cell.biome != "coastal_shallows"
 			and not is_emergency
 		)
-		if is_pure_martial_march and _has_vanguard_closer_to_rival(deme, cur_rival_dist, state):
+		if is_pure_martial_march and _has_vanguard_closer_to_rival(deme, cur_rival_dist, state, rival_dist_cache):
 			continue
 		var v_eff_mobility := v_eff.spatial_mobility
 		var mig_mobility := clampf(v_eff_mobility + p_migrate * 0.25, -1.5, 1.5)
@@ -536,7 +552,7 @@ static func run_demography_and_migration_phase(
 				continue
 			if ncell.deme_ids.size() >= 3:
 				continue
-			var n_dist := _min_distance_to_rival(ncell, deme, state) if is_martial_expander else 999
+			var n_dist := _min_distance_to_rival(ncell, deme, state, rival_dist_cache) if is_martial_expander else 999
 			if is_pure_martial_march and n_dist >= cur_rival_dist:
 				continue
 			if not is_emergency:
@@ -566,7 +582,7 @@ static func run_demography_and_migration_phase(
 			for cand in candidates:
 				var sc := cand.current_resources / float(cand.deme_ids.size() + 1)
 				if is_martial_expander and cur_rival_dist < 999:
-					var dc := _min_distance_to_rival(cand, deme, state)
+					var dc := _min_distance_to_rival(cand, deme, state, rival_dist_cache)
 					if dc < cur_rival_dist:
 						sc += 45.0 + float(maxi(0, 10 - dc)) * 8.0
 				if sc > best_score:
@@ -617,6 +633,7 @@ static func run_demography_and_migration_phase(
 		state.demes[daughter_id] = daughter
 		newly_created_demes[daughter_id] = true
 		target_cell.deme_ids.append(daughter_id)
+		rival_dist_cache.clear()
 		initial_pop_by_deme[daughter_id] = migrants
 		pre_fission_pop_by_deme[daughter_id] = migrants
 		effective_vec_by_deme[daughter_id] = effective_vec_by_deme[deme.id]
@@ -877,9 +894,22 @@ static func run_demography_and_migration_phase(
 			continue
 		surviving_demes.append(d)
 		surviving_cells.append(state.cells[d.hex_id])
-		surv_disp.append(EvoEcologyInteraction.get_archetype_prob(d, state.decisions_catalog, "dispute"))
-		surv_over.append(EvoEcologyInteraction.get_archetype_prob(d, state.decisions_catalog, "overexploit"))
-		surv_coop.append(EvoEcologyInteraction.get_archetype_prob(d, state.decisions_catalog, "cooperate"))
+		var pd: float = 0.0
+		var po: float = 0.0
+		var pc: float = 0.0
+		for dec_id in d.last_decision_probabilities.keys():
+			if state.decisions_catalog.has(dec_id):
+				var arch := (state.decisions_catalog[dec_id] as EvoTypes.DecisionDef).archetype
+				var prob := float(d.last_decision_probabilities[dec_id])
+				if arch == "dispute":
+					pd += prob
+				elif arch == "overexploit":
+					po += prob
+				elif arch == "cooperate":
+					pc += prob
+		surv_disp.append(pd)
+		surv_over.append(po)
+		surv_coop.append(pc)
 
 	var s_count := surviving_demes.size()
 	for idx_a in range(s_count):

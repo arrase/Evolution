@@ -95,22 +95,20 @@ static func compute_pact_defense_bonus(
 	victim: EvoTypes.Deme,
 	state: EvoTypes.WorldState
 ) -> float:
-	if not state.cells.has(victim.hex_id):
+	if state.active_pacts.is_empty() or not state.cells.has(victim.hex_id):
 		return 0.0
 	var v_cell: EvoTypes.HexCell = state.cells[victim.hex_id]
 	var bonus: float = 0.0
-	for did in state.demes.keys():
-		var ally_id := str(did)
-		if ally_id == victim.id:
-			continue
-		if not EvoTypes.is_pact_active(state, victim.id, ally_id):
-			continue
-		var ally: EvoTypes.Deme = state.demes[ally_id]
-		if not state.cells.has(ally.hex_id):
-			continue
-		var a_cell: EvoTypes.HexCell = state.cells[ally.hex_id]
-		if HexMath.hex_distance(v_cell.q, v_cell.r, a_cell.q, a_cell.r) <= 1:
+	for ally_id in v_cell.deme_ids:
+		if ally_id != victim.id and state.demes.has(ally_id) and EvoTypes.is_pact_active(state, victim.id, ally_id):
+			var ally: EvoTypes.Deme = state.demes[ally_id]
 			bonus += 0.25 * clampf(float(ally.population) / maxf(20.0, float(victim.population)), 0.4, 1.5)
+	for nid in HexMath.get_neighbor_ids(v_cell.q, v_cell.r, state.cells):
+		var a_cell: EvoTypes.HexCell = state.cells[nid]
+		for ally_id in a_cell.deme_ids:
+			if ally_id != victim.id and state.demes.has(ally_id) and EvoTypes.is_pact_active(state, victim.id, ally_id):
+				var ally: EvoTypes.Deme = state.demes[ally_id]
+				bonus += 0.25 * clampf(float(ally.population) / maxf(20.0, float(victim.population)), 0.4, 1.5)
 	return clampf(bonus, 0.0, 0.75)
 
 
@@ -383,8 +381,14 @@ static func _can_attempt_raid(
 	c_raider: EvoTypes.HexCell,
 	state: EvoTypes.WorldState,
 	vec_r: EvoTypes.BiophysicalVector,
-	extracted_energy_by_deme: Dictionary
+	extracted_energy_by_deme: Dictionary,
+	ap_r: Array = []
 ) -> bool:
+	var p_disp := float(ap_r[2]) if ap_r.size() >= 4 else get_archetype_prob(raider, state.decisions_catalog, "dispute")
+	var p_over := float(ap_r[3]) if ap_r.size() >= 4 else get_archetype_prob(raider, state.decisions_catalog, "overexploit")
+	if p_disp + p_over < 0.28:
+		return false
+
 	var ext_r := float(extracted_energy_by_deme.get(raider.id, 0.0))
 	var need_r := _compute_caloric_need(raider, vec_r)
 	var adequacy_r := ext_r / need_r
@@ -396,11 +400,6 @@ static func _can_attempt_raid(
 		or k_ratio < 0.80
 	)
 	if not env_pressure:
-		return false
-
-	var p_disp := get_archetype_prob(raider, state.decisions_catalog, "dispute")
-	var p_over := get_archetype_prob(raider, state.decisions_catalog, "overexploit")
-	if p_disp + p_over < 0.28:
 		return false
 
 	var has_raiding_capability := (
@@ -440,12 +439,14 @@ static func _execute_raid_if_successful(
 	vec_r: EvoTypes.BiophysicalVector,
 	vec_v: EvoTypes.BiophysicalVector,
 	extracted_energy_by_deme: Dictionary,
-	turn_geopolitical_flows: Array[EvoTypes.HexEdgeFlow]
+	turn_geopolitical_flows: Array[EvoTypes.HexEdgeFlow],
+	ap_r: Array = [],
+	ap_v: Array = []
 ) -> bool:
-	var p_r_disp := get_archetype_prob(raider, state.decisions_catalog, "dispute")
-	var p_r_over := get_archetype_prob(raider, state.decisions_catalog, "overexploit")
-	var p_v_disp := get_archetype_prob(victim, state.decisions_catalog, "dispute")
-	var p_v_coop := get_archetype_prob(victim, state.decisions_catalog, "cooperate")
+	var p_r_disp := float(ap_r[2]) if ap_r.size() >= 4 else get_archetype_prob(raider, state.decisions_catalog, "dispute")
+	var p_r_over := float(ap_r[3]) if ap_r.size() >= 4 else get_archetype_prob(raider, state.decisions_catalog, "overexploit")
+	var p_v_disp := float(ap_v[2]) if ap_v.size() >= 4 else get_archetype_prob(victim, state.decisions_catalog, "dispute")
+	var p_v_coop := float(ap_v[0]) if ap_v.size() >= 4 else get_archetype_prob(victim, state.decisions_catalog, "cooperate")
 
 	var warrior_r := 0.35 if raider.cultural_trait_ids.has("cul-warrior-expansion") else 0.0
 	var warrior_v := 0.30 if victim.cultural_trait_ids.has("cul-warrior-expansion") else 0.0
@@ -553,14 +554,16 @@ static func _run_raids(
 
 		var v1: EvoTypes.BiophysicalVector = effective_vec_by_deme[d1.id]
 		var v2: EvoTypes.BiophysicalVector = effective_vec_by_deme[d2.id]
+		var ap1: Array = arch_probs[d1.id]
+		var ap2: Array = arch_probs[d2.id]
 
-		if _can_attempt_raid(d1, d2, c1, state, v1, extracted_energy_by_deme):
-			if _execute_raid_if_successful(d1, d2, c1, c2, state, lang, v1, v2, extracted_energy_by_deme, turn_geopolitical_flows):
+		if _can_attempt_raid(d1, d2, c1, state, v1, extracted_energy_by_deme, ap1):
+			if _execute_raid_if_successful(d1, d2, c1, c2, state, lang, v1, v2, extracted_energy_by_deme, turn_geopolitical_flows, ap1, ap2):
 				raided_pairs[pair_key] = true
 				continue
 
-		if _can_attempt_raid(d2, d1, c2, state, v2, extracted_energy_by_deme):
-			if _execute_raid_if_successful(d2, d1, c2, c1, state, lang, v2, v1, extracted_energy_by_deme, turn_geopolitical_flows):
+		if _can_attempt_raid(d2, d1, c2, state, v2, extracted_energy_by_deme, ap2):
+			if _execute_raid_if_successful(d2, d1, c2, c1, state, lang, v2, v1, extracted_energy_by_deme, turn_geopolitical_flows, ap2, ap1):
 				raided_pairs[pair_key] = true
 
 
@@ -576,8 +579,32 @@ static func run_resource_and_symbiosis_phase(
 	var symbiosis_bonus_applied: Dictionary = {}
 	var existing_flows_by_key: Dictionary = {}
 	var initial_cultural_traits_by_deme: Dictionary = {}
+	var arch_probs: Dictionary = {}
+	var valid_demes: Array[EvoTypes.Deme] = []
+	var valid_cells: Array[EvoTypes.HexCell] = []
 	for did in state.demes.keys():
-		initial_cultural_traits_by_deme[did] = (state.demes[did] as EvoTypes.Deme).cultural_trait_ids.duplicate()
+		var d: EvoTypes.Deme = state.demes[did]
+		initial_cultural_traits_by_deme[did] = d.cultural_trait_ids.duplicate()
+		var p_coop: float = 0.0
+		var p_exch: float = 0.0
+		var p_disp: float = 0.0
+		var p_over: float = 0.0
+		for dec_id in d.last_decision_probabilities.keys():
+			if state.decisions_catalog.has(dec_id):
+				var arch := (state.decisions_catalog[dec_id] as EvoTypes.DecisionDef).archetype
+				var prob := float(d.last_decision_probabilities[dec_id])
+				if arch == "cooperate":
+					p_coop += prob
+				elif arch == "exchange":
+					p_exch += prob
+				elif arch == "dispute":
+					p_disp += prob
+				elif arch == "overexploit":
+					p_over += prob
+		arch_probs[d.id] = [p_coop, p_exch, p_disp, p_over]
+		if state.cells.has(d.hex_id):
+			valid_demes.append(d)
+			valid_cells.append(state.cells[d.hex_id])
 
 	var tragedy_hexes: Dictionary = {}
 	for entry in state.chronicle:
@@ -612,12 +639,13 @@ static func run_resource_and_symbiosis_phase(
 		var exchangers: Array[EvoTypes.Deme] = []
 
 		for deme in resident_demes:
-			var is_active_hawk := has_rival_lineages and get_archetype_prob(deme, state.decisions_catalog, "dispute") >= 0.25
+			var ap: Array = arch_probs[deme.id]
+			var is_active_hawk := has_rival_lineages and float(ap[2]) >= 0.25
 			if is_active_hawk:
 				hawks.append(deme)
 			else:
 				doves.append(deme)
-				if get_archetype_prob(deme, state.decisions_catalog, "exchange") >= 0.20:
+				if float(ap[1]) >= 0.20:
 					exchangers.append(deme)
 
 		var hawk_lineages: Dictionary = {}
@@ -761,7 +789,7 @@ static func run_resource_and_symbiosis_phase(
 		var has_intensive_overexploit := false
 		for deme in resident_demes:
 			sum_eco_impact += (effective_vec_by_deme[deme.id] as EvoTypes.BiophysicalVector).ecological_impact
-			if get_archetype_prob(deme, state.decisions_catalog, "overexploit") >= 0.30:
+			if float((arch_probs[deme.id] as Array)[3]) >= 0.30:
 				has_intensive_overexploit = true
 
 		var already_logged_tragedy := tragedy_hexes.has(cell.id)
@@ -794,21 +822,6 @@ static func run_resource_and_symbiosis_phase(
 				clampf(cell.carrying_capacity * (1.0 + 0.05 * sum_eco_impact), 10.0, cell.carrying_capacity_max),
 				0.01
 			)
-
-	var arch_probs: Dictionary = {}
-	var valid_demes: Array[EvoTypes.Deme] = []
-	var valid_cells: Array[EvoTypes.HexCell] = []
-	for did in state.demes.keys():
-		var d: EvoTypes.Deme = state.demes[did]
-		arch_probs[d.id] = [
-			get_archetype_prob(d, state.decisions_catalog, "cooperate"),
-			get_archetype_prob(d, state.decisions_catalog, "exchange"),
-			get_archetype_prob(d, state.decisions_catalog, "dispute"),
-			get_archetype_prob(d, state.decisions_catalog, "overexploit")
-		]
-		if state.cells.has(d.hex_id):
-			valid_demes.append(d)
-			valid_cells.append(state.cells[d.hex_id])
 
 	var exchange_flow_pairs: Dictionary = {}
 	for donor_id in state.demes.keys():

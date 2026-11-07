@@ -854,8 +854,11 @@ class WorldState extends RefCounted:
 
 
 static func make_pair_key(id_a: String, id_b: String) -> String:
-	return "%s__%s" % [id_a, id_b] if id_a < id_b else "%s__%s" % [id_b, id_a]
+	return (id_a + "__" + id_b) if id_a < id_b else (id_b + "__" + id_a)
 
 
 static func is_pact_active(state: WorldState, id_a: String, id_b: String) -> bool:
-	return int(state.active_pacts.get(make_pair_key(id_a, id_b), 0)) >= 2
+	if state.active_pacts.is_empty():
+		return false
+	var key := (id_a + "__" + id_b) if id_a < id_b else (id_b + "__" + id_a)
+	return int(state.active_pacts.get(key, 0)) >= 2

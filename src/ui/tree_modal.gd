@@ -451,7 +451,8 @@ func _rebuild_detail_panel() -> void:
 		var t_name := t_id
 		if _world_state.traits_catalog.has(t_id):
 			var t_def: EvoTypes.TraitDef = _world_state.traits_catalog[t_id]
-			t_name = "• %s (%s)" % [t_def.name, t_def.category]
+			var cat_lbl := EvoUiStyle.tr_text(_lang, "biológico" if t_def.category == "biological" else "cultural", t_def.category)
+			t_name = "• %s (%s)" % [EvoI18n.trait_name(_lang, t_def), cat_lbl]
 		var tl := Label.new()
 		tl.text = t_name
 		tl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -467,9 +468,10 @@ func _rebuild_detail_panel() -> void:
 		villages_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 		_detail_vbox.add_child(villages_title)
 
+		var pop_unit := "pop" if _lang == "en" else "hab"
 		for d in living_demes:
 			var dl := Label.new()
-			dl.text = "• %s [%s · %d hab · 🧠 %s · (%s)]" % [d.name, d.get_village_roman(), d.population, d.decision_model_tag, d.hex_id]
+			dl.text = "• %s [%s · %d %s · 🧠 %s · (%s)]" % [d.name, d.get_village_roman(), d.population, pop_unit, d.decision_model_tag, d.hex_id]
 			dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			dl.add_theme_font_size_override("font_size", 12)
 			dl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)

@@ -834,7 +834,8 @@ static func update_top_bar_state(hud: Control) -> void:
 		"🧠 Motores Cognitivos:\n• %s (Táctico/Instinto): %d aldeas\n• %s (Ecológico/Estratégico): %d aldeas\n• Ventana de contexto: %d · Confianza media: %d%%" % [p_model, primary_count, s_model, secondary_count, ctx_len, int(round(avg_conf * 100.0))],
 		"🧠 Cognitive Engines:\n• %s (Tactical/Instinct): %d villages\n• %s (Ecological/Strategic): %d villages\n• Context window: %d · Avg confidence: %d%%" % [p_model, primary_count, s_model, secondary_count, ctx_len, int(round(avg_conf * 100.0))]
 	)
-	refresh_decision_model_selectors(hud)
+	if (hud._settings_popup != null and hud._settings_popup.visible) or (hud._primary_model_opt != null and hud._primary_model_opt.item_count == 0):
+		refresh_decision_model_selectors(hud)
 
 	hud._auto_pause_check.set_pressed_no_signal(hud._world_state.auto_pause_on_milestone)
 	hud._unlimited_pressure_check.set_pressed_no_signal(hud._world_state.unlimited_pressure_mode)

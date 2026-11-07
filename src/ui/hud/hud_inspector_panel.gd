@@ -364,9 +364,9 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		hud._traits_sheet_vbox.add_child(traits_flow)
 
 		for t_id in d.biological_trait_ids:
-			traits_flow.add_child(_make_trait_tag(hud._world_state, t_id, false))
+			traits_flow.add_child(_make_trait_tag(hud._world_state, t_id, false, hud._lang))
 		for t_id in d.cultural_trait_ids:
-			traits_flow.add_child(_make_trait_tag(hud._world_state, t_id, true))
+			traits_flow.add_child(_make_trait_tag(hud._world_state, t_id, true, hud._lang))
 
 		var open_forge_btn := Button.new()
 		open_forge_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -434,7 +434,7 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		var prob: float = float(d.last_decision_probabilities[dec_id])
 		var dec_lbl_str := dec_id
 		if hud._world_state.decisions_catalog.has(dec_id):
-			dec_lbl_str = (hud._world_state.decisions_catalog[dec_id] as EvoTypes.DecisionDef).name
+			dec_lbl_str = EvoI18n.decision_name(hud._lang, hud._world_state.decisions_catalog[dec_id])
 		var is_dom := (dec_id == d.last_dominant_decision_id or (d.last_dominant_decision_id == "" and i == 0))
 		if is_dom:
 			dec_lbl_str = "★ " + dec_lbl_str
@@ -578,8 +578,6 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 		if od_pact.population > 0 and EvoTypes.is_pact_active(world_state, d.id, other_id):
 			pact_list.append(_format_short_deme_label(od_pact))
 			mentioned_deme_ids[other_id] = true
-	if not pact_list.is_empty():
-		lines.append("🤝 %s: %s" % [EvoI18n.t(lang, "inspector_pact_with"), ", ".join(pact_list)])
 
 	var war_list: Array[String] = []
 	var raid_list: Array[String] = []
@@ -622,7 +620,7 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 					betrayal_list.append(short_lbl)
 			"pact":
 				if not pact_list.has(short_lbl):
-					lines.append("🤝 %s: %s" % [EvoI18n.t(lang, "inspector_pact_with"), short_lbl])
+					pact_list.append(short_lbl)
 			"exchange", "cooperate", "merge":
 				if not coop_full.has(full_lbl):
 					coop_full.append(full_lbl)
@@ -639,6 +637,8 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 					mig_short.append(coord_lbl)
 					mig_coord.append(coord_lbl)
 
+	if not pact_list.is_empty():
+		lines.append("🤝 " + EvoI18n.t(lang, "inspector_pact_with", {"partner": ", ".join(pact_list)}))
 	if not war_list.is_empty():
 		lines.append("⚔️ %s: %s" % [EvoI18n.t(lang, "event_war"), ", ".join(war_list)])
 	if not raid_list.is_empty():
@@ -805,15 +805,16 @@ static func _format_relation_category(
 	return EvoUiStyle.tr_text(lang, multi_es % [n, joined_many], multi_en % [n, joined_many])
 
 
-static func _make_trait_tag(world_state: EvoTypes.WorldState, trait_id: String, is_cultural: bool) -> Control:
+static func _make_trait_tag(world_state: EvoTypes.WorldState, trait_id: String, is_cultural: bool, lang: String = "es") -> Control:
 	var t_name := trait_id
 	var tip := trait_id
 	if world_state != null and world_state.traits_catalog.has(trait_id):
 		var tr: EvoTypes.TraitDef = world_state.traits_catalog[trait_id]
-		t_name = tr.name
+		t_name = EvoI18n.trait_name(lang, tr)
+		var t_desc := EvoI18n.trait_description(lang, tr)
 		var v := tr.vector
 		tip = "%s\n%s\nCost: %+.2f | Extr: %+.2f | Eco: %+.2f | Mob: %+.2f | Coh: %+.2f | Thr: %.2f" % [
-			tr.name, tr.description,
+			t_name, t_desc,
 			v.metabolic_cost, v.extraction_efficiency, v.ecological_impact,
 			v.spatial_mobility, v.social_cohesion, v.transmission_threshold
 		]

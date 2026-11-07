@@ -12,11 +12,45 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 	var state: EvoTypes.WorldState = r.world_state
 	var v_positions := PackedVector2Array()
 	var deme_village: Dictionary = {}
+	var deme_road_stance: Dictionary = {}
+	var catalog: Dictionary = state.decisions_catalog
 	for v in r._villages:
 		v_positions.append(v["pos"] as Vector2)
-		deme_village[v["deme_id"]] = v
+		var did: String = v["deme_id"]
+		deme_village[did] = v
+		if state.demes.has(did):
+			var d: EvoTypes.Deme = state.demes[did]
+			var p_disp := 0.0
+			var p_over := 0.0
+			var p_coop := 0.0
+			for dec_id in d.last_decision_probabilities.keys():
+				var prob := float(d.last_decision_probabilities[dec_id])
+				var arch := ""
+				if catalog.has(dec_id):
+					arch = (catalog[dec_id] as EvoTypes.DecisionDef).archetype
+				else:
+					var s := str(dec_id)
+					if s.contains("dispute"):
+						arch = "dispute"
+					elif s.contains("overexploit"):
+						arch = "overexploit"
+					elif s.contains("cooperate") or s.contains("exchange"):
+						arch = "cooperate"
+				if arch == "dispute":
+					p_disp += prob
+				elif arch == "overexploit":
+					p_over += prob
+				elif arch == "cooperate" or arch == "exchange":
+					p_coop += prob
+			var dom_arch: String = v["archetype"]
+			deme_road_stance[did] = {
+				"arch": dom_arch,
+				"conflict": p_disp >= 0.10 or p_over >= 0.30 or dom_arch == "dispute" or dom_arch == "overexploit",
+				"coop": p_coop >= 0.14 or dom_arch == "cooperate" or dom_arch == "exchange"
+			}
 	r.set_meta("_v_pos_cache", v_positions)
 	r.set_meta("_deme_v_cache", deme_village)
+	r.set_meta("_deme_stance_cache", deme_road_stance)
 
 	for flow in state.active_flows:
 		if not state.cells.has(flow.from_hex_id) or not state.cells.has(flow.to_hex_id):
@@ -895,6 +929,23 @@ static func get_deme_archetype_prob(r: Node2D, deme: EvoTypes.Deme, target_arch:
 static func classify_village_pair_relation(r: Node2D, da: EvoTypes.Deme, db: EvoTypes.Deme) -> String:
 	if EvoTypes.is_pact_active(r.world_state, da.id, db.id):
 		return "pact"
+
+	var stance_cache: Dictionary = r.get_meta("_deme_stance_cache") if r.has_meta("_deme_stance_cache") else {}
+	if stance_cache.has(da.id) and stance_cache.has(db.id):
+		var sa: Dictionary = stance_cache[da.id]
+		var sb: Dictionary = stance_cache[db.id]
+		var arch_a_c: String = sa["arch"]
+		var arch_b_c: String = sb["arch"]
+		var has_conflict_c: bool = bool(sa["conflict"]) or bool(sb["conflict"])
+		if da.lineage_id != db.lineage_id and has_conflict_c:
+			return "dispute_front"
+		if arch_a_c == "dispute" or arch_b_c == "dispute":
+			return "dispute_front"
+		if bool(sa["coop"]) or bool(sb["coop"]):
+			return "active_road"
+		if da.lineage_id == db.lineage_id and da.isolation_turns < 3 and db.isolation_turns < 3 and not has_conflict_c:
+			return "active_road"
+		return "broken_road"
 
 	var arch_a: String = r._get_deme_dominant_archetype(da)
 	var arch_b: String = r._get_deme_dominant_archetype(db)

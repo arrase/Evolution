@@ -133,14 +133,16 @@ static func inspect_geopolitical_context(
 
 	var has_intra_rival := false
 	var has_adjacent_rival := false
+	var has_nearby_deme := false
 	var neighbor_has_surplus := false
 	var neighbor_is_weaker := false
 	var has_active_pact := false
 	var active_pact_count: int = 0
 	var adjacent_rivals_count: int = 0
 	var max_neighbor_reserves: float = 0.0
+	var has_pacts: bool = state != null and not state.active_pacts.is_empty()
 
-	if state != null and not state.active_pacts.is_empty():
+	if has_pacts:
 		var pacts_key := "%d|%d" % [state.generation, state.active_pacts.size()]
 		var pact_counts: Dictionary
 		if state.has_meta("pact_counts_key") and str(state.get_meta("pact_counts_key")) == pacts_key:
@@ -160,19 +162,24 @@ static func inspect_geopolitical_context(
 		active_pact_count = int(pact_counts.get(deme.id, 0))
 		has_active_pact = active_pact_count > 0
 
+	var cell_pop: int = deme.population
 	if cell != null and state != null:
+		var sum_pop: int = 0
 		for oid in cell.deme_ids:
 			if state.demes.has(oid):
 				var other: EvoTypes.Deme = state.demes[oid]
+				sum_pop += other.population
 				if other.id != deme.id:
+					has_nearby_deme = true
 					max_neighbor_reserves = maxf(max_neighbor_reserves, other.energy_reserves)
-					if other.lineage_id != deme.lineage_id and not EvoTypes.is_pact_active(state, deme.id, other.id):
+					if other.lineage_id != deme.lineage_id and (not has_pacts or not EvoTypes.is_pact_active(state, deme.id, other.id)):
 						has_intra_rival = true
 						adjacent_rivals_count += 1
 						if other.energy_reserves > deme.energy_reserves * 1.15:
 							neighbor_has_surplus = true
 						if other.population < int(float(deme.population) * 0.85) or other.energy_reserves < 45.0:
 							neighbor_is_weaker = true
+		cell_pop = maxi(deme.population, sum_pop)
 
 		for nid in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
 			var ncell: EvoTypes.HexCell = state.cells[nid]
@@ -180,8 +187,9 @@ static func inspect_geopolitical_context(
 				if state.demes.has(oid):
 					var other: EvoTypes.Deme = state.demes[oid]
 					if other.id != deme.id:
+						has_nearby_deme = true
 						max_neighbor_reserves = maxf(max_neighbor_reserves, other.energy_reserves)
-						if other.lineage_id != deme.lineage_id and not EvoTypes.is_pact_active(state, deme.id, other.id):
+						if other.lineage_id != deme.lineage_id and (not has_pacts or not EvoTypes.is_pact_active(state, deme.id, other.id)):
 							has_adjacent_rival = true
 							adjacent_rivals_count += 1
 							if ncell.current_resources > cell.current_resources * 1.15 or other.energy_reserves > deme.energy_reserves * 1.15:
@@ -189,19 +197,20 @@ static func inspect_geopolitical_context(
 							if other.population < int(float(deme.population) * 0.85) or other.energy_reserves < 45.0:
 								neighbor_is_weaker = true
 
-	var cell_pop := maxi(deme.population, _get_cell_total_population(cell, state))
 	var adequacy := (cell.current_resources if cell != null else 300.0) / maxf(1.0, float(cell_pop) * 0.85)
 
 	var res := {
 		"has_intra_rival": has_intra_rival,
 		"has_adjacent_rival": has_adjacent_rival,
+		"has_nearby_deme": has_nearby_deme,
 		"neighbor_has_surplus": neighbor_has_surplus,
 		"neighbor_is_weaker": neighbor_is_weaker,
 		"has_active_pact": has_active_pact,
 		"active_pacts": active_pact_count,
 		"adjacent_rivals": adjacent_rivals_count,
 		"neighbor_max_reserves": max_neighbor_reserves,
-		"env_adequacy": adequacy
+		"env_adequacy": adequacy,
+		"cell_pop": cell_pop
 	}
 	if deme != null:
 		deme.set_meta("geo_ctx_key", cache_key)
@@ -258,7 +267,7 @@ static func compute_environmental_decision_weights(
 	if cell == null or state == null:
 		return normalize_decision_probabilities(weights, eligible_ids)["probabilities"]
 
-	var cell_pop := maxi(deme.population, _get_cell_total_population(cell, state))
+	var cell_pop := int(geo.get("cell_pop", deme.population))
 	var adequacy := cell.current_resources / maxf(1.0, float(cell_pop) * 0.85)
 	var k_ratio := cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max)
 	var reserve_stress := clampf((60.0 - deme.energy_reserves) / 60.0, 0.0, 1.0)
@@ -343,13 +352,7 @@ static func compute_environmental_decision_weights(
 			weights["dec-explore-innovate"] = float(weights["dec-explore-innovate"]) * (1.0 + env_pressure * 1.35)
 
 	if weights.has("dec-exchange-symbiosis"):
-		var has_nearby_deme := cell.deme_ids.size() > 1
-		if not has_nearby_deme:
-			for nid in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
-				if not (state.cells[nid] as EvoTypes.HexCell).deme_ids.is_empty():
-					has_nearby_deme = true
-					break
-		if not has_nearby_deme:
+		if not bool(geo.get("has_nearby_deme", false)):
 			weights["dec-exchange-symbiosis"] = float(weights["dec-exchange-symbiosis"]) * 0.25
 
 	if weights.has("dec-explore-innovate"):
@@ -519,13 +522,21 @@ static func _get_sorted_passable_neighbors(
 	if deme != null and deme.has_meta("pass_n_key") and str(deme.get_meta("pass_n_key")) == n_cache_key:
 		return deme.get_meta("pass_n_val") as Array[Dictionary]
 
-	var base_mobility := compute_baseline_mobility(deme, state)
-	var max_migrate_mob: float = 0.0
-	for dec_id in state.decisions_catalog.keys():
-		var dec: EvoTypes.DecisionDef = state.decisions_catalog[dec_id]
-		if dec.archetype == "migrate" and is_decision_eligible(deme, dec, state.traits_catalog):
-			max_migrate_mob = maxf(max_migrate_mob, dec.vector.spatial_mobility)
-	var effective_mig_mobility := minf(1.5, base_mobility + max_migrate_mob)
+	var mob_t_key := "%d|%d|%d" % [deme.biological_trait_ids.size(), deme.cultural_trait_ids.size(), state.decisions_catalog.size()]
+	var effective_mig_mobility: float
+	if deme != null and deme.has_meta("eff_mig_mob_key") and str(deme.get_meta("eff_mig_mob_key")) == mob_t_key:
+		effective_mig_mobility = float(deme.get_meta("eff_mig_mob_val"))
+	else:
+		var base_mobility := compute_baseline_mobility(deme, state)
+		var max_migrate_mob: float = 0.0
+		for dec_id in state.decisions_catalog.keys():
+			var dec: EvoTypes.DecisionDef = state.decisions_catalog[dec_id]
+			if dec.archetype == "migrate" and is_decision_eligible(deme, dec, state.traits_catalog):
+				max_migrate_mob = maxf(max_migrate_mob, dec.vector.spatial_mobility)
+		effective_mig_mobility = minf(1.5, base_mobility + max_migrate_mob)
+		if deme != null:
+			deme.set_meta("eff_mig_mob_key", mob_t_key)
+			deme.set_meta("eff_mig_mob_val", effective_mig_mobility)
 	var cell_n_key := "%d|%.2f" % [state.generation if state != null else -1, effective_mig_mobility]
 	if current_cell != null and current_cell.has_meta("cell_pass_n_key") and str(current_cell.get_meta("cell_pass_n_key")) == cell_n_key:
 		var cached_pass := current_cell.get_meta("cell_pass_n_val") as Array[Dictionary]
@@ -900,7 +911,7 @@ static func invalidate_state_caches(state: EvoTypes.WorldState) -> void:
 			d.remove_meta("compact_criterion")
 	for deme_id in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[deme_id]
-		for k in ["geo_ctx_key", "pass_n_key", "env_w_key", "traits_sig_key", "base_w_key"]:
+		for k in ["geo_ctx_key", "pass_n_key", "env_w_key", "traits_sig_key", "base_w_key", "eff_mig_mob_key"]:
 			if deme.has_meta(k):
 				deme.remove_meta(k)
 	for cid in state.cells.keys():
