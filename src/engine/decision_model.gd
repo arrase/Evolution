@@ -84,11 +84,25 @@ static func blend_with_environmental_weights(
 	cell: EvoTypes.HexCell,
 	state: EvoTypes.WorldState
 ) -> Dictionary:
-	var eligible_ids := EvoHeuristicScorer.get_eligible_decision_ids(deme, state.decisions_catalog, state.traits_catalog, state)
+	var env_weights: Dictionary = {}
+	var eligible_ids: Array[String] = []
+	if deme != null and cell != null and state != null:
+		var w_key := "%d|%s|%d|%.1f" % [state.generation, cell.id, deme.population, deme.energy_reserves]
+		if deme.has_meta("env_w_key") and str(deme.get_meta("env_w_key")) == w_key:
+			env_weights = deme.get_meta("env_w_val") as Dictionary
+		else:
+			env_weights = EvoHeuristicScorer.compute_environmental_decision_weights(deme, cell, state)
+			deme.set_meta("env_w_key", w_key)
+			deme.set_meta("env_w_val", env_weights)
+		for k in env_weights.keys():
+			eligible_ids.append(str(k))
+	else:
+		eligible_ids = EvoHeuristicScorer.get_eligible_decision_ids(deme, state.decisions_catalog, state.traits_catalog, state)
+		if not eligible_ids.is_empty():
+			env_weights = EvoHeuristicScorer.compute_environmental_decision_weights(deme, cell, state)
 	if eligible_ids.is_empty():
 		return {"probabilities": model_probs.duplicate(), "dominant_decision_id": EvoHeuristicScorer.pick_dominant_decision(model_probs)}
 	var norm_model: Dictionary = EvoHeuristicScorer.normalize_decision_probabilities(model_probs, eligible_ids)["probabilities"]
-	var env_weights := EvoHeuristicScorer.compute_environmental_decision_weights(deme, cell, state)
 	var blended: Dictionary = {}
 	for dec_id in eligible_ids:
 		var m_prob := float(norm_model.get(dec_id, 0.0))
@@ -144,12 +158,16 @@ static func build_contextual_justification(
 	)
 
 
+static func invalidate_state_caches(state: EvoTypes.WorldState) -> void:
+	EvoHeuristicScorer.invalidate_state_caches(state)
+
+
 static func evaluate_deme(
 	deme: EvoTypes.Deme,
 	state: EvoTypes.WorldState,
 	lang: String = "es"
 ) -> Dictionary:
-	if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == EvoUserSettings.primary_model):
+	if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2", "deme-darwin-rival"] and deme.decision_model_tag == EvoUserSettings.primary_model):
 		deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
 
 	if not state.cells.has(deme.hex_id):
@@ -211,36 +229,47 @@ static func evaluate_deme(
 	}
 
 
-static func evaluate_all_demes(state: EvoTypes.WorldState, lang: String = "es") -> void:
+static func evaluate_all_demes(
+	state: EvoTypes.WorldState,
+	lang: String = "es",
+	enqueue_missing: bool = true
+) -> void:
+	var need_sigs := EvoOllamaClient.has_cached_or_can_enqueue(enqueue_missing)
 	var buckets: Dictionary = {}
 	for deme_id in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[deme_id]
-		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == EvoUserSettings.primary_model):
+		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2", "deme-darwin-rival"] and deme.decision_model_tag == EvoUserSettings.primary_model):
 			deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
 		if state.cells.has(deme.hex_id):
 			var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
 			EvoHeuristicScorer.modulate_deme_probabilities_for_turn(deme, cell, state)
 			var dom_p := float(deme.last_decision_probabilities.get(deme.last_dominant_decision_id, 0.5))
-			deme.last_justification = build_contextual_justification(
-				deme,
-				cell,
-				state,
-				deme.last_dominant_decision_id,
-				dom_p,
-				lang,
-				deme.last_confidence
-			)
-		var sig := compute_deme_evaluation_signature(deme, state)
-		deme.set_meta("eval_sig", sig)
-		if buckets.has(sig):
-			(buckets[sig]["demes"] as Array).append(deme)
-		else:
-			buckets[sig] = {
-				"representative": deme,
-				"demes": [deme]
-			}
+			var just_key := "%s|%s|%.2f" % [lang, deme.last_dominant_decision_id, dom_p]
+			if deme.last_justification == "" or not deme.has_meta("just_key") or str(deme.get_meta("just_key")) != just_key:
+				deme.set_meta("just_key", just_key)
+				deme.last_justification = build_contextual_justification(
+					deme,
+					cell,
+					state,
+					deme.last_dominant_decision_id,
+					dom_p,
+					lang,
+					deme.last_confidence
+				)
+		if need_sigs:
+			var sig := compute_deme_evaluation_signature(deme, state)
+			deme.set_meta("eval_sig", sig)
+			if buckets.has(sig):
+				(buckets[sig]["demes"] as Array).append(deme)
+			else:
+				buckets[sig] = {
+					"representative": deme,
+					"demes": [deme]
+				}
 
-	var live_results := EvoOllamaClient.sync_and_enqueue_batch(buckets, state)
+	if not need_sigs:
+		return
+	var live_results := EvoOllamaClient.sync_and_enqueue_batch(buckets, state, enqueue_missing)
 
 	for sig in buckets.keys():
 		if not live_results.has(sig):
@@ -272,17 +301,19 @@ static func evaluate_all_demes(state: EvoTypes.WorldState, lang: String = "es") 
 
 
 static func prefetch_for_state(state: EvoTypes.WorldState) -> void:
-	if state == null or state.demes.is_empty():
+	if state == null or state.demes.is_empty() or not EvoOllamaClient.needs_prefetch():
 		return
 	var reps_by_sig: Dictionary = {}
 	for deme_id in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[deme_id]
-		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2"] and deme.decision_model_tag == EvoUserSettings.primary_model):
+		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2", "deme-darwin-rival"] and deme.decision_model_tag == EvoUserSettings.primary_model):
 			deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
 		var sig := compute_deme_evaluation_signature(deme, state)
 		deme.set_meta("eval_sig", sig)
 		if not reps_by_sig.has(sig):
 			reps_by_sig[sig] = deme
+			if reps_by_sig.size() >= 6:
+				break
 
 	EvoOllamaClient.prefetch_for_reps(reps_by_sig, state)
 

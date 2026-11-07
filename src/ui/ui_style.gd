@@ -384,6 +384,8 @@ static func get_event_type_color(event_type: String) -> Color:
 			return Color("#c2410c")
 		"extinction":
 			return Color("#b91c1c")
+		"total_extinction":
+			return Color("#991b1b")
 		"single_survivor":
 			return Color("#ca8a04")
 		"ecological_equilibrium":
@@ -417,6 +419,8 @@ static func get_event_type_label(event_type: String, lang: String = "es") -> Str
 			return tr_text(lang, "Pérdida Cultural", "Cultural Loss")
 		"extinction":
 			return tr_text(lang, "Extinción", "Extinction")
+		"total_extinction":
+			return EvoI18n.t(lang, "chronicle.type.total_extinction")
 		"single_survivor":
 			return tr_text(lang, "Hegemonía Evolutiva", "Evolutionary Hegemony")
 		"ecological_equilibrium":
@@ -529,7 +533,7 @@ static func get_vital_status_label(status: String, lang: String = "es") -> Strin
 			return tr_text(lang, "Prosperando", "Thriving")
 		"stable":
 			return tr_text(lang, "Estable", "Stable")
-		"struggling":
+		"struggling", "declining":
 			return tr_text(lang, "En apuros", "Struggling")
 		"starving":
 			return tr_text(lang, "Hambruna", "Starving")
@@ -542,7 +546,7 @@ static func get_vital_status_heart(status: String) -> String:
 			return "💚"
 		"stable":
 			return "💙"
-		"struggling":
+		"struggling", "declining":
 			return "💛"
 		"starving":
 			return "❤️‍🩹"
@@ -555,7 +559,7 @@ static func get_vital_status_color(status: String) -> Color:
 			return Color("#16a34a")
 		"stable":
 			return Color("#0284c7")
-		"struggling":
+		"struggling", "declining":
 			return Color("#d97706")
 		"starving":
 			return Color("#dc2626")

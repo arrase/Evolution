@@ -145,6 +145,7 @@ const STRINGS: Dictionary = {
 		"chronicle.type.allopatric_speciation": "Especiación Alopátrica",
 		"chronicle.type.cultural_loss": "Cuello de Botella Cultural",
 		"chronicle.type.extinction": "Extinción",
+		"chronicle.type.total_extinction": "Extinción Total",
 		"chronicle.type.tragedy_of_commons": "Tragedia de los Comunes",
 		"chronicle.type.symbiosis": "Simbiosis Cultural",
 		"chronicle.type.single_survivor": "Hegemonía Evolutiva",
@@ -409,6 +410,7 @@ const STRINGS: Dictionary = {
 		"chronicle.type.allopatric_speciation": "Allopatric Speciation",
 		"chronicle.type.cultural_loss": "Cultural Bottleneck",
 		"chronicle.type.extinction": "Extinction",
+		"chronicle.type.total_extinction": "Total Extinction",
 		"chronicle.type.tragedy_of_commons": "Tragedy of the Commons",
 		"chronicle.type.symbiosis": "Cultural Symbiosis",
 		"chronicle.type.single_survivor": "Evolutionary Hegemony",
@@ -616,11 +618,17 @@ static func localize_world_state(state: EvoTypes.WorldState, lang: String = "es"
 		if tr.origin in ["catalog", "base"]:
 			tr.name = trait_name(lang, tr)
 			tr.description = trait_description(lang, tr)
+		if tr.has_meta("compact_str"):
+			tr.remove_meta("compact_str")
 	for dec_id in state.decisions_catalog.keys():
 		var dec: EvoTypes.DecisionDef = state.decisions_catalog[dec_id]
 		if dec.origin in ["catalog", "base"]:
 			dec.name = decision_name(lang, dec)
 			dec.description = decision_description(lang, dec)
+		if dec.has_meta("compact_criterion"):
+			dec.remove_meta("compact_criterion")
+	if state.has_meta("dec_cat_hash"):
+		state.remove_meta("dec_cat_hash")
 	for strat_id in state.strategies_catalog.keys():
 		var strat: EvoTypes.StrategyDef = state.strategies_catalog[strat_id]
 		if strat.origin in ["base", "catalog"]:
@@ -658,7 +666,7 @@ static func biome_name(lang: String, biome: String) -> String:
 
 
 static func trait_name(lang: String, trait_def: EvoTypes.TraitDef) -> String:
-	if trait_def is Object and trait_def.get("origin") != null and str(trait_def.get("origin")) != "catalog":
+	if trait_def is Object and trait_def.get("origin") != null and str(trait_def.get("origin")) not in ["catalog", "base"]:
 		return str(trait_def.name)
 	var key := "trait." + trait_def.id + ".name"
 	var table: Dictionary = STRINGS[resolve_lang(lang)]
@@ -668,7 +676,7 @@ static func trait_name(lang: String, trait_def: EvoTypes.TraitDef) -> String:
 
 
 static func trait_description(lang: String, trait_def: EvoTypes.TraitDef) -> String:
-	if trait_def is Object and trait_def.get("origin") != null and str(trait_def.get("origin")) != "catalog":
+	if trait_def is Object and trait_def.get("origin") != null and str(trait_def.get("origin")) not in ["catalog", "base"]:
 		return str(trait_def.description)
 	var key := "trait." + trait_def.id + ".desc"
 	var table: Dictionary = STRINGS[resolve_lang(lang)]
@@ -678,7 +686,7 @@ static func trait_description(lang: String, trait_def: EvoTypes.TraitDef) -> Str
 
 
 static func decision_name(lang: String, dec_def: EvoTypes.DecisionDef) -> String:
-	if dec_def is Object and dec_def.get("origin") != null and str(dec_def.get("origin")) != "catalog":
+	if dec_def is Object and dec_def.get("origin") != null and str(dec_def.get("origin")) not in ["catalog", "base"]:
 		return str(dec_def.name)
 	var key := "decision." + dec_def.id + ".name"
 	var table: Dictionary = STRINGS[resolve_lang(lang)]
@@ -690,7 +698,7 @@ static func decision_name(lang: String, dec_def: EvoTypes.DecisionDef) -> String
 
 
 static func decision_description(lang: String, dec_def: EvoTypes.DecisionDef) -> String:
-	if dec_def is Object and dec_def.get("origin") != null and str(dec_def.get("origin")) != "catalog":
+	if dec_def is Object and dec_def.get("origin") != null and str(dec_def.get("origin")) not in ["catalog", "base"]:
 		return str(dec_def.description)
 	var key := "decision." + dec_def.id + ".desc"
 	var table: Dictionary = STRINGS[resolve_lang(lang)]

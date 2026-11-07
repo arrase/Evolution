@@ -10,6 +10,13 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 	var badge_positions: Array[Vector2] = []
 	var hex_traffic_counts: Dictionary = {}
 	var state: EvoTypes.WorldState = r.world_state
+	var v_positions := PackedVector2Array()
+	var deme_village: Dictionary = {}
+	for v in r._villages:
+		v_positions.append(v["pos"] as Vector2)
+		deme_village[v["deme_id"]] = v
+	r.set_meta("_v_pos_cache", v_positions)
+	r.set_meta("_deme_v_cache", deme_village)
 
 	for flow in state.active_flows:
 		if not state.cells.has(flow.from_hex_id) or not state.cells.has(flow.to_hex_id):
@@ -19,6 +26,8 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 		var is_same_hex := cell_a.id == cell_b.id
 		var h_key := make_pair_key(flow.from_hex_id, flow.to_hex_id)
 		if not is_same_hex and handled_hex_pairs.has(h_key):
+			continue
+		if is_same_hex and flow.from_deme_id != "" and flow.to_deme_id != "" and handled_deme_pairs.has(make_pair_key(flow.from_deme_id, flow.to_deme_id)):
 			continue
 
 		var endpoints := resolve_road_endpoints(r, cell_a, cell_b, flow.from_deme_id, flow.to_deme_id)
@@ -46,8 +55,12 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 			handled_deme_pairs[make_pair_key(flow.from_deme_id, flow.to_deme_id)] = true
 
 		var flow_color := Color("#eab308")
-		if flow.from_deme_id != "" and state.demes.has(flow.from_deme_id):
+		if flow.from_deme_id != "" and deme_village.has(flow.from_deme_id):
+			flow_color = deme_village[flow.from_deme_id]["strat_color"]
+		elif flow.from_deme_id != "" and state.demes.has(flow.from_deme_id):
 			flow_color = EvoPropFloraRenderer.resolve_deme_strategy_color(state, state.demes[flow.from_deme_id])
+		elif not cell_a.deme_ids.is_empty() and deme_village.has(cell_a.deme_ids[0]):
+			flow_color = deme_village[cell_a.deme_ids[0]]["strat_color"]
 		elif not cell_a.deme_ids.is_empty() and state.demes.has(cell_a.deme_ids[0]):
 			flow_color = EvoPropFloraRenderer.resolve_deme_strategy_color(state, state.demes[cell_a.deme_ids[0]])
 
@@ -367,10 +380,10 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 			var da: EvoTypes.Deme = pair["da"]
 			var db: EvoTypes.Deme = pair["db"]
 			handled_deme_pairs[make_pair_key(da.id, db.id)] = true
-			var world_a := get_deme_world_pos(ca, da.id)
+			var world_a: Vector2 = pair["wa"]
 			var z_a: float = r._get_cell_top_z(ca)
 			var trim_a := get_cell_plaza_trim(ca)
-			var world_b := get_deme_world_pos(cb, db.id)
+			var world_b: Vector2 = pair["wb"]
 			var z_b: float = r._get_cell_top_z(cb)
 			var trim_b := get_cell_plaza_trim(cb)
 			var trimmed := trim_road_segment(
@@ -644,20 +657,26 @@ static func prune_redundant_triangle_chords(r: Node2D, roads: Array[Dictionary])
 					if has_triangle_bypass:
 						continue
 		if rd.has("color"):
-			rd["villager_textures"] = r._get_villager_textures_for_color(rd["color"])
-		project_road_entry(r, rd)
+			rd["villager_textures"] = EvoPropFloraRenderer.get_villager_textures_for_color(r, rd["color"])
+		project_road_entry(r, rd, false)
 		result.append(rd)
 	return result
 
 
-static func project_road_entry(r: Node2D, road: Dictionary) -> void:
-	var raw_a: Vector2 = r._project(road["world_a"] as Vector2, float(road["z_a"]))
-	var raw_b: Vector2 = r._project(road["world_b"] as Vector2, float(road["z_b"]))
-	var trimmed := trim_road_segment(raw_a, raw_b, float(road["trim_a"]), float(road["trim_b"]))
-	var p_a: Vector2 = trimmed["p_a"]
-	var p_b: Vector2 = trimmed["p_b"]
-	road["p_a"] = p_a
-	road["p_b"] = p_b
+static func project_road_entry(r: Node2D, road: Dictionary, force_reproject: bool = true) -> void:
+	var p_a: Vector2
+	var p_b: Vector2
+	if force_reproject or not road.has("p_a"):
+		var raw_a: Vector2 = r._project(road["world_a"] as Vector2, float(road["z_a"]))
+		var raw_b: Vector2 = r._project(road["world_b"] as Vector2, float(road["z_b"]))
+		var trimmed := trim_road_segment(raw_a, raw_b, float(road["trim_a"]), float(road["trim_b"]))
+		p_a = trimmed["p_a"]
+		p_b = trimmed["p_b"]
+		road["p_a"] = p_a
+		road["p_b"] = p_b
+	else:
+		p_a = road["p_a"]
+		p_b = road["p_b"]
 	road["a_pos"] = p_a
 	road["b_pos"] = p_b
 	var curve_f := float(road.get("curve_factor", 0.045))
@@ -666,7 +685,7 @@ static func project_road_entry(r: Node2D, road: Dictionary) -> void:
 	var dist := diff.length()
 	var perp := Vector2(-diff.y, diff.x).normalized() if dist > 0.01 else Vector2.UP
 	road["ctrl"] = (p_a + p_b) * 0.5 + perp * (minf(dist * curve_f, 12.0) * curve_sign)
-	if road.get("kind", "") in ["dispute", "war", "raid", "betrayal", "pact"]:
+	if force_reproject and road.get("kind", "") in ["dispute", "war", "raid", "betrayal", "pact"]:
 		if bool(road.get("is_same_hex", false)) and road.has("badge_world"):
 			road["badge_pos"] = r._project(road["badge_world"] as Vector2, float(road["badge_z"]))
 		else:
@@ -675,7 +694,7 @@ static func project_road_entry(r: Node2D, road: Dictionary) -> void:
 
 static func reproject_roads(r: Node2D) -> void:
 	for road in r._roads:
-		project_road_entry(r, road)
+		project_road_entry(r, road, true)
 
 
 static func _draw_road_network(r: Node2D) -> void:
@@ -799,13 +818,19 @@ static func register_road_badge(
 	badge_positions: Array[Vector2],
 	is_priority: bool
 ) -> bool:
-	var min_v_dist := 42.0 if is_priority else 54.0
-	for v in r._villages:
-		if badge_pos.distance_to(v["pos"] as Vector2) < min_v_dist:
-			return false
-	var min_b_dist := 34.0 if is_priority else 48.0
+	var min_v_dist_sq := (42.0 * 42.0) if is_priority else (54.0 * 54.0)
+	if r.has_meta("_v_pos_cache"):
+		var v_positions: PackedVector2Array = r.get_meta("_v_pos_cache")
+		for vp in v_positions:
+			if badge_pos.distance_squared_to(vp) < min_v_dist_sq:
+				return false
+	else:
+		for v in r._villages:
+			if badge_pos.distance_squared_to(v["pos"] as Vector2) < min_v_dist_sq:
+				return false
+	var min_b_dist_sq := (34.0 * 34.0) if is_priority else (48.0 * 48.0)
 	for bp in badge_positions:
-		if badge_pos.distance_to(bp) < min_b_dist:
+		if badge_pos.distance_squared_to(bp) < min_b_dist_sq:
 			return false
 	badge_positions.append(badge_pos)
 	return true
@@ -914,34 +939,53 @@ static func find_closest_deme_pair(r: Node2D, cell_a: EvoTypes.HexCell, cell_b: 
 	var demes: Dictionary = r.world_state.demes
 	var best_da: EvoTypes.Deme = null
 	var best_db: EvoTypes.Deme = null
+	var best_wa := Vector2.ZERO
+	var best_wb := Vector2.ZERO
 	var best_dist_sq := INF
 	var pact_da: EvoTypes.Deme = null
 	var pact_db: EvoTypes.Deme = null
+	var pact_wa := Vector2.ZERO
+	var pact_wb := Vector2.ZERO
 	var pact_dist_sq := INF
-	for id_a in cell_a.deme_ids:
+	var count_a := cell_a.deme_ids.size()
+	var count_b := cell_b.deme_ids.size()
+	var w_ca := HexMath.axial_to_world(cell_a.q, cell_a.r)
+	var w_cb := HexMath.axial_to_world(cell_b.q, cell_b.r)
+	var wb_list := PackedVector2Array()
+	wb_list.resize(count_b)
+	for j in range(count_b):
+		wb_list[j] = w_cb + HexMath.compute_village_sector_offset(j, count_b, HexMath.HEX_SIZE)
+	var has_pacts: bool = not (r.world_state as EvoTypes.WorldState).active_pacts.is_empty()
+	for i in range(count_a):
+		var id_a: String = cell_a.deme_ids[i]
 		if not demes.has(id_a):
 			continue
 		var da: EvoTypes.Deme = demes[id_a]
-		var wa := get_deme_world_pos(cell_a, id_a)
-		for id_b in cell_b.deme_ids:
+		var wa := w_ca + HexMath.compute_village_sector_offset(i, count_a, HexMath.HEX_SIZE)
+		for j in range(count_b):
+			var id_b: String = cell_b.deme_ids[j]
 			if not demes.has(id_b):
 				continue
 			var db: EvoTypes.Deme = demes[id_b]
-			var wb := get_deme_world_pos(cell_b, id_b)
+			var wb := wb_list[j]
 			var d2 := wa.distance_squared_to(wb)
-			if EvoTypes.is_pact_active(r.world_state, id_a, id_b) and d2 < pact_dist_sq:
+			if has_pacts and EvoTypes.is_pact_active(r.world_state, id_a, id_b) and d2 < pact_dist_sq:
 				pact_dist_sq = d2
 				pact_da = da
 				pact_db = db
+				pact_wa = wa
+				pact_wb = wb
 			if d2 < best_dist_sq:
 				best_dist_sq = d2
 				best_da = da
 				best_db = db
+				best_wa = wa
+				best_wb = wb
 	if pact_da != null and pact_db != null:
-		return {"da": pact_da, "db": pact_db}
+		return {"da": pact_da, "db": pact_db, "wa": pact_wa, "wb": pact_wb}
 	if best_da == null or best_db == null:
 		return {}
-	return {"da": best_da, "db": best_db}
+	return {"da": best_da, "db": best_db, "wa": best_wa, "wb": best_wb}
 
 
 static func resolve_road_endpoints(
@@ -951,13 +995,41 @@ static func resolve_road_endpoints(
 	from_deme_id: String,
 	to_deme_id: String
 ) -> Dictionary:
+	if cell_a.id == cell_b.id and r.has_meta("_deme_v_cache"):
+		var dv: Dictionary = r.get_meta("_deme_v_cache")
+		if dv.has(from_deme_id) and dv.has(to_deme_id):
+			var va: Dictionary = dv[from_deme_id]
+			var vb: Dictionary = dv[to_deme_id]
+			return {
+				"world_a": va["world_xy"],
+				"z_a": va["top_z"],
+				"world_b": vb["world_xy"],
+				"z_b": vb["top_z"],
+				"p_a": va["pos"],
+				"p_b": vb["pos"]
+			}
 	var world_a: Vector2
 	var world_b: Vector2
 	if cell_a.id != cell_b.id and not cell_a.deme_ids.is_empty() and not cell_b.deme_ids.is_empty():
 		var closest := find_closest_deme_pair(r, cell_a, cell_b)
 		if not closest.is_empty():
-			world_a = get_deme_world_pos(cell_a, (closest["da"] as EvoTypes.Deme).id)
-			world_b = get_deme_world_pos(cell_b, (closest["db"] as EvoTypes.Deme).id)
+			world_a = closest["wa"]
+			world_b = closest["wb"]
+			if r.has_meta("_deme_v_cache"):
+				var dv: Dictionary = r.get_meta("_deme_v_cache")
+				var id_a := (closest["da"] as EvoTypes.Deme).id
+				var id_b := (closest["db"] as EvoTypes.Deme).id
+				if dv.has(id_a) and dv.has(id_b):
+					var va: Dictionary = dv[id_a]
+					var vb: Dictionary = dv[id_b]
+					return {
+						"world_a": world_a,
+						"z_a": va["top_z"],
+						"world_b": world_b,
+						"z_b": vb["top_z"],
+						"p_a": va["pos"],
+						"p_b": vb["pos"]
+					}
 		else:
 			world_a = get_flow_endpoint_world(cell_a, from_deme_id, 0)
 			world_b = get_flow_endpoint_world(cell_b, to_deme_id, 1)

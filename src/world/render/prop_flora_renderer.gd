@@ -46,6 +46,7 @@ const DEFAULT_FLORA_PALETTE: Array[String] = ["tree_savanna", "wildflowers", "ta
 
 
 class Prop:
+	var hex_id: String = ""
 	var world_xy: Vector2
 	var top_z: float
 	var screen_offset: Vector2
@@ -97,7 +98,9 @@ static func get_villager_textures_for_color(r: Node2D, tunic_col: Color) -> Arra
 static func collect_villages(r: Node2D) -> Array[Dictionary]:
 	var villages: Array[Dictionary] = []
 	var state: EvoTypes.WorldState = r.world_state
-	for hex_id in state.cells:
+	var geo_by_deme := build_geopolitics_by_deme(state)
+	var hex_list: Array = r._sorted_hex_ids if not r._sorted_hex_ids.is_empty() else state.cells.keys()
+	for hex_id in hex_list:
 		var cell: EvoTypes.HexCell = state.cells[hex_id]
 		if r._is_water(cell):
 			continue
@@ -126,7 +129,7 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 			var v_pos: Vector2 = r._project(v_world, top_z)
 			var vital_status := deme.get_vital_status()
 			var status_col: Color = STATUS_COLORS[vital_status] if STATUS_COLORS.has(vital_status) else Color("#38bdf8")
-			var geo := resolve_deme_geopolitics(state, deme)
+			var geo: Dictionary = geo_by_deme[deme.id] if geo_by_deme.has(deme.id) else resolve_deme_geopolitics(state, deme)
 
 			villages.append({
 				"deme": deme,
@@ -326,25 +329,41 @@ static func compute_cell_flora_key(r: Node2D, cell: EvoTypes.HexCell, top_z: flo
 static func collect_static_props(r: Node2D) -> Array[Prop]:
 	var state: EvoTypes.WorldState = r.world_state
 	var hex_list: Array = r._sorted_hex_ids if not r._sorted_hex_ids.is_empty() else state.cells.keys()
-	var any_flora_changed: bool = not r._cell_flora_cache.has("__sorted_flora__")
+	var cam_vec := Vector2(r._built_yaw, r._built_pitch)
+	var full_flora_rebuild: bool = (
+		not r._cell_flora_cache.has("__sorted_flora__")
+		or r._cell_flora_cache.get("__flora_cam__", Vector2.INF) != cam_vec
+	)
+	var changed_hexes: Dictionary = {}
 	for hex_id in hex_list:
 		var cell: EvoTypes.HexCell = state.cells[hex_id]
 		if r._is_water(cell):
+			if r._cell_flora_cache.has(hex_id):
+				r._cell_flora_cache.erase(hex_id)
+				changed_hexes[hex_id] = true
 			continue
 		var top_z: float = r._get_cell_top_z(cell)
 		var flora_key := compute_cell_flora_key(r, cell, top_z)
 		if not r._cell_flora_cache.has(hex_id) or (r._cell_flora_cache[hex_id]["key"] as Array) != flora_key:
-			any_flora_changed = true
+			changed_hexes[hex_id] = true
 			var world_xy := HexMath.axial_to_world(cell.q, cell.r)
 			var cell_props: Array[Prop] = []
 			collect_cell_flora_props(r, cell, world_xy, top_z, cell_props)
 			for cp in cell_props:
+				cp.hex_id = hex_id
 				cp.project(r._ground, r._lift)
-			cell_props.sort_custom(func(a: Prop, b: Prop) -> bool: return a.y < b.y)
+			for i in range(1, cell_props.size()):
+				var kp: Prop = cell_props[i]
+				var ky: float = kp.y
+				var j: int = i - 1
+				while j >= 0 and cell_props[j].y > ky:
+					cell_props[j + 1] = cell_props[j]
+					j -= 1
+				cell_props[j + 1] = kp
 			r._cell_flora_cache[hex_id] = {"key": flora_key, "props": cell_props}
 
 	var flora_sorted: Array[Prop] = []
-	if any_flora_changed:
+	if full_flora_rebuild or changed_hexes.size() > 45:
 		for hex_id in hex_list:
 			var cell: EvoTypes.HexCell = state.cells[hex_id]
 			if r._is_water(cell):
@@ -359,6 +378,39 @@ static func collect_static_props(r: Node2D) -> Array[Prop]:
 				flora_sorted[j + 1] = flora_sorted[j]
 				j -= 1
 			flora_sorted[j + 1] = key_prop
+		r._cell_flora_cache["__sorted_flora__"] = flora_sorted
+		r._cell_flora_cache["__flora_cam__"] = cam_vec
+	elif not changed_hexes.is_empty():
+		var prev_sorted: Array[Prop] = r._cell_flora_cache["__sorted_flora__"] as Array[Prop]
+		var added_props: Array[Prop] = []
+		for ch_id in changed_hexes.keys():
+			if r._cell_flora_cache.has(ch_id):
+				added_props.append_array(r._cell_flora_cache[ch_id]["props"] as Array[Prop])
+		for i in range(1, added_props.size()):
+			var kp: Prop = added_props[i]
+			var ky: float = kp.y
+			var j: int = i - 1
+			while j >= 0 and added_props[j].y > ky:
+				added_props[j + 1] = added_props[j]
+				j -= 1
+			added_props[j + 1] = kp
+		var p_idx := 0
+		var a_idx := 0
+		var p_len := prev_sorted.size()
+		var a_len := added_props.size()
+		while p_idx < p_len:
+			var pp: Prop = prev_sorted[p_idx]
+			if changed_hexes.has(pp.hex_id):
+				p_idx += 1
+				continue
+			while a_idx < a_len and added_props[a_idx].y <= pp.y:
+				flora_sorted.append(added_props[a_idx])
+				a_idx += 1
+			flora_sorted.append(pp)
+			p_idx += 1
+		while a_idx < a_len:
+			flora_sorted.append(added_props[a_idx])
+			a_idx += 1
 		r._cell_flora_cache["__sorted_flora__"] = flora_sorted
 	else:
 		flora_sorted = r._cell_flora_cache["__sorted_flora__"] as Array[Prop]
@@ -375,9 +427,14 @@ static func collect_static_props(r: Node2D) -> Array[Prop]:
 
 	for village in r._villages:
 		collect_village_building_props(village, dyn_props)
-	for dp in dyn_props:
-		dp.project(r._ground, r._lift)
-	dyn_props.sort_custom(func(a: Prop, b: Prop) -> bool: return a.y < b.y)
+	for i in range(1, dyn_props.size()):
+		var key_dp: Prop = dyn_props[i]
+		var key_dy: float = key_dp.y
+		var j: int = i - 1
+		while j >= 0 and dyn_props[j].y > key_dy:
+			dyn_props[j + 1] = dyn_props[j]
+			j -= 1
+		dyn_props[j + 1] = key_dp
 
 	var props: Array[Prop] = []
 	var f_idx := 0
@@ -403,36 +460,116 @@ static func collect_static_props(r: Node2D) -> Array[Prop]:
 
 static func collect_village_building_props(village: Dictionary, props: Array[Prop]) -> void:
 	var deme: EvoTypes.Deme = village["deme"]
-	var v_world: Vector2 = village["world_xy"]
-	var top_z: float = village["top_z"]
+	var v_pos: Vector2 = village["pos"]
 	var sf: float = village["sf"]
 	var m: Color = village["modulate"]
-
-	var layout := get_village_building_layout(
-		int(village["tier"]),
-		sf,
-		not deme.cultural_trait_ids.is_empty(),
-		deme.cultural_trait_ids.size(),
-		str(village["archetype"])
+	var tier := int(village["tier"])
+	var c_count := deme.cultural_trait_ids.size()
+	var arch := str(village["archetype"])
+	var flags: int = (
+		(1 if bool(village.get("has_pact", false)) else 0)
+		| (2 if bool(village.get("in_war", false)) else 0)
+		| (4 if bool(village.get("in_raid", false)) else 0)
+		| (8 if bool(village.get("in_betrayal", false)) else 0)
 	)
+	var vp_key: Array = [tier, sf, c_count, arch, flags, m, v_pos]
+	if deme.has_meta("_vp_key") and (deme.get_meta("_vp_key") as Array) == vp_key:
+		props.append_array(deme.get_meta("_vp_val") as Array[Prop])
+		return
+
+	var v_props: Array[Prop] = []
+	var v_world: Vector2 = village["world_xy"]
+	var top_z: float = village["top_z"]
+	var layout := get_village_building_layout(tier, sf, c_count > 0, c_count, arch)
 	for b_item in layout:
-		props.append(world_prop(str(b_item["sprite"]), v_world, top_z, b_item["offset"], float(b_item["scale"]), m))
-	_draw_settlement_props(village, props)
+		var off: Vector2 = b_item["offset"]
+		var p := world_prop(str(b_item["sprite"]), v_world, top_z, off, float(b_item["scale"]), m)
+		p.set_foot(v_pos + off)
+		v_props.append(p)
+	_draw_settlement_props(village, v_props)
+	deme.set_meta("_vp_key", vp_key)
+	deme.set_meta("_vp_val", v_props)
+	props.append_array(v_props)
 
 
 static func _draw_settlement_props(village: Dictionary, props: Array[Prop]) -> void:
 	var v_world: Vector2 = village["world_xy"]
+	var v_pos: Vector2 = village["pos"]
 	var top_z: float = village["top_z"]
 	var sf: float = village["sf"]
 	var m: Color = village["modulate"]
 	if bool(village.get("has_pact", false)):
-		props.append(world_prop("prop_pact_totem", v_world, top_z, Vector2(0, 34) * sf, 2.15 * sf, m))
+		var off := Vector2(0, 34) * sf
+		var p := world_prop("prop_pact_totem", v_world, top_z, off, 2.15 * sf, m)
+		p.set_foot(v_pos + off)
+		props.append(p)
 	if bool(village.get("in_war", false)):
-		props.append(world_prop("prop_war_banner", v_world, top_z, Vector2(-58, 12) * sf, 2.25 * sf, m))
+		var off := Vector2(-58, 12) * sf
+		var p := world_prop("prop_war_banner", v_world, top_z, off, 2.25 * sf, m)
+		p.set_foot(v_pos + off)
+		props.append(p)
 	if bool(village.get("in_raid", false)):
-		props.append(world_prop("prop_raid_loot", v_world, top_z, Vector2(58, 12) * sf, 2.15 * sf, m))
+		var off := Vector2(58, 12) * sf
+		var p := world_prop("prop_raid_loot", v_world, top_z, off, 2.15 * sf, m)
+		p.set_foot(v_pos + off)
+		props.append(p)
 	if bool(village.get("in_betrayal", false)):
-		props.append(world_prop("prop_betrayal_ruin", v_world, top_z, Vector2(0, -28) * sf, 2.20 * sf, m))
+		var off := Vector2(0, -28) * sf
+		var p := world_prop("prop_betrayal_ruin", v_world, top_z, off, 2.20 * sf, m)
+		p.set_foot(v_pos + off)
+		props.append(p)
+
+
+static func build_geopolitics_by_deme(state: EvoTypes.WorldState) -> Dictionary:
+	var geo_by_deme: Dictionary = {}
+	for did in state.demes.keys():
+		var empty_icons: Array[String] = []
+		geo_by_deme[did] = {
+			"has_pact": false,
+			"in_war": false,
+			"in_raid": false,
+			"in_betrayal": false,
+			"geo_icons": empty_icons
+		}
+	for pk_var in state.active_pacts.keys():
+		if int(state.active_pacts[pk_var]) >= 2:
+			var pk := str(pk_var)
+			var sep := "__" if pk.contains("__") else "|"
+			var parts := pk.split(sep)
+			if parts.size() == 2 and geo_by_deme.has(parts[0]) and geo_by_deme.has(parts[1]):
+				geo_by_deme[parts[0]]["has_pact"] = true
+				geo_by_deme[parts[1]]["has_pact"] = true
+	for flow in state.active_flows:
+		var ft := flow.flow_type
+		if not ft in ["war", "raid", "betrayal", "pact"]:
+			continue
+		var flag_key := "has_pact" if ft == "pact" else ("in_" + ft)
+		if flow.from_deme_id != "" or flow.to_deme_id != "":
+			if geo_by_deme.has(flow.from_deme_id):
+				geo_by_deme[flow.from_deme_id][flag_key] = true
+			if geo_by_deme.has(flow.to_deme_id):
+				geo_by_deme[flow.to_deme_id][flag_key] = true
+		else:
+			if state.cells.has(flow.from_hex_id):
+				for did in (state.cells[flow.from_hex_id] as EvoTypes.HexCell).deme_ids:
+					if geo_by_deme.has(did):
+						geo_by_deme[did][flag_key] = true
+			if state.cells.has(flow.to_hex_id):
+				for did in (state.cells[flow.to_hex_id] as EvoTypes.HexCell).deme_ids:
+					if geo_by_deme.has(did):
+						geo_by_deme[did][flag_key] = true
+	for did in geo_by_deme.keys():
+		var entry: Dictionary = geo_by_deme[did]
+		var icons: Array[String] = entry["geo_icons"]
+		if bool(entry["in_war"]):
+			icons.append("war")
+		if bool(entry["in_betrayal"]):
+			icons.append("betrayal")
+		if bool(entry["in_raid"]):
+			icons.append("raid")
+		if bool(entry["has_pact"]):
+			icons.append("pact")
+	return geo_by_deme
 
 
 static func resolve_deme_geopolitics(state: EvoTypes.WorldState, deme: EvoTypes.Deme) -> Dictionary:
@@ -499,8 +636,14 @@ static func get_cell_road_corridors_local(
 		var has_link := not ncell.deme_ids.is_empty() or (ncell.biome == "coastal_shallows" and ncell.altitude >= state.sea_level)
 		if has_link:
 			var n_local := HexMath.axial_to_world(ncell.q, ncell.r) - cell_world
-			for vc in village_local_centers:
-				segments.append({"a": vc, "b": n_local})
+			var best_vc: Vector2 = village_local_centers[0]
+			var best_d2: float = best_vc.distance_squared_to(n_local)
+			for v_i in range(1, v_count):
+				var d2 := village_local_centers[v_i].distance_squared_to(n_local)
+				if d2 < best_d2:
+					best_d2 = d2
+					best_vc = village_local_centers[v_i]
+			segments.append({"a": best_vc, "b": n_local})
 	return segments
 
 
@@ -537,12 +680,16 @@ static func collect_cell_flora_props(
 	var palette_sprites: Array = BIOME_FLORA_PALETTES[cell.biome] if BIOME_FLORA_PALETTES.has(cell.biome) else DEFAULT_FLORA_PALETTE
 	var placed_offsets: Array[Vector2] = []
 	var village_clear_r := 118.0 if v_count == 1 else 88.0
+	var village_clear_r_sq := village_clear_r * village_clear_r
+	var village_clear_r2_sq := (village_clear_r - 2.0) * (village_clear_r - 2.0)
+	var max_rad_sq := (HexMath.HEX_SIZE * 0.82) * (HexMath.HEX_SIZE * 0.82)
 	var inner_count: int = 0 if v_count > 0 else maxi(2, prop_count / 3)
 	var outer_count: int = prop_count - inner_count
+	var base_seed: int = cell.q * 73856093 ^ cell.r * 19349663
 
 	for idx in range(prop_count):
-		var s1: int = r._cell_seed(cell.q, cell.r, idx * 13 + 1)
-		var s2: int = r._cell_seed(cell.q, cell.r, idx * 29 + 7)
+		var s1: int = absi(base_seed ^ ((idx * 13 + 1) * 83492791))
+		var s2: int = absi(base_seed ^ ((idx * 29 + 7) * 83492791))
 		var angle := 0.0
 		var rad_norm := 0.0
 		if idx < inner_count:
@@ -560,18 +707,19 @@ static func collect_cell_flora_props(
 
 		var valid_spot := true
 		for vc in village_local_centers:
-			if local_off.distance_to(vc) < village_clear_r:
-				var push_dir := (local_off - vc).normalized() if local_off.distance_to(vc) > 0.01 else Vector2(cos(angle), sin(angle))
+			var d_sq := local_off.distance_squared_to(vc)
+			if d_sq < village_clear_r_sq:
+				var push_dir := (local_off - vc).normalized() if d_sq > 0.0001 else Vector2(cos(angle), sin(angle))
 				local_off = vc + push_dir * (village_clear_r + 8.0)
-				if local_off.length() > HexMath.HEX_SIZE * 0.82:
+				if local_off.length_squared() > max_rad_sq:
 					valid_spot = false
 				break
 		if not valid_spot:
 			continue
-		if v_count >= 2 and local_off.length() < 74.0:
+		if v_count >= 2 and local_off.length_squared() < 5476.0:
 			continue
 		for vc in village_local_centers:
-			if local_off.distance_to(vc) < village_clear_r - 2.0:
+			if local_off.distance_squared_to(vc) < village_clear_r2_sq:
 				valid_spot = false
 				break
 		if not valid_spot:
@@ -579,14 +727,14 @@ static func collect_cell_flora_props(
 
 		for seg in road_corridors:
 			var closest := Geometry2D.get_closest_point_to_segment(local_off, seg["a"], seg["b"])
-			if local_off.distance_to(closest) < 42.0:
+			if local_off.distance_squared_to(closest) < 1764.0:
 				valid_spot = false
 				break
 		if not valid_spot:
 			continue
 
 		for prev in placed_offsets:
-			if local_off.distance_to(prev) < 52.0:
+			if local_off.distance_squared_to(prev) < 2704.0:
 				valid_spot = false
 				break
 		if not valid_spot:

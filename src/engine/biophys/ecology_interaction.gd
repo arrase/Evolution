@@ -153,7 +153,6 @@ static func _is_opportunistic_betrayer(
 		return false
 	var has_coop_culture := (
 		deme.cultural_trait_ids.has("cul-communal-conservation")
-		or deme.cultural_trait_ids.has("cul-cooperative-networks")
 		or deme.cultural_trait_ids.has("cul-interdeme-barter")
 	)
 	if p_disp + p_over > p_coop + p_exch + 0.08 and (v_eff.social_cohesion < 0.55 or not has_coop_culture):
@@ -179,9 +178,15 @@ static func _execute_betrayal(
 	turn_geopolitical_flows: Array[EvoTypes.HexEdgeFlow]
 ) -> void:
 	var ext_victim := float(extracted_energy_by_deme.get(victim.id, 0.0))
-	var loot := snappedf(clampf(victim.energy_reserves * 0.30 + ext_victim * 0.25, 10.0, 45.0), 0.01)
+	var desired_loot := snappedf(clampf(victim.energy_reserves * 0.30 + ext_victim * 0.25, 10.0, 45.0), 0.01)
+	var from_reserves := minf(victim.energy_reserves, desired_loot * 0.70)
+	var from_ext := minf(ext_victim, desired_loot - from_reserves)
+	if from_reserves + from_ext < desired_loot:
+		from_reserves = minf(victim.energy_reserves, from_reserves + (desired_loot - (from_reserves + from_ext)))
+	var loot := snappedf(from_reserves + from_ext, 0.01)
+	victim.energy_reserves = maxf(0.0, snappedf(victim.energy_reserves - from_reserves, 0.01))
+	extracted_energy_by_deme[victim.id] = maxf(0.0, snappedf(ext_victim - from_ext, 0.01))
 	betrayer.energy_reserves = minf(220.0, snappedf(betrayer.energy_reserves + loot, 0.01))
-	victim.energy_reserves = maxf(0.0, snappedf(victim.energy_reserves - loot, 0.01))
 
 	var casualties := maxi(3, int(round(float(victim.population) * 0.14)))
 	victim.population = maxi(5, victim.population - casualties)
@@ -245,114 +250,115 @@ static func _run_pacts_and_betrayals(
 	extracted_energy_by_deme: Dictionary,
 	symbiosis_bonus_applied: Dictionary,
 	turn_geopolitical_flows: Array[EvoTypes.HexEdgeFlow],
-	betrayed_pairs_this_turn: Dictionary
+	betrayed_pairs_this_turn: Dictionary,
+	arch_probs: Dictionary,
+	adjacent_pairs: Array,
+	existing_flows_by_key: Dictionary
 ) -> void:
-	var deme_ids := state.demes.keys()
-	for i in range(deme_ids.size()):
-		var id_1 := str(deme_ids[i])
-		if not state.demes.has(id_1):
-			continue
-		var d1: EvoTypes.Deme = state.demes[id_1]
-		if not state.cells.has(d1.hex_id):
-			continue
-		var c1: EvoTypes.HexCell = state.cells[d1.hex_id]
+	var has_warrior: Dictionary = {}
+	for did in state.demes.keys():
+		var d: EvoTypes.Deme = state.demes[did]
+		has_warrior[d.id] = d.cultural_trait_ids.has("cul-warrior-expansion")
 
-		for j in range(i + 1, deme_ids.size()):
-			var id_2 := str(deme_ids[j])
-			if not state.demes.has(id_2):
+	var logged_pact_hex_pairs: Dictionary = {}
+
+	for pair in adjacent_pairs:
+		var d1: EvoTypes.Deme = pair[0]
+		var c1: EvoTypes.HexCell = pair[1]
+		var d2: EvoTypes.Deme = pair[2]
+		var c2: EvoTypes.HexCell = pair[3]
+		var pair_key: String = pair[4]
+
+		var ap1: Array = arch_probs[d1.id]
+		var p_coop_1: float = float(ap1[0])
+		var p_exch_1: float = float(ap1[1])
+		var p_disp_1: float = float(ap1[2])
+		var p_over_1: float = float(ap1[3])
+		var coop_1: bool = p_coop_1 + p_exch_1 >= 0.30 and p_disp_1 < 0.22 and not bool(has_warrior[d1.id])
+
+		var pact_turns := int(state.active_pacts.get(pair_key, 0))
+		var formal_pact := pact_turns >= 2
+
+		var v1: EvoTypes.BiophysicalVector = effective_vec_by_deme[d1.id]
+		var v2: EvoTypes.BiophysicalVector = effective_vec_by_deme[d2.id]
+		var ext_1 := float(extracted_energy_by_deme.get(d1.id, 0.0))
+		var ext_2 := float(extracted_energy_by_deme.get(d2.id, 0.0))
+
+		var ap2: Array = arch_probs[d2.id]
+		var p_coop_2: float = float(ap2[0])
+		var p_exch_2: float = float(ap2[1])
+		var p_disp_2: float = float(ap2[2])
+		var p_over_2: float = float(ap2[3])
+
+		if formal_pact:
+			var d1_betrays := (
+				_is_deme_stressed_for_betrayal(d1, c1, state, v1, ext_1)
+				and _is_opportunistic_betrayer(d1, v1, p_coop_1, p_exch_1, p_disp_1, p_over_1, formal_pact)
+			)
+			var d2_betrays := (
+				_is_deme_stressed_for_betrayal(d2, c2, state, v2, ext_2)
+				and _is_opportunistic_betrayer(d2, v2, p_coop_2, p_exch_2, p_disp_2, p_over_2, formal_pact)
+			)
+			if d1_betrays or d2_betrays:
+				betrayed_pairs_this_turn[pair_key] = true
+				if d1_betrays:
+					_execute_betrayal(d1, d2, c1, c2, pair_key, state, lang, extracted_energy_by_deme, turn_geopolitical_flows)
+				else:
+					_execute_betrayal(d2, d1, c2, c1, pair_key, state, lang, extracted_energy_by_deme, turn_geopolitical_flows)
 				continue
-			var d2: EvoTypes.Deme = state.demes[id_2]
-			if not state.cells.has(d2.hex_id):
-				continue
-			var c2: EvoTypes.HexCell = state.cells[d2.hex_id]
 
-			var dist := HexMath.hex_distance(c1.q, c1.r, c2.q, c2.r)
-			if dist > 1:
-				continue
-			if dist == 1 and (c1.biome == "ocean" or c2.biome == "ocean" or c1.altitude > 0.85 or c2.altitude > 0.85):
-				continue
+		var coop_2: bool = p_coop_2 + p_exch_2 >= 0.30 and p_disp_2 < 0.22 and not bool(has_warrior[d2.id])
+		if coop_1 and coop_2:
+			var next_turns := pact_turns + 1
+			state.active_pacts[pair_key] = next_turns
+			var hex_pair_key := ("%s|%s" % [c1.id, c2.id]) if c1.id <= c2.id else ("%s|%s" % [c2.id, c1.id])
+			if next_turns == 2 and not logged_pact_hex_pairs.has(hex_pair_key):
+				logged_pact_hex_pairs[hex_pair_key] = true
+				var hex_label := c1.id if c1.id == c2.id else "%s <-> %s" % [c1.id, c2.id]
+				var params := {
+					"deme_a": d1.name,
+					"deme_b": d2.name,
+					"hex": hex_label
+				}
+				var entry := EvoTypes.ChronicleEntry.new()
+				entry.id = "chronicle-pact-%d-%s" % [state.generation, pair_key]
+				entry.generation = state.generation
+				entry.event_type = "pact"
+				entry.title = EvoI18n.t(lang, "chronicle_pact_title", params)
+				entry.causal_explanation = EvoI18n.t(lang, "chronicle_pact_desc", params)
+				entry.hex_id = c1.id
+				entry.deme_id = d1.id
+				entry.lineage_id = d1.lineage_id
+				state.chronicle.append(entry)
 
-			var pair_key := EvoTypes.make_pair_key(d1.id, d2.id)
-			var pact_turns := int(state.active_pacts.get(pair_key, 0))
-			var formal_pact := EvoTypes.is_pact_active(state, d1.id, d2.id)
+			if next_turns >= 2:
+				if not symbiosis_bonus_applied.has(d1.id):
+					extracted_energy_by_deme[d1.id] = snappedf(ext_1 * 1.15, 0.0001)
+					symbiosis_bonus_applied[d1.id] = true
+				if not symbiosis_bonus_applied.has(d2.id):
+					extracted_energy_by_deme[d2.id] = snappedf(ext_2 * 1.15, 0.0001)
+					symbiosis_bonus_applied[d2.id] = true
 
-			var v1: EvoTypes.BiophysicalVector = effective_vec_by_deme[d1.id]
-			var v2: EvoTypes.BiophysicalVector = effective_vec_by_deme[d2.id]
-			var ext_1 := float(extracted_energy_by_deme.get(d1.id, 0.0))
-			var ext_2 := float(extracted_energy_by_deme.get(d2.id, 0.0))
+				var need_1 := _compute_caloric_need(d1, v1)
+				var need_2 := _compute_caloric_need(d2, v2)
+				var d1_distress := d1.energy_reserves < 35.0 or float(extracted_energy_by_deme[d1.id]) < need_1
+				var d2_distress := d2.energy_reserves < 35.0 or float(extracted_energy_by_deme[d2.id]) < need_2
 
-			var p_coop_1 := get_archetype_prob(d1, state.decisions_catalog, "cooperate")
-			var p_exch_1 := get_archetype_prob(d1, state.decisions_catalog, "exchange")
-			var p_disp_1 := get_archetype_prob(d1, state.decisions_catalog, "dispute")
-			var p_over_1 := get_archetype_prob(d1, state.decisions_catalog, "overexploit")
+				if d1_distress and not d2_distress and d2.energy_reserves > 60.0:
+					var transfer := snappedf(minf(14.0, (d2.energy_reserves - 50.0) * 0.25), 0.01)
+					d2.energy_reserves = maxf(0.0, snappedf(d2.energy_reserves - transfer, 0.01))
+					d1.energy_reserves = snappedf(d1.energy_reserves + transfer, 0.01)
+				elif d2_distress and not d1_distress and d1.energy_reserves > 60.0:
+					var transfer := snappedf(minf(14.0, (d1.energy_reserves - 50.0) * 0.25), 0.01)
+					d1.energy_reserves = maxf(0.0, snappedf(d1.energy_reserves - transfer, 0.01))
+					d2.energy_reserves = snappedf(d2.energy_reserves + transfer, 0.01)
 
-			var p_coop_2 := get_archetype_prob(d2, state.decisions_catalog, "cooperate")
-			var p_exch_2 := get_archetype_prob(d2, state.decisions_catalog, "exchange")
-			var p_disp_2 := get_archetype_prob(d2, state.decisions_catalog, "dispute")
-			var p_over_2 := get_archetype_prob(d2, state.decisions_catalog, "overexploit")
-
-			if formal_pact:
-				var d1_betrays := (
-					_is_deme_stressed_for_betrayal(d1, c1, state, v1, ext_1)
-					and _is_opportunistic_betrayer(d1, v1, p_coop_1, p_exch_1, p_disp_1, p_over_1, formal_pact)
-				)
-				var d2_betrays := (
-					_is_deme_stressed_for_betrayal(d2, c2, state, v2, ext_2)
-					and _is_opportunistic_betrayer(d2, v2, p_coop_2, p_exch_2, p_disp_2, p_over_2, formal_pact)
-				)
-				if d1_betrays or d2_betrays:
-					betrayed_pairs_this_turn[pair_key] = true
-					if d1_betrays:
-						_execute_betrayal(d1, d2, c1, c2, pair_key, state, lang, extracted_energy_by_deme, turn_geopolitical_flows)
-					else:
-						_execute_betrayal(d2, d1, c2, c1, pair_key, state, lang, extracted_energy_by_deme, turn_geopolitical_flows)
-					continue
-
-			var coop_1 := p_coop_1 + p_exch_1 >= 0.30 and p_disp_1 < 0.22 and not d1.cultural_trait_ids.has("cul-warrior-expansion")
-			var coop_2 := p_coop_2 + p_exch_2 >= 0.30 and p_disp_2 < 0.22 and not d2.cultural_trait_ids.has("cul-warrior-expansion")
-			if coop_1 and coop_2:
-				var next_turns := pact_turns + 1
-				state.active_pacts[pair_key] = next_turns
-				if next_turns == 2:
-					var hex_label := c1.id if c1.id == c2.id else "%s <-> %s" % [c1.id, c2.id]
-					var params := {
-						"deme_a": d1.name,
-						"deme_b": d2.name,
-						"hex": hex_label
-					}
-					var entry := EvoTypes.ChronicleEntry.new()
-					entry.id = "chronicle-pact-%d-%s" % [state.generation, pair_key]
-					entry.generation = state.generation
-					entry.event_type = "pact"
-					entry.title = EvoI18n.t(lang, "chronicle_pact_title", params)
-					entry.causal_explanation = EvoI18n.t(lang, "chronicle_pact_desc", params)
-					entry.hex_id = c1.id
-					entry.deme_id = d1.id
-					entry.lineage_id = d1.lineage_id
-					state.chronicle.append(entry)
-
-				if EvoTypes.is_pact_active(state, d1.id, d2.id):
-					if not symbiosis_bonus_applied.has(d1.id):
-						extracted_energy_by_deme[d1.id] = snappedf(ext_1 * 1.15, 0.0001)
-						symbiosis_bonus_applied[d1.id] = true
-					if not symbiosis_bonus_applied.has(d2.id):
-						extracted_energy_by_deme[d2.id] = snappedf(ext_2 * 1.15, 0.0001)
-						symbiosis_bonus_applied[d2.id] = true
-
-					var need_1 := _compute_caloric_need(d1, v1)
-					var need_2 := _compute_caloric_need(d2, v2)
-					var d1_distress := d1.energy_reserves < 35.0 or float(extracted_energy_by_deme[d1.id]) < need_1
-					var d2_distress := d2.energy_reserves < 35.0 or float(extracted_energy_by_deme[d2.id]) < need_2
-
-					if d1_distress and not d2_distress and d2.energy_reserves > 60.0:
-						var transfer := snappedf(minf(14.0, (d2.energy_reserves - 50.0) * 0.25), 0.01)
-						d2.energy_reserves = maxf(0.0, snappedf(d2.energy_reserves - transfer, 0.01))
-						d1.energy_reserves = snappedf(d1.energy_reserves + transfer, 0.01)
-					elif d2_distress and not d1_distress and d1.energy_reserves > 60.0:
-						var transfer := snappedf(minf(14.0, (d1.energy_reserves - 50.0) * 0.25), 0.01)
-						d1.energy_reserves = maxf(0.0, snappedf(d1.energy_reserves - transfer, 0.01))
-						d2.energy_reserves = snappedf(d2.energy_reserves + transfer, 0.01)
-
+				var flow_key := pair_key if c1.id == c2.id else hex_pair_key
+				if existing_flows_by_key.has(flow_key):
+					var ex_flow: EvoTypes.HexEdgeFlow = existing_flows_by_key[flow_key]
+					ex_flow.flow_type = "pact"
+					ex_flow.intensity = 0.80
+				else:
 					var flow := EvoTypes.HexEdgeFlow.new()
 					flow.from_hex_id = c1.id
 					flow.to_hex_id = c2.id
@@ -362,12 +368,13 @@ static func _run_pacts_and_betrayals(
 					flow.to_deme_id = d2.id
 					state.active_flows.append(flow)
 					turn_geopolitical_flows.append(flow)
-			elif pact_turns > 0 and ((p_coop_1 + p_exch_1 < 0.18 and p_coop_2 + p_exch_2 < 0.18) or p_disp_1 >= 0.28 or p_disp_2 >= 0.28):
-				var decayed := pact_turns - 1
-				if decayed <= 0:
-					state.active_pacts.erase(pair_key)
-				else:
-					state.active_pacts[pair_key] = decayed
+					existing_flows_by_key[flow_key] = flow
+		elif pact_turns > 0 and ((p_coop_1 + p_exch_1 < 0.18 and p_coop_2 + p_exch_2 < 0.18) or p_disp_1 >= 0.28 or p_disp_2 >= 0.28):
+			var decayed := pact_turns - 1
+			if decayed <= 0:
+				state.active_pacts.erase(pair_key)
+			else:
+				state.active_pacts[pair_key] = decayed
 
 
 static func _can_attempt_raid(
@@ -467,12 +474,12 @@ static func _execute_raid_if_successful(
 	if from_reserves + from_ext < desired_loot:
 		var rem := desired_loot - (from_reserves + from_ext)
 		from_reserves = minf(victim.energy_reserves, from_reserves + rem)
-	var loot := snappedf(maxf(8.0, from_reserves + from_ext), 0.01)
+	var loot := snappedf(from_reserves + from_ext, 0.01)
 
 	victim.energy_reserves = maxf(0.0, snappedf(victim.energy_reserves - from_reserves, 0.01))
 	extracted_energy_by_deme[victim.id] = maxf(0.0, snappedf(ext_v - from_ext, 0.01))
 	extracted_energy_by_deme[raider.id] = snappedf(float(extracted_energy_by_deme.get(raider.id, 0.0)) + from_ext, 0.01)
-	raider.energy_reserves = minf(220.0, snappedf(raider.energy_reserves + loot, 0.01))
+	raider.energy_reserves = minf(220.0, snappedf(raider.energy_reserves + from_reserves, 0.01))
 
 	var r_loss := maxi(1, int(round(float(raider.population) * 0.025)))
 	var v_loss := maxi(1, int(round(float(victim.population) * 0.04)))
@@ -516,53 +523,45 @@ static func _run_raids(
 	effective_vec_by_deme: Dictionary,
 	extracted_energy_by_deme: Dictionary,
 	turn_geopolitical_flows: Array[EvoTypes.HexEdgeFlow],
-	betrayed_pairs_this_turn: Dictionary
+	betrayed_pairs_this_turn: Dictionary,
+	arch_probs: Dictionary,
+	adjacent_pairs: Array
 ) -> void:
+	var any_raider := false
+	for did in arch_probs.keys():
+		var ap: Array = arch_probs[did]
+		if float(ap[2]) + float(ap[3]) >= 0.28:
+			any_raider = true
+			break
+	if not any_raider:
+		return
+
 	var raided_pairs: Dictionary = {}
-	var deme_ids := state.demes.keys()
-	for i in range(deme_ids.size()):
-		var id_1 := str(deme_ids[i])
-		if not state.demes.has(id_1):
+	for pair in adjacent_pairs:
+		var d1: EvoTypes.Deme = pair[0]
+		var c1: EvoTypes.HexCell = pair[1]
+		var d2: EvoTypes.Deme = pair[2]
+		var c2: EvoTypes.HexCell = pair[3]
+		var pair_key: String = pair[4]
+
+		if betrayed_pairs_this_turn.has(pair_key) or raided_pairs.has(pair_key):
 			continue
-		var d1: EvoTypes.Deme = state.demes[id_1]
-		if not state.cells.has(d1.hex_id):
+		if int(state.active_pacts.get(pair_key, 0)) >= 2:
 			continue
-		var c1: EvoTypes.HexCell = state.cells[d1.hex_id]
+		if d1.lineage_id == d2.lineage_id and EvoDemographyMigration.compute_deme_divergence(d1, d2) <= 0.35:
+			continue
 
-		for j in range(i + 1, deme_ids.size()):
-			var id_2 := str(deme_ids[j])
-			if not state.demes.has(id_2):
-				continue
-			var d2: EvoTypes.Deme = state.demes[id_2]
-			if not state.cells.has(d2.hex_id):
-				continue
-			var c2: EvoTypes.HexCell = state.cells[d2.hex_id]
+		var v1: EvoTypes.BiophysicalVector = effective_vec_by_deme[d1.id]
+		var v2: EvoTypes.BiophysicalVector = effective_vec_by_deme[d2.id]
 
-			var dist := HexMath.hex_distance(c1.q, c1.r, c2.q, c2.r)
-			if dist > 1:
-				continue
-			if dist == 1 and (c1.biome == "ocean" or c2.biome == "ocean" or c1.altitude > 0.85 or c2.altitude > 0.85):
+		if _can_attempt_raid(d1, d2, c1, state, v1, extracted_energy_by_deme):
+			if _execute_raid_if_successful(d1, d2, c1, c2, state, lang, v1, v2, extracted_energy_by_deme, turn_geopolitical_flows):
+				raided_pairs[pair_key] = true
 				continue
 
-			var pair_key := EvoTypes.make_pair_key(d1.id, d2.id)
-			if betrayed_pairs_this_turn.has(pair_key) or raided_pairs.has(pair_key):
-				continue
-			if EvoTypes.is_pact_active(state, d1.id, d2.id):
-				continue
-			if d1.lineage_id == d2.lineage_id and EvoDemographyMigration.compute_deme_divergence(d1, d2) <= 0.35:
-				continue
-
-			var v1: EvoTypes.BiophysicalVector = effective_vec_by_deme[d1.id]
-			var v2: EvoTypes.BiophysicalVector = effective_vec_by_deme[d2.id]
-
-			if _can_attempt_raid(d1, d2, c1, state, v1, extracted_energy_by_deme):
-				if _execute_raid_if_successful(d1, d2, c1, c2, state, lang, v1, v2, extracted_energy_by_deme, turn_geopolitical_flows):
-					raided_pairs[pair_key] = true
-					continue
-
-			if _can_attempt_raid(d2, d1, c2, state, v2, extracted_energy_by_deme):
-				if _execute_raid_if_successful(d2, d1, c2, c1, state, lang, v2, v1, extracted_energy_by_deme, turn_geopolitical_flows):
-					raided_pairs[pair_key] = true
+		if _can_attempt_raid(d2, d1, c2, state, v2, extracted_energy_by_deme):
+			if _execute_raid_if_successful(d2, d1, c2, c1, state, lang, v2, v1, extracted_energy_by_deme, turn_geopolitical_flows):
+				raided_pairs[pair_key] = true
 
 
 static func run_resource_and_symbiosis_phase(
@@ -575,6 +574,7 @@ static func run_resource_and_symbiosis_phase(
 ) -> void:
 	var is_en := lang == "en"
 	var symbiosis_bonus_applied: Dictionary = {}
+	var existing_flows_by_key: Dictionary = {}
 	var initial_cultural_traits_by_deme: Dictionary = {}
 	for did in state.demes.keys():
 		initial_cultural_traits_by_deme[did] = (state.demes[did] as EvoTypes.Deme).cultural_trait_ids.duplicate()
@@ -717,6 +717,8 @@ static func run_resource_and_symbiosis_phase(
 				flow.from_deme_id = ex.id
 				flow.to_deme_id = partner.id
 				state.active_flows.append(flow)
+				var intra_pk := (ex.id + "__" + partner.id) if ex.id < partner.id else (partner.id + "__" + ex.id)
+				existing_flows_by_key[intra_pk] = flow
 
 			for donor in exchangers:
 				var donor_initial_traits: Array = initial_cultural_traits_by_deme.get(donor.id, [])
@@ -733,6 +735,7 @@ static func run_resource_and_symbiosis_phase(
 						var tdef: EvoTypes.TraitDef = state.traits_catalog[tid]
 						if receiver_social >= tdef.vector.transmission_threshold:
 							receiver.cultural_trait_ids.append(tid)
+							effective_vec_by_deme[receiver.id] = compute_effective_vector(receiver, state)
 							if not logged_symbiosis_in_cell:
 								logged_symbiosis_in_cell = true
 								var tname := EvoI18n.trait_name(lang, tdef)
@@ -792,10 +795,25 @@ static func run_resource_and_symbiosis_phase(
 				0.01
 			)
 
+	var arch_probs: Dictionary = {}
+	var valid_demes: Array[EvoTypes.Deme] = []
+	var valid_cells: Array[EvoTypes.HexCell] = []
+	for did in state.demes.keys():
+		var d: EvoTypes.Deme = state.demes[did]
+		arch_probs[d.id] = [
+			get_archetype_prob(d, state.decisions_catalog, "cooperate"),
+			get_archetype_prob(d, state.decisions_catalog, "exchange"),
+			get_archetype_prob(d, state.decisions_catalog, "dispute"),
+			get_archetype_prob(d, state.decisions_catalog, "overexploit")
+		]
+		if state.cells.has(d.hex_id):
+			valid_demes.append(d)
+			valid_cells.append(state.cells[d.hex_id])
+
 	var exchange_flow_pairs: Dictionary = {}
 	for donor_id in state.demes.keys():
 		var donor: EvoTypes.Deme = state.demes[donor_id]
-		if get_archetype_prob(donor, state.decisions_catalog, "exchange") < 0.20:
+		if float((arch_probs[donor.id] as Array)[1]) < 0.20:
 			continue
 		if not state.cells.has(donor.hex_id):
 			continue
@@ -811,7 +829,7 @@ static func run_resource_and_symbiosis_phase(
 				if not state.demes.has(ndeme_id):
 					continue
 				var receiver: EvoTypes.Deme = state.demes[ndeme_id]
-				if get_archetype_prob(receiver, state.decisions_catalog, "exchange") < 0.20:
+				if float((arch_probs[receiver.id] as Array)[1]) < 0.20:
 					continue
 
 				if not symbiosis_bonus_applied.has(donor.id):
@@ -819,11 +837,9 @@ static func run_resource_and_symbiosis_phase(
 					extracted_energy_by_deme[donor.id] = snappedf(base_ext * 1.20, 0.0001)
 					symbiosis_bonus_applied[donor.id] = true
 
-				var pair_ab := "%s|%s" % [donor.id, receiver.id]
-				var pair_ba := "%s|%s" % [receiver.id, donor.id]
-				if not exchange_flow_pairs.has(pair_ab):
-					exchange_flow_pairs[pair_ab] = true
-					exchange_flow_pairs[pair_ba] = true
+				var hex_pair_key := ("%s|%s" % [donor_cell.id, ncell.id]) if donor_cell.id <= ncell.id else ("%s|%s" % [ncell.id, donor_cell.id])
+				if not exchange_flow_pairs.has(hex_pair_key):
+					exchange_flow_pairs[hex_pair_key] = true
 					var flow := EvoTypes.HexEdgeFlow.new()
 					flow.from_hex_id = donor_cell.id
 					flow.to_hex_id = ncell.id
@@ -832,6 +848,7 @@ static func run_resource_and_symbiosis_phase(
 					flow.from_deme_id = donor.id
 					flow.to_deme_id = receiver.id
 					state.active_flows.append(flow)
+					existing_flows_by_key[hex_pair_key] = flow
 
 				if EvoCatalog.deme_has_cultural_capacity(receiver, state.traits_catalog):
 					var receiver_social := (effective_vec_by_deme[receiver.id] as EvoTypes.BiophysicalVector).social_cohesion
@@ -842,6 +859,7 @@ static func run_resource_and_symbiosis_phase(
 						var tdef: EvoTypes.TraitDef = state.traits_catalog[tid]
 						if receiver_social >= tdef.vector.transmission_threshold:
 							receiver.cultural_trait_ids.append(tid)
+							effective_vec_by_deme[receiver.id] = compute_effective_vector(receiver, state)
 							var tname := EvoI18n.trait_name(lang, tdef)
 							var entry := EvoTypes.ChronicleEntry.new()
 							entry.id = "chronicle-symbiosis-%d-%s-%s-%s" % [state.generation, ncell.id, receiver.id, tid]
@@ -859,6 +877,26 @@ static func run_resource_and_symbiosis_phase(
 							entry.trait_id = tid
 							state.chronicle.append(entry)
 
+	var adjacent_pairs: Array = []
+	var v_count := valid_demes.size()
+	for i in range(v_count):
+		var d1 := valid_demes[i]
+		var c1 := valid_cells[i]
+		var q1 := c1.q
+		var r1 := c1.r
+		var bad1 := c1.biome == "ocean" or c1.altitude > 0.85
+		for j in range(i + 1, v_count):
+			var c2 := valid_cells[j]
+			var dq := q1 - c2.q
+			var dr := r1 - c2.r
+			if absi(dq) > 1 or absi(dr) > 1 or absi(dq + dr) > 1:
+				continue
+			if (dq != 0 or dr != 0) and (bad1 or c2.biome == "ocean" or c2.altitude > 0.85):
+				continue
+			var d2 := valid_demes[j]
+			var pk := (d1.id + "__" + d2.id) if d1.id < d2.id else (d2.id + "__" + d1.id)
+			adjacent_pairs.append([d1, c1, d2, c2, pk])
+
 	var betrayed_pairs_this_turn: Dictionary = {}
 	_run_pacts_and_betrayals(
 		state,
@@ -867,7 +905,10 @@ static func run_resource_and_symbiosis_phase(
 		extracted_energy_by_deme,
 		symbiosis_bonus_applied,
 		turn_geopolitical_flows,
-		betrayed_pairs_this_turn
+		betrayed_pairs_this_turn,
+		arch_probs,
+		adjacent_pairs,
+		existing_flows_by_key
 	)
 	_run_raids(
 		state,
@@ -875,5 +916,7 @@ static func run_resource_and_symbiosis_phase(
 		effective_vec_by_deme,
 		extracted_energy_by_deme,
 		turn_geopolitical_flows,
-		betrayed_pairs_this_turn
+		betrayed_pairs_this_turn,
+		arch_probs,
+		adjacent_pairs
 	)

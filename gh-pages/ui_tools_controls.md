@@ -39,7 +39,7 @@ flowchart TD
     * **Healthy ($\ge 85\%$ $K_{\max}$)**: Emerald mint (`#6ee7b7`).
     * **Stressed ($60\%\text{–}84\%$ $K_{\max}$)**: Amber (`#fbbf24`) with a dashed orange perimeter border (`#f59e0b`).
     * **Collapsed ($< 60\%$ $K_{\max}$ — Tragedy of the Commons)**: Coral red (`#f87171`) with a thick dashed crimson border (`#ef4444`).
-  * **`🗺️ Legend / Leyenda`**: Toggles the floating *Valley Legend* card detailing the live **Strategy Duel Counter (`legend_strategies`)** (showing each active strategy's color swatch, emblem icon, name, living village count, and total population), all 7 biome swatches, the 4 architectural village tiers (`I–IV`), and the 3 inter-village path symbols (`🛣️`, `⚔️`, `🧭`).
+  * **`🗺️ Legend / Leyenda`**: Toggles the floating *Valley Legend* card detailing the live **Strategy Duel Counter (`legend_strategies`)** (showing each active strategy's color swatch, emblem icon, name, living village count, and total population), all 7 biome swatches, the 4 architectural village tiers (`I–IV`), the 3 inter-village path symbols (`🛣️`, `⚔️`, `🧭`), and the **Geopolitical Legend (`legend_geopolitics`)** (`🤝 Pact / Alliance`, `⚔️ War / Invasion`, `🔥 Raid / Plunder`, and `🗡️ Betrayal`).
 
 ### 2. Top-Right Season Clock, Playback & Settings Popup
 * **Dynamic Season & Tide Portrait (`SeasonTidePortrait`)**: A custom-drawn $72 \times 76$ pixel-art vignette displaying a radiant sun over green hills during `wet_warm` ($\gamma = 1.20$), a crescent moon with falling snow over slate hills during `dry_cold` ($\gamma = 0.75$), and a live water-level gauge (`🌊 %d%%`) tracking global `sea_level`.
@@ -55,15 +55,16 @@ flowchart TD
 
 ---
 
-## Visual Strategy Identification on the 2.5D Map & HUD
+## Visual Strategy & Geopolitical Identification on the 2.5D Map & HUD
 
-Every village's founding **Evolutionary Strategy** (`deme.strategy_id`) is immediately recognizable across the 2.5D isometric valley and HUD without opening a modal:
+Every village's founding **Evolutionary Strategy** (`deme.strategy_id`) and live **Geopolitical Status** (`war`, `raid`, `pact`, `betrayal`) are immediately recognizable across the 2.5D isometric valley and HUD without opening a modal:
 
-1. **Floating Village Billboards (`EvoWorldOverlayRenderer.draw_village_billboard`)**: Each settlement displays a compact overhead dark-wood pill featuring a **strategy-colored emblem shield (`shield_c`)** with the strategy's icon/color on the left and the village's current population count (`sub_text`) on the right, plus a golden selection arrow when inspected.
-2. **Strategy-Colored Ground Rings & Plazas (`EvoPropFloraRenderer.draw_village_plaza`)**: Each settlement's circular stone plaza is framed by a ground ring and status border tinted with its strategy/lineage identity and vital health (`thriving`, `stable`, `struggling`, `starving`).
-3. **Plaza Banners & Villager Tunics (`EvoPixelArtGen.get_villager_texture`)**: Orbiting villagers and road travelers dynamically recolor their pixel-art tunics (`villager_idle`, `villager_walk1`, `villager_walk2`) and settlement banners to match `deme.color` (inherited from the founding `StrategyDef.color`, or diverged from `SPECIATION_PALETTE` upon allopatric speciation while retaining `deme.strategy_id`).
-4. **Inspector Strategy Badge (`insp_strategy`)**: The Right-Hand Scroll Inspector displays the selected village's founding strategy emblem, localized strategy name, and color swatch right alongside its lineage and population telemetry.
-5. **Valley Legend Strategy Duel Counter (`legend_strategies`)**: Opening `🗺️ Legend` displays a live head-to-head breakdown of the active **Strategy Duel**, tallying active settlements and total population per competing strategy across the map.
+1. **Hex Strategy Perimeter Rings (`EvoWorldOverlayRenderer._draw_hex_strategy_ring`)**: Every inhabited hexagon displays a crisp perimeter ring tinted in the resident strategy's color (`Strategy A` vs. `Strategy B`), making territorial borders and conquests immediately legible from macro zoom.
+2. **Floating Village Billboards & Geopolitical Side Pills (`EvoWorldOverlayRenderer.draw_village_billboard`)**: Each settlement displays an overhead dark-wood pill featuring a **strategy-colored emblem shield (`A · ...` / `B · ...`)**, population count, vital heart icon, dominant decision icon, and **Geopolitical Status Side Pills** (`⚔️ War`, `🗡️ Betrayal`, `🔥 Raid`, `🤝 Pact`) whenever the village is actively engaged in diplomacy or conflict.
+3. **Strategy-Colored Ground Rings, Plazas & Geopolitical Props (`EvoPropFloraRenderer`)**: Each settlement's circular stone plaza is framed by a strategy-colored ground ring and vital border (`thriving`, `stable`, `declining`, `starving`), surrounded by contextual geopolitical structures (`act_war`, `act_raid`, `act_pact`, `act_betrayal`, `prop_war_banner`, `prop_raid_loot`, `prop_pact_totem`, `prop_betrayal_ruin`).
+4. **Plaza Banners & Villager Tunics (`EvoPixelArtGen.get_villager_texture`)**: Orbiting villagers and road travelers dynamically recolor their pixel-art tunics (`villager_idle`, `villager_walk1`, `villager_walk2`) and settlement banners to match `deme.color` (inherited from the founding `StrategyDef.color`, or diverged from `SPECIATION_PALETTE` upon allopatric speciation while retaining `deme.strategy_id`).
+5. **Inspector Strategy Banner & Pacts Summary (`EvoHudInspectorPanel`)**: The Right-Hand Scroll Inspector features a prominent full-width **Strategy Banner (`🛡️ Strategy: ...`)** and a dedicated **`🤝 Pacts & Alliances`** readout right alongside its lineage and population telemetry.
+6. **Valley Legend Strategy Duel Counter & Geopolitical Legend (`EvoHudHotbarDock`)**: Opening `🗺️ Legend` displays a live head-to-head breakdown of the active **Strategy Duel** (tallying active settlements and total population per competing strategy) together with the **Geopolitical Legend** (`Pact / Alliance`, `War / Invasion`, `Raid / Plunder`, `Betrayal`).
 
 ---
 
@@ -77,12 +78,14 @@ The collapsible parchment Scroll Inspector on the right side of the screen provi
 
 === "Tab 1: 🧠 Village (`Aldea`)"
 
-    * **Vitals & Strategy Card**:
-      * **Strategy (`insp_strategy`) & Lineage**: Displays the village's founding **Evolutionary Strategy badge** (`<icon> <Strategy Name>`), species lineage name, headcount, and architectural tier (`I · Camp` $<50$, `II · Hamlet` $50\text{–}149$, `III · Village` $150\text{–}399$, `IV · Citadel` $400+$).
+    * **Prominent Strategy Banner & Vitals Card**:
+      * **Strategy Banner (`_insp_strategy_banner`) & Lineage**: Full-width colored banner displaying the village's founding **Evolutionary Strategy** (`🛡️ Strategy: <icon> <Strategy Name>`), species lineage name, headcount, and architectural tier (`I · Camp` $<50$, `II · Hamlet` $50\text{–}149$, `III · Village` $150\text{–}399$, `IV · Citadel` $400+$).
       * **Caloric Reserves (`🍯`)**: Progress bar tracking stored `energy_reserves`.
-      * **Turn Energy Delta (`⚡`)**: Net caloric balance $\Delta E$ from the last turn and vital status badge (`💚 Thriving` $\Delta E \ge +10$, `💙 Stable` $\Delta E \ge 0$, `💛 Struggling` reserves $> 40$, `❤️‍🩹 Starving` reserves $\le 40$).
+      * **Turn Energy Delta (`⚡`)**: Net caloric balance $\Delta E$ from the last turn and unified vital status badge (`💚 Thriving`, `💙 Stable`, `💛 Declining`, `❤️‍🩹 Starving`).
     * **Dominant Intention (`🧠`)**: Displays the top 3 behavioral decisions from `last_decision_probabilities` as horizontal probability bars, marking the dominant intention with a gold star (`★`).
-    * **Relations & Paths (`🛣️`)**: Exhaustive listing of active cooperation/trade routes (`🛣️`), territorial disputes (`⚔️`), migratory expeditions (`🧭`), severed/disused roads (`🚧` with turn age), cohabiting demes in the same hex (`🤝`), and neighboring villages (`🏘️`).
+    * **Pacts & Alliances (`🤝`) & Geopolitical Relations (`🛣️`)**:
+      * **Pacts Summary**: Lists all active formal Alliance Pacts (`>= 2` consecutive cooperative turns) and partner names.
+      * **Relations & Paths**: Exhaustive listing of active **Alliance Pacts (`🤝`)**, **Wars of Conquest (`⚔️`)**, **Plunder Raids (`🔥`)**, **Pact Betrayals (`🗡️`)**, cooperation/trade routes (`🛣️`), territorial disputes (`⚔️`), migratory expeditions (`🧭`), severed/disused roads (`🚧` with turn age), cohabiting demes (`🤝`), and neighboring villages (`🏘️`).
     * **Naturalist's Note (`💬`)**: Contextual behavioral justification generated by the cognitive engine.
 
 === "Tab 2: 🧬 Traits (`Rasgos`)"
@@ -106,7 +109,7 @@ The collapsible parchment Scroll Inspector on the right side of the screen provi
 
 ![Naturalist's Notebook — Evolutionary Chronicle Modal](assets/img/screenshot_notebook_modal.png)
 
-* **8 Category Filters**: Filter historical events by `All`, `Baldwin Effect (baldwin_trait)`, `Cultural Innovation (cultural_innovation)`, `Allopatric Speciation (allopatric_speciation)`, `Symbiosis (symbiosis)`, `Tragedy of the Commons (tragedy_of_commons)`, `Cultural Loss (cultural_loss)`, or `Extinction (extinction)`.
+* **14 Category Filters**: Filter historical events by `All (all)`, `Wars (war)`, `Plunder Raids (raid)`, `Alliance Pacts (pact)`, `Betrayals (betrayal)`, `Baldwin Effect (baldwin_trait)`, `Cultural Innovation (cultural_innovation)`, `Allopatric Speciation (allopatric_speciation)`, `Symbiosis (symbiosis)`, `Tragedy of the Commons (tragedy_of_commons)`, `Cultural Loss (cultural_loss)`, `Extinction (extinction)`, `Evolutionary Hegemony (single_survivor)`, or `Dynamic Equilibrium (ecological_equilibrium)`.
 * **Causal Event Cards**: Displays up to 100 reverse-chronological entries color-coded by event type, including the generation badge (`G%d`), hex coordinate, headline, and full causal narrative.
 * **One-Click Map Jump (`📍 View on map`)**: Clicking any Chronicle entry closes the modal, selects the target hexagon and deme, and smoothly pans the 2.5D camera directly to the site of the milestone.
 

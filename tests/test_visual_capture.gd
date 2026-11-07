@@ -1,9 +1,13 @@
 extends SceneTree
 
 const OUTPUT_DIR: String = "/home/arrase/Develop/Evolution/gh-pages/assets/img"
+var _tmp_cfg_dir: String = ""
 
 
 func _init() -> void:
+	_tmp_cfg_dir = "/tmp/evolution_visual_capture_%d" % Time.get_ticks_usec()
+	DirAccess.make_dir_recursive_absolute(_tmp_cfg_dir)
+	EvoUserSettings.config_path_override = _tmp_cfg_dir.path_join("settings.json")
 	call_deferred("_run_captures")
 
 
@@ -111,22 +115,34 @@ func _run_captures() -> void:
 	await _wait_and_save(main, "screenshot_lab_modal.png")
 	main.hud.lab_modal.close_modal()
 
-	# 7. screenshot_late_simulation.png (56 generations in Rift Savanna to verify clean road lifecycle and late-game UI polish)
+	# 7. screenshot_late_simulation.png (24 generations in Rift Savanna with active pacts, conflicts, and road networks)
 	main.load_preset("preset-rift-savanna")
-	for _g in range(56):
+	for _g in range(24):
 		main.step_generation()
 	main.hud._milestone_banner.visible = false
 	main.hud.refresh(main.world_state)
-	if main.world_state.demes.has("deme-rift-east"):
-		main.hud.select_deme("deme-rift-east")
-		main.world_renderer.selected_deme_id = "deme-rift-east"
-		main.world_renderer.selected_hex_id = (main.world_state.demes["deme-rift-east"] as EvoTypes.Deme).hex_id
-	elif not main.world_state.demes.is_empty():
-		var did := str(main.world_state.demes.keys()[0])
-		main.hud.select_deme(did)
-		main.world_renderer.selected_deme_id = did
+	var best_did: String = ""
+	var best_pop: int = -1
+	for d_id in main.world_state.demes.keys():
+		var d: EvoTypes.Deme = main.world_state.demes[d_id]
+		if d.population > best_pop:
+			best_pop = d.population
+			best_did = str(d_id)
+	if best_did != "":
+		main.hud.select_deme(best_did)
+		main.world_renderer.selected_deme_id = best_did
+		main.world_renderer.selected_hex_id = (main.world_state.demes[best_did] as EvoTypes.Deme).hex_id
 	await _wait_and_save(main, "screenshot_late_simulation.png")
 
 	main.free()
 	EvoDecisionModel.wait_for_workers()
+	var cat_path := _tmp_cfg_dir.path_join("user_catalog.json")
+	if FileAccess.file_exists(cat_path):
+		DirAccess.remove_absolute(cat_path)
+	var cfg_path := _tmp_cfg_dir.path_join("settings.json")
+	if FileAccess.file_exists(cfg_path):
+		DirAccess.remove_absolute(cfg_path)
+	if DirAccess.dir_exists_absolute(_tmp_cfg_dir):
+		DirAccess.remove_absolute(_tmp_cfg_dir)
+	EvoUserSettings.config_path_override = ""
 	quit(0)

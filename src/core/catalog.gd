@@ -217,13 +217,13 @@ static func compute_baseline_decision_weights(deme: EvoTypes.Deme, traits_catalo
 		"dec-selective-migration": (
 			0.10
 			+ maxf(0.0, vec.spatial_mobility) * 0.45
-			+ (0.28 if (deme_has_trait(deme, "bio-thermal-tolerance") or deme_has_trait(deme, "bio-endurance-locomotion")) else 0.0)
+			+ (0.28 if deme_has_trait(deme, "bio-thermal-tolerance") else 0.0)
 			+ (0.16 if (has_warrior or has_r_strat) else 0.0)
 		),
 		"dec-cooperate-store": (
 			0.12
 			+ coop_cohesion
-			+ (0.25 if (deme_has_trait(deme, "cul-communal-conservation") or deme_has_trait(deme, "cul-cooperative-networks")) else 0.0)
+			+ (0.25 if deme_has_trait(deme, "cul-communal-conservation") else 0.0)
 			+ (0.15 if (deme_has_trait(deme, "bio-social-instinct") and not has_warrior and not has_r_strat) else 0.0)
 		),
 		"dec-exchange-symbiosis": (
@@ -243,8 +243,8 @@ static func compute_baseline_decision_weights(deme: EvoTypes.Deme, traits_catalo
 		"dec-explore-innovate": (
 			0.08
 			+ maxf(0.0, vec.transmission_threshold) * 0.50
-			+ (0.35 if (deme_has_trait(deme, "cul-fire-processing") or deme_has_trait(deme, "cul-symbolic-archive")) else 0.0)
-			+ (0.30 if (deme_has_trait(deme, "bio-encephalization") or deme_has_trait(deme, "bio-neural-plasticity")) else 0.0)
+			+ (0.35 if (deme_has_trait(deme, "cul-fire-processing") or deme_has_trait(deme, "cul-lithic-acheulean")) else 0.0)
+			+ (0.30 if (deme_has_trait(deme, "bio-encephalization") or deme_has_trait(deme, "bio-digestive-spec")) else 0.0)
 		) if has_cultural_cap else 0.0
 	}
 
@@ -357,6 +357,17 @@ static func inject_trait_into_deme(
 			next_cul.append(trait_id)
 		deme.biological_trait_ids = next_bio
 		deme.cultural_trait_ids = next_cul
+
+	if state.lineage_tree.has(deme.lineage_id):
+		var lin: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id]
+		lin.biological_trait_ids = deme.biological_trait_ids.duplicate()
+		lin.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
+		for tid in deme.biological_trait_ids:
+			if not lin.acquired_trait_ids.has(tid):
+				lin.acquired_trait_ids.append(tid)
+		for tid in deme.cultural_trait_ids:
+			if not lin.acquired_trait_ids.has(tid):
+				lin.acquired_trait_ids.append(tid)
 
 	var eval_res := EvoDecisionModel.evaluate_deme(deme, state, lang)
 	deme.last_decision_probabilities = eval_res["probabilities"]

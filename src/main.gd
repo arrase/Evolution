@@ -18,6 +18,8 @@ var current_lang: String:
 		return lang
 	set(value):
 		lang = value
+		if world_renderer != null:
+			world_renderer.lang = value
 
 var lab_modal: EvoLabModal:
 	get:
@@ -42,6 +44,7 @@ func _ready() -> void:
 
 	world_renderer = EvoWorldRenderer.new()
 	world_renderer.name = "WorldRenderer"
+	world_renderer.lang = lang
 	add_child(world_renderer)
 	world_renderer.set_camera(camera)
 
@@ -94,11 +97,14 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if not ke.pressed or ke.echo:
 		return
 	if ke.keycode == KEY_SPACE:
-		if get_viewport() != null and get_viewport().gui_get_focus_owner() is LineEdit:
-			return
+		if get_viewport() != null:
+			var focus_owner := get_viewport().gui_get_focus_owner()
+			if focus_owner is LineEdit or focus_owner is TextEdit:
+				return
 		if hud != null and (
 			hud._ollama_startup_blocked
 			or (hud._missing_models_modal != null and hud._missing_models_modal.visible)
+			or (hud._settings_popup != null and hud._settings_popup.visible)
 			or (hud.lab_modal != null and hud.lab_modal.visible)
 			or (hud.notebook_modal != null and hud.notebook_modal.visible)
 			or (hud.tree_modal != null and hud.tree_modal.visible)
@@ -113,11 +119,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		elif hud._settings_popup != null and hud._settings_popup.visible:
 			hud._settings_popup.visible = false
 		elif hud.notebook_modal != null and hud.notebook_modal.visible:
-			hud.notebook_modal.visible = false
+			hud.notebook_modal.close_modal()
 		elif hud.tree_modal != null and hud.tree_modal.visible:
-			hud.tree_modal.visible = false
+			hud.tree_modal.close_modal()
 		elif hud.lab_modal != null and hud.lab_modal.visible:
-			hud.lab_modal.visible = false
+			hud.lab_modal.close_modal()
 		else:
 			hud._on_tool_button_pressed("inspect")
 		get_viewport().set_input_as_handled()
@@ -258,6 +264,8 @@ func _on_strategy_saved(strategy_id: String) -> void:
 	if world_state == null:
 		return
 	EvoUserSettings.save_user_catalog(world_state)
+	EvoOllamaClient.clear_cache()
+	EvoDecisionModel.invalidate_state_caches(world_state)
 	if world_state.generation == 0 and (strategy_id == world_state.strategy_a_id or strategy_id == world_state.strategy_b_id):
 		if strategy_id == world_state.strategy_a_id:
 			for did in SLOT_A_DEME_IDS:
@@ -272,7 +280,16 @@ func _on_strategy_saved(strategy_id: String) -> void:
 			if d.strategy_id == strategy_id:
 				EvoCatalog.apply_strategy_to_deme(world_state, d, strategy_id, lang)
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
-	EvoOllamaClient.clear_cache()
+	elif world_state.strategies_catalog.has(strategy_id):
+		var strat: EvoTypes.StrategyDef = world_state.strategies_catalog[strategy_id]
+		for did in world_state.demes.keys():
+			var d: EvoTypes.Deme = world_state.demes[did]
+			if d.strategy_id == strategy_id:
+				d.color = strat.color
+				if world_state.lineage_tree.has(d.lineage_id):
+					var lin: EvoTypes.LineageNode = world_state.lineage_tree[d.lineage_id]
+					if lin.divergence_reason != "allopatric_speciation":
+						lin.color = strat.color
 	EvoDecisionModel.prefetch_for_state(world_state)
 	hud.refresh(world_state)
 	world_renderer.refresh()
@@ -311,6 +328,7 @@ func _sync_selection_after_world_mutation() -> void:
 
 
 func step_generation() -> void:
+	_play_timer = 0.0
 	if world_state == null:
 		return
 	if hud != null and (hud._ollama_startup_blocked or (hud._missing_models_modal != null and hud._missing_models_modal.visible)):
@@ -346,12 +364,16 @@ func _apply_brush_at_hex(hex_id: String) -> void:
 		applied = EvoTurnEngine.apply_adjust_carrying_capacity(world_state, target_hexes, delta_k)
 
 	if applied:
+		EvoDecisionModel.invalidate_state_caches(world_state)
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 		hud.mark_tool_used()
-		world_renderer.selected_hex_id = hex_id
-		hud.select_hex(hex_id)
-		world_renderer.selected_deme_id = hud._selected_deme_id
-		_sync_selection_after_world_mutation()
+		if world_renderer.selected_deme_id != "" and world_state.demes.has(world_renderer.selected_deme_id) and (world_state.demes[world_renderer.selected_deme_id] as EvoTypes.Deme).hex_id != hex_id:
+			_sync_selection_after_world_mutation()
+		else:
+			world_renderer.selected_hex_id = hex_id
+			hud.select_hex(hex_id)
+			world_renderer.selected_deme_id = hud._selected_deme_id
+			_sync_selection_after_world_mutation()
 		hud.refresh(world_state)
 		world_renderer.refresh()
 
@@ -398,7 +420,17 @@ func _on_state_imported(new_state: EvoTypes.WorldState) -> void:
 		hud._selected_deme_id = str(world_state.demes.keys()[0]) if not world_state.demes.is_empty() else ""
 	EvoOllamaClient.clear_cache()
 	world_renderer.selected_deme_id = hud._selected_deme_id
-	world_renderer.selected_hex_id = (world_state.demes[hud._selected_deme_id] as EvoTypes.Deme).hex_id if world_state.demes.has(hud._selected_deme_id) else ""
+	if world_state.demes.has(hud._selected_deme_id):
+		world_renderer.selected_hex_id = (world_state.demes[hud._selected_deme_id] as EvoTypes.Deme).hex_id
+	elif not world_state.cells.is_empty():
+		if world_state.cells.has(hud._selected_hex_id):
+			world_renderer.selected_hex_id = hud._selected_hex_id
+		elif world_state.cells.has("0,0"):
+			world_renderer.selected_hex_id = "0,0"
+		else:
+			world_renderer.selected_hex_id = str(world_state.cells.keys()[0])
+	else:
+		world_renderer.selected_hex_id = ""
 	world_renderer.highlighted_lineage_id = ""
 	hud._selected_hex_id = world_renderer.selected_hex_id
 	EvoDecisionModel.evaluate_all_demes(world_state, hud._lang if hud != null else lang)
@@ -430,6 +462,8 @@ func _on_speed_changed(p_fast: bool) -> void:
 
 func _on_language_changed(new_lang: String) -> void:
 	lang = new_lang
+	if world_renderer != null:
+		world_renderer.lang = lang
 	if world_state != null:
 		EvoI18n.localize_world_state(world_state, lang)
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
@@ -474,6 +508,7 @@ func _on_sea_level_change_requested(delta: float) -> void:
 	if world_state == null:
 		return
 	if EvoTurnEngine.apply_adjust_sea_level(world_state, delta, lang):
+		EvoDecisionModel.invalidate_state_caches(world_state)
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 		hud.mark_tool_used()
 		_sync_selection_after_world_mutation()
@@ -513,6 +548,11 @@ func _on_lineage_highlight_requested(lineage_id: String) -> void:
 
 
 func _on_inject_trait_requested(_deme_id: String, _trait_id: String) -> void:
+	if world_state != null:
+		EvoDecisionModel.invalidate_state_caches(world_state)
+		EvoDecisionModel.evaluate_all_demes(world_state, lang)
+		EvoDecisionModel.prefetch_for_state(world_state)
+		hud.refresh(world_state)
 	world_renderer.refresh()
 
 
@@ -523,6 +563,7 @@ func _on_catalog_item_saved(item_type: String, item_data: Variant = null) -> voi
 			_on_strategy_saved(str((item_data as Dictionary)["id"]))
 			return
 		EvoOllamaClient.clear_cache()
+		EvoDecisionModel.invalidate_state_caches(world_state)
 		EvoDecisionModel.evaluate_all_demes(world_state, hud._lang if hud != null else lang)
 		EvoDecisionModel.prefetch_for_state(world_state)
 		hud.refresh(world_state)

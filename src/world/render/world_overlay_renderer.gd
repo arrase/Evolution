@@ -7,27 +7,19 @@ const BADGE_H := 30.0
 const SHIELD_W := 26.0
 
 
-static func _resolve_deme_strategy_visuals(world_state: EvoTypes.WorldState, deme: EvoTypes.Deme) -> Dictionary:
+static func _resolve_deme_strategy_visuals(
+	world_state: EvoTypes.WorldState,
+	deme: EvoTypes.Deme,
+	lang: String = "es"
+) -> Dictionary:
 	var fallback_color := Color.from_string(deme.color, Color(0.88, 0.48, 0.37))
 	var slot_tag := "A" if deme.strategy_id == world_state.strategy_a_id else ("B" if deme.strategy_id == world_state.strategy_b_id else "")
 	if world_state.strategies_catalog.has(deme.strategy_id):
 		var strategy: EvoTypes.StrategyDef = world_state.strategies_catalog[deme.strategy_id]
-		var current_lang := (
-			"en"
-			if world_state.world_name != EvoI18n.preset_title("es", world_state.preset_id)
-			and (
-				strategy.name == EvoI18n.strategy_text(strategy.id, "name", "", "en")
-				or (
-					world_state.traits_catalog.has("bio-k-strategy")
-					and (world_state.traits_catalog["bio-k-strategy"] as EvoTypes.TraitDef).name.begins_with("K-")
-				)
-			)
-			else "es"
-		)
 		return {
 			"icon": strategy.icon,
 			"color": Color.from_string(strategy.color, fallback_color),
-			"name": EvoI18n.strategy_name(current_lang, strategy),
+			"name": EvoI18n.strategy_name(lang, strategy),
 			"slot_tag": slot_tag
 		}
 	return {
@@ -135,7 +127,7 @@ static func _draw_deme_billboards(r: Node2D) -> void:
 		var sf: float = village["sf"]
 		var is_dimmed: bool = village["is_dimmed"]
 		var alpha := 0.48 if is_dimmed else 0.96
-		var strat_vis := _resolve_deme_strategy_visuals(r.world_state, deme)
+		var strat_vis := _resolve_deme_strategy_visuals(r.world_state, deme, r.lang)
 		var strat_color: Color = strat_vis["color"]
 
 		if not drawn_hex_rings.has(hex_id):
@@ -191,7 +183,7 @@ static func draw_village_billboard(r: Node2D, village: Dictionary, pos: Vector2)
 	var is_dimmed: bool = village["is_dimmed"]
 	var font := ThemeDB.fallback_font
 
-	var strat_vis := _resolve_deme_strategy_visuals(r.world_state, deme)
+	var strat_vis := _resolve_deme_strategy_visuals(r.world_state, deme, r.lang)
 	var strat_color: Color = strat_vis["color"]
 	var strat_icon: String = strat_vis["icon"]
 	var strat_name: String = strat_vis["name"]
@@ -252,7 +244,7 @@ static func draw_village_billboard(r: Node2D, village: Dictionary, pos: Vector2)
 		top_col
 	)
 
-	var pop_text := "%d hab" % deme.population
+	var pop_text := ("%d pop" if r.lang == "en" else "%d hab") % deme.population
 	var pop_col := Color("#fde047") if is_selected else Color("#fef3c7")
 	pop_col.a = alpha
 	ci.draw_string(

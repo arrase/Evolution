@@ -520,7 +520,9 @@ func refresh(world_state: EvoTypes.WorldState = null, selected_deme_id: String =
 	if _title_label == null:
 		return
 	_rebuild_inject_deme_options()
+	var checked_ids := _get_checked_strategy_trait_ids()
 	_rebuild_strategy_trait_checks()
+	_set_checked_strategy_trait_ids(checked_ids)
 	_rebuild_catalog_list()
 	_update_labels()
 	_update_thermodynamics_preview()
@@ -821,22 +823,27 @@ func _on_strategy_trait_toggled(is_checked: bool, trait_id: String) -> void:
 					(strategy_trait_checks[other_id] as CheckBox).button_pressed = false
 
 			if tr.category == "cultural" and not _has_checked_cultural_capacity(traits_cat):
-				if strategy_trait_checks.has("bio-social-instinct"):
-					(strategy_trait_checks["bio-social-instinct"] as CheckBox).button_pressed = true
-				elif strategy_trait_checks.has("bio-encephalization"):
-					(strategy_trait_checks["bio-encephalization"] as CheckBox).button_pressed = true
-				else:
+				var enabled_any := false
+				for bid in ["bio-social-instinct", "bio-encephalization"]:
+					if strategy_trait_checks.has(bid):
+						var can_enable := not traits_cat.has(bid) or (traits_cat[bid] as EvoTypes.TraitDef).enables_cultural_transmission
+						if can_enable:
+							(strategy_trait_checks[bid] as CheckBox).button_pressed = true
+							enabled_any = true
+							break
+				if not enabled_any:
 					for bid in traits_cat.keys():
 						var btr: EvoTypes.TraitDef = traits_cat[bid]
 						if btr.category == "biological" and btr.enables_cultural_transmission and strategy_trait_checks.has(bid):
 							(strategy_trait_checks[bid] as CheckBox).button_pressed = true
 							break
 	else:
-		var is_culture_enabler := trait_id in ["bio-social-instinct", "bio-encephalization"]
+		var is_culture_enabler := false
 		if traits_cat.has(trait_id):
 			var tr: EvoTypes.TraitDef = traits_cat[trait_id]
-			if tr.category == "biological" and tr.enables_cultural_transmission:
-				is_culture_enabler = true
+			is_culture_enabler = (tr.category == "biological" and tr.enables_cultural_transmission)
+		else:
+			is_culture_enabler = trait_id in ["bio-social-instinct", "bio-encephalization"]
 		if is_culture_enabler and not _has_checked_cultural_capacity(traits_cat):
 			for cid in strategy_trait_checks.keys():
 				var is_cul := str(cid).begins_with("cul-")
@@ -879,6 +886,16 @@ func _set_checked_strategy_trait_ids(trait_ids: Array) -> void:
 	_update_strategy_vector_preview()
 
 
+func _are_traits_mutually_exclusive(tid_a: String, tid_b: String, traits_cat: Dictionary) -> bool:
+	if (tid_a == "bio-r-strategy" and tid_b == "bio-k-strategy") or (tid_a == "bio-k-strategy" and tid_b == "bio-r-strategy"):
+		return true
+	if traits_cat.has(tid_a) and (traits_cat[tid_a] as EvoTypes.TraitDef).mutually_exclusive_with.has(tid_b):
+		return true
+	if traits_cat.has(tid_b) and (traits_cat[tid_b] as EvoTypes.TraitDef).mutually_exclusive_with.has(tid_a):
+		return true
+	return false
+
+
 func _build_strategy_from_form() -> EvoTypes.StrategyDef:
 	var strat := EvoTypes.StrategyDef.new()
 	strat.id = _resolve_target_id("strat")
@@ -892,28 +909,54 @@ func _build_strategy_from_form() -> EvoTypes.StrategyDef:
 	var traits_cat: Dictionary = _world_state.traits_catalog if _world_state != null else {}
 	var bio_ids: Array[String] = []
 	var cul_ids: Array[String] = []
-	for tid in strategy_trait_checks.keys():
-		var cb: CheckBox = strategy_trait_checks[tid]
+	var accepted_ids: Array[String] = []
+	for tid_var in strategy_trait_checks.keys():
+		var tid := str(tid_var)
+		var cb: CheckBox = strategy_trait_checks[tid_var]
 		if not cb.button_pressed:
 			continue
-		var is_cul := str(tid).begins_with("cul-")
+		var has_conflict := false
+		for kept_id in accepted_ids:
+			if _are_traits_mutually_exclusive(tid, kept_id, traits_cat):
+				has_conflict = true
+				break
+		if has_conflict:
+			continue
+		accepted_ids.append(tid)
+		var is_cul := tid.begins_with("cul-")
 		if traits_cat.has(tid):
 			is_cul = (traits_cat[tid] as EvoTypes.TraitDef).category == "cultural"
 		if is_cul:
-			cul_ids.append(str(tid))
+			cul_ids.append(tid)
 		else:
-			bio_ids.append(str(tid))
+			bio_ids.append(tid)
 
-	if bio_ids.has("bio-r-strategy") and bio_ids.has("bio-k-strategy"):
-		bio_ids.erase("bio-k-strategy")
 	if not cul_ids.is_empty():
 		var has_cap := false
 		for bid in bio_ids:
-			if bid in ["bio-social-instinct", "bio-encephalization"] or (traits_cat.has(bid) and (traits_cat[bid] as EvoTypes.TraitDef).enables_cultural_transmission):
+			if traits_cat.has(bid):
+				if (traits_cat[bid] as EvoTypes.TraitDef).enables_cultural_transmission:
+					has_cap = true
+					break
+			elif bid in ["bio-social-instinct", "bio-encephalization"]:
 				has_cap = true
 				break
 		if not has_cap:
-			bio_ids.append("bio-social-instinct")
+			var fallback_bio := ""
+			for cand in ["bio-social-instinct", "bio-encephalization"]:
+				if not traits_cat.has(cand) or (traits_cat[cand] as EvoTypes.TraitDef).enables_cultural_transmission:
+					fallback_bio = cand
+					break
+			if fallback_bio == "":
+				for tid in traits_cat.keys():
+					var t: EvoTypes.TraitDef = traits_cat[tid]
+					if t.category == "biological" and t.enables_cultural_transmission:
+						fallback_bio = t.id
+						break
+			if fallback_bio != "" and not bio_ids.has(fallback_bio):
+				bio_ids.append(fallback_bio)
+			elif fallback_bio == "":
+				cul_ids.clear()
 
 	strat.biological_trait_ids = bio_ids
 	strat.cultural_trait_ids = cul_ids
@@ -1324,10 +1367,38 @@ func _on_slider_value_changed(_val: float, _key: String) -> void:
 	_update_thermodynamics_preview()
 
 
+func _is_selected_builtin_trait_unmodified() -> bool:
+	if _world_state == null or _selected_id == "" or not _world_state.traits_catalog.has(_selected_id):
+		return false
+	var existing: EvoTypes.TraitDef = _world_state.traits_catalog[_selected_id]
+	if existing.origin not in ["catalog", "base"]:
+		return false
+	var target_id := id_edit.text.strip_edges()
+	if target_id != "" and target_id != existing.id:
+		return false
+	var clean_name := name_edit.text.strip_edges()
+	if clean_name != EvoI18n.trait_name(_lang, existing).strip_edges() and clean_name != existing.name.strip_edges():
+		return false
+	var clean_desc := desc_edit.text.strip_edges()
+	if clean_desc != EvoI18n.trait_description(_lang, existing).strip_edges() and clean_desc != existing.description.strip_edges():
+		return false
+	if _current_tab == "biological" and enables_culture_check.button_pressed != existing.enables_cultural_transmission:
+		return false
+	var form_vec := _read_vector_from_sliders()
+	var ex_vec := existing.vector
+	return (
+		is_equal_approx(form_vec.metabolic_cost, snappedf(ex_vec.metabolic_cost, 0.01))
+		and is_equal_approx(form_vec.extraction_efficiency, snappedf(ex_vec.extraction_efficiency, 0.01))
+		and is_equal_approx(form_vec.ecological_impact, snappedf(ex_vec.ecological_impact, 0.01))
+		and is_equal_approx(form_vec.spatial_mobility, snappedf(ex_vec.spatial_mobility, 0.01))
+		and is_equal_approx(form_vec.social_cohesion, snappedf(ex_vec.social_cohesion, 0.01))
+		and is_equal_approx(form_vec.transmission_threshold, snappedf(ex_vec.transmission_threshold, 0.01))
+	)
+
+
 func _on_inject_pressed() -> void:
 	if _current_tab not in ["biological", "cultural"] or _selected_deme_id == "":
 		return
-	_save_current_item()
 	if _current_tab == "cultural" and _world_state != null and _world_state.demes.has(_selected_deme_id):
 		var target_deme: EvoTypes.Deme = _world_state.demes[_selected_deme_id]
 		if not EvoCatalog.deme_has_cultural_capacity(target_deme, _world_state.traits_catalog):
@@ -1338,6 +1409,8 @@ func _on_inject_pressed() -> void:
 				"⚠ Selected village lacks cultural capacity (requires Encephalization or Instinctive Sociability)."
 			)
 			return
+	if not _is_selected_builtin_trait_unmodified():
+		_save_current_item()
 	if _world_state != null:
 		EvoCatalog.inject_trait_into_deme(_world_state, _selected_deme_id, _selected_id, _lang)
 	_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)

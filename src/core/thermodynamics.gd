@@ -55,8 +55,7 @@ static func validate_and_balance_thermodynamics(
 
 	if target_metabolic > 1.0:
 		var excess := target_metabolic - 1.0
-		var base_eco := minf(0.0, clamped.ecological_impact)
-		adjusted_eco = maxf(-1.0, round4(base_eco - excess))
+		adjusted_eco = clampf(round4(clamped.ecological_impact - excess), -1.0, 1.0)
 
 	clamped.metabolic_cost = adjusted_metabolic
 	clamped.ecological_impact = adjusted_eco

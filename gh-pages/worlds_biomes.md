@@ -42,7 +42,7 @@ The baseline biophysical parameters defined in `EvoTypes.BIOME_CLIMATE_DEFAULTS`
 | `savanna` | **Savanna** / *Sabana* | `+0.50` | `0.40` | `0.28 – 0.65` | `0.18` | `420.0` | Intermediate seasonal mosaic; rewards food storage, cooperation, and selective migration during dry cycles. |
 | `arid_steppe` | **Arid Steppe** / *Estepa Árida* | `+0.65` | `0.20` | `0.30 – 0.70` | `0.12` | `280.0` | Water-stressed scrubland with slow biomass replenishment and high vulnerability to overexploitation. |
 | `tundra` | **Tundra** / *Tundra* | `-0.55` | `0.35` | `0.35 – 0.74` | `0.10` | `240.0` | Sub-zero boreal habitat; imposes steep thermal metabolic costs unless buffered by high `spatial_mobility` / `bio-thermal-tolerance`. |
-| `high_mountain` | **High Mountain** / *Alta Montaña* | `-0.40` | `0.25` | `0.78 – 0.98` | `0.08` | `140.0` | Tectonic barrier ridge. Traversable only when $(\text{altitude} - 0.50) \le v_{\text{eff}}.\text{spatial\_mobility}$. |
+| `high_mountain` | **High Mountain** / *Alta Montaña* | `-0.40` | `0.25` | `0.78 – 0.98` | `0.08` | `140.0` | Tectonic barrier ridge. Traversable only when $\text{altitude} \le 0.85$ and $(\text{altitude} - 0.50) \le v_{\text{eff}}.\text{spatial\_mobility}$. |
 | `coastal_shallows` | **Coastal Shallows** / *Bajíos Costeros* | `+0.20` | `0.70` | `0.14 – 0.24` | `0.20` | `260.0` | Intertidal land bridges (`alt = 0.18` in Darwin's Archipelago) that periodically emerge and flood with sea-level changes. |
 | `ocean` | **Ocean** / *Océano* | `+0.10` | `0.90` | `0.02 – 0.08` | `0.02` | `50.0` | Deep marine barrier ($R = 0.0$). Impassable to terrestrial demes; submergence displaces or extinguishes resident populations. |
 
@@ -50,10 +50,10 @@ The baseline biophysical parameters defined in `EvoTypes.BIOME_CLIMATE_DEFAULTS`
 
 Whether a deme can migrate into or maintain genetic contact across an adjacent hexagon `ncell` is governed by `EvoDemographyMigration.is_hex_passable_for_deme(ncell, spatial_mobility)`:
 
-$$\text{Passable}(\text{ncell}, v_{\text{eff}}) \iff \text{ncell.biome} \neq \text{"ocean"} \;\land\; (\text{ncell.altitude} - 0.50) \le v_{\text{eff}}.\text{spatial\_mobility}$$
+$$\text{Passable}(\text{ncell}, v_{\text{eff}}) \iff \text{ncell.biome} \neq \text{"ocean"} \;\land\; \text{ncell.altitude} \le 0.85 \;\land\; (\text{ncell.altitude} - 0.50) \le v_{\text{eff}}.\text{spatial\_mobility}$$
 
 !!! info "Tectonic Ridges as Selective Barriers"
-    In **The Rift Valley**, the central mountain ridge (`q == 0, r != 0`) has `altitude = 0.88`, requiring $v_{\text{eff}}.\text{spatial\_mobility} \ge 0.38$ to cross directly—forcing populations without `bio-thermal-tolerance` or `dec-selective-migration` to either funnel through the central valley pass at `(0, 0)` (`altitude = 0.52`) or evolve in geographic isolation.
+    In **The Rift Valley**, the central mountain ridge (`q == 0, r != 0`) has `altitude = 0.88 > 0.85`, forming an impassable tectonic wall—forcing populations to either funnel through the central valley pass at `(0, 0)` (`altitude = 0.52`), wait for the player to carve a mountain pass with the **Valley Pickaxe** (`-0.18` altitude), or evolve in geographic isolation.
 
 ---
 
@@ -92,8 +92,8 @@ $$\text{sea\_level}(t) = \begin{cases} 0.12 \ (\text{Low Tide — Land Bridges E
 Whenever a hex's `altitude` falls below `state.sea_level` (via glacial cycles or God-mode altitude/sea-level tools), it converts to `"ocean"` and any resident demes must evacuate immediately:
 
 1. The engine scans all 6 adjacent neighbor hexes for valid refuges (`ncell.biome != "ocean"`, `ncell.deme_ids.size() < 3`, and `ncell.altitude <= 0.85`), sorted by highest `current_resources` ($R$).
-2. **Emergency Relocation**: If a refuge exists, the deme relocates to the best neighbor, suffers a **$20\%$ energy reserve penalty** ($E_{\text{reserves}} \leftarrow 0.80 \cdot E_{\text{reserves}}$), and generates a `"migration"` flow.
-3. **Submergence Extinction**: If all surrounding hexes are ocean, impassable peaks, or full ($3$ demes), the deme drowns—recording an `"extinction"` entry in the Chronicle and leaving behind sunken `ruins`.
+2. **Emergency Relocation**: If a refuge exists, the deme relocates to the best neighbor, suffers a **$20\%$ energy reserve penalty** ($E_{\text{reserves}} \leftarrow 0.80 \cdot E_{\text{reserves}}$), and generates a `"migration"` flow (`intensity = 0.80`).
+3. **Submergence Extinction**: If all surrounding hexes are ocean, impassable peaks (`altitude > 0.85`), or full ($3$ demes), the deme drowns—recording an `"extinction"` entry in the Chronicle and leaving behind sunken `ruins`.
 
 ### 4. Passive Carrying Capacity ($K$) & Biomass ($R$) Regeneration
 Each non-ocean cell recovers its carrying capacity $K$ toward $K_{\max}$ and replenishes available food $R$:

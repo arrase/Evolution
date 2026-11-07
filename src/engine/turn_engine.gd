@@ -11,7 +11,7 @@ static func advance_generation(state: EvoTypes.WorldState, lang: String = "es") 
 	var prev_chronicle_count := state.chronicle.size()
 
 	EvoEnvPhase.run_environmental_phase(state, lang)
-	EvoDecisionModel.evaluate_all_demes(state, lang)
+	EvoDecisionModel.evaluate_all_demes(state, lang, false)
 	EvoBiophysPhase.run_biophysical_phase(state, lang)
 	EvoMilestonePhase.run_milestone_phase(state, lang)
 
@@ -30,6 +30,8 @@ static func advance_generation(state: EvoTypes.WorldState, lang: String = "es") 
 		elif entry.event_type in ["total_extinction", "single_survivor", "ecological_equilibrium"]:
 			has_macro_outcome = true
 			outcome_entry = entry
+
+	EvoDecisionModel.prefetch_for_state(state)
 
 	return {
 		"generation": state.generation,
@@ -91,6 +93,15 @@ static func _displace_submerged_demes(state: EvoTypes.WorldState, lang: String =
 				state.active_flows.append(flow)
 			else:
 				state.demes.erase(deme_id)
+				var drowned_pacts: Array[String] = []
+				for pk_var in state.active_pacts.keys():
+					var pk := str(pk_var)
+					var sep := "__" if pk.contains("__") else "|"
+					var parts := pk.split(sep)
+					if parts.size() == 2 and (parts[0] == deme_id or parts[1] == deme_id):
+						drowned_pacts.append(pk)
+				for pk in drowned_pacts:
+					state.active_pacts.erase(pk)
 				if not state.recent_extinction_hexes.has(cell.id):
 					state.recent_extinction_hexes.append(cell.id)
 
@@ -143,10 +154,6 @@ static func _displace_submerged_demes(state: EvoTypes.WorldState, lang: String =
 		var fb := str(conn.get("to_deme_id", ""))
 		if (fa != "" and not state.demes.has(fa)) or (fb != "" and not state.demes.has(fb)):
 			continue
-		if fa != "" and state.demes.has(fa):
-			conn["from_hex_id"] = (state.demes[fa] as EvoTypes.Deme).hex_id
-		if fb != "" and state.demes.has(fb):
-			conn["to_hex_id"] = (state.demes[fb] as EvoTypes.Deme).hex_id
 		var ha := str(conn.get("from_hex_id", ""))
 		var hb := str(conn.get("to_hex_id", ""))
 		if (state.cells.has(ha) and (state.cells[ha] as EvoTypes.HexCell).biome == "ocean") or (state.cells.has(hb) and (state.cells[hb] as EvoTypes.HexCell).biome == "ocean"):
@@ -188,13 +195,16 @@ static func apply_set_biome(
 	if not _can_afford(state, COST_SET_BIOME):
 		return false
 
-	_spend_points(state, COST_SET_BIOME)
 	var defaults: Dictionary = EvoTypes.BIOME_CLIMATE_DEFAULTS[target_biome]
+	var changed := false
 
 	for hid in hex_ids:
 		if not state.cells.has(hid):
 			continue
 		var cell: EvoTypes.HexCell = state.cells[hid]
+		if cell.biome == target_biome:
+			continue
+		changed = true
 		_apply_biome_climate_defaults(cell, target_biome, true)
 		if target_biome == "ocean":
 			cell.altitude = snappedf(clampf(cell.altitude, 0.0, maxf(0.0, state.sea_level - 0.02)), 0.01)
@@ -203,6 +213,9 @@ static func apply_set_biome(
 			var max_land_alt := maxf(min_land_alt, float(defaults["max_alt"]))
 			cell.altitude = snappedf(clampf(cell.altitude, min_land_alt, max_land_alt), 0.01)
 
+	if not changed:
+		return false
+	_spend_points(state, COST_SET_BIOME)
 	_displace_submerged_demes(state, lang)
 	return true
 
@@ -216,14 +229,18 @@ static func apply_adjust_altitude(
 	if hex_ids.is_empty() or not _can_afford(state, COST_ADJUST_ALTITUDE):
 		return false
 
-	_spend_points(state, COST_ADJUST_ALTITUDE)
+	var changed := false
 
 	for hid in hex_ids:
 		if not state.cells.has(hid):
 			continue
 		var cell: EvoTypes.HexCell = state.cells[hid]
 		var prev_biome := cell.biome
+		var prev_alt := cell.altitude
 		var next_alt := snappedf(clampf(cell.altitude + delta, 0.0, 1.0), 0.01)
+		if is_equal_approx(next_alt, prev_alt):
+			continue
+		changed = true
 		cell.altitude = next_alt
 
 		var next_biome := prev_biome
@@ -244,10 +261,15 @@ static func apply_adjust_altitude(
 			next_biome = "savanna" if next_alt < 0.55 else ("arid_steppe" if next_alt < 0.78 else "high_mountain")
 		elif delta < 0.0 and prev_biome == "high_mountain" and next_alt < 0.78:
 			next_biome = "coastal_shallows" if next_alt < 0.28 else ("savanna" if next_alt < 0.55 else "arid_steppe")
+		elif delta < 0.0 and next_alt >= state.sea_level and next_alt < 0.28 and prev_biome != "coastal_shallows":
+			next_biome = "coastal_shallows"
 
 		if next_biome != prev_biome or next_biome == "ocean":
 			_apply_biome_climate_defaults(cell, next_biome, prev_biome == "ocean")
 
+	if not changed:
+		return false
+	_spend_points(state, COST_ADJUST_ALTITUDE)
 	_displace_submerged_demes(state, lang)
 	return true
 
@@ -260,8 +282,8 @@ static func apply_adjust_carrying_capacity(
 	if hex_ids.is_empty() or not _can_afford(state, COST_ADJUST_CAPACITY):
 		return false
 
-	_spend_points(state, COST_ADJUST_CAPACITY)
 	var factor := 1.0 + factor_delta
+	var changed := false
 
 	for hid in hex_ids:
 		if not state.cells.has(hid):
@@ -270,18 +292,26 @@ static func apply_adjust_carrying_capacity(
 		if cell.biome == "ocean":
 			continue
 		var prev_k := cell.carrying_capacity
+		var prev_r := cell.current_resources
 		var next_k := snappedf(clampf(prev_k * factor, 10.0, cell.carrying_capacity_max), 0.01)
-		cell.carrying_capacity = next_k
+		var next_r := prev_r
 		if factor_delta > 0.0:
 			var added_res := maxf(
 				cell.current_resources * factor,
 				cell.current_resources + prev_k * factor_delta
 			)
-			cell.current_resources = clampf(roundf(added_res), 0.0, next_k)
+			next_r = clampf(roundf(added_res), 0.0, next_k)
 		else:
 			var degrade_factor := 0.78 if factor_delta < 0.0 else factor
-			cell.current_resources = snappedf(clampf(cell.current_resources * degrade_factor, 0.0, next_k), 0.01)
+			next_r = snappedf(clampf(cell.current_resources * degrade_factor, 0.0, next_k), 0.01)
+		if not is_equal_approx(next_k, prev_k) or not is_equal_approx(next_r, prev_r):
+			cell.carrying_capacity = next_k
+			cell.current_resources = next_r
+			changed = true
 
+	if not changed:
+		return false
+	_spend_points(state, COST_ADJUST_CAPACITY)
 	return true
 
 
@@ -293,8 +323,10 @@ static func apply_adjust_sea_level(
 	if not _can_afford(state, COST_ADJUST_SEA_LEVEL):
 		return false
 
-	_spend_points(state, COST_ADJUST_SEA_LEVEL)
 	var next_sea_level := snappedf(clampf(state.sea_level + delta, 0.0, 0.50), 0.01)
+	if is_equal_approx(next_sea_level, state.sea_level):
+		return false
+	_spend_points(state, COST_ADJUST_SEA_LEVEL)
 	state.sea_level = next_sea_level
 
 	for cid in state.cells.keys():

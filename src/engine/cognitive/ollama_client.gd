@@ -14,10 +14,13 @@ static var _mutex := Mutex.new()
 static var _cached_ollama_status: Dictionary = {}
 static var _live_signature_cache: Dictionary = {}
 static var _pending_jobs_by_sig: Dictionary = {}
+static var _cache_epoch: int = 0
+static var _active_worker_epoch: int = -1
 static var _worker_task_id: int = -1
 static var _worker_running: bool = false
 static var _status_probed: bool = false
 static var _status_probe_running: bool = false
+static var _status_reprobe_requested: bool = false
 static var _status_task_id: int = -1
 static var _shutdown_requested: bool = false
 static var _completed_revision: int = 0
@@ -62,6 +65,7 @@ static func _default_ollama_status() -> Dictionary:
 
 static func clear_cache() -> void:
 	_mutex.lock()
+	_cache_epoch += 1
 	_live_signature_cache.clear()
 	_pending_jobs_by_sig.clear()
 	_newly_completed_sigs.clear()
@@ -79,8 +83,11 @@ static func check_ollama_status(force_refresh: bool = false) -> Dictionary:
 	var should_launch := (not _status_probed or force_refresh) and not _status_probe_running and not _shutdown_requested
 	if should_launch:
 		_status_probe_running = true
+		_status_reprobe_requested = false
 		task_to_reap = _status_task_id
 		_status_task_id = -1
+	elif force_refresh and _status_probe_running and not _shutdown_requested:
+		_status_reprobe_requested = true
 	var snapshot := _cached_ollama_status.duplicate(true)
 	_mutex.unlock()
 
@@ -116,92 +123,101 @@ static func filter_decision_models_from_tags(models: Array) -> Array[String]:
 
 
 static func _probe_ollama_status_sync() -> Dictionary:
-	var desired_primary: String = EvoUserSettings.primary_model
-	var desired_secondary: String = EvoUserSettings.secondary_model
-	var primary_tag: String = desired_primary
-	var secondary_tag: String = desired_secondary
-	var primary_ready: bool = false
-	var secondary_ready: bool = false
-	var connected: bool = false
-	var decision_models: Array[String] = []
-	var all_model_names: Array[String] = []
+	var status: Dictionary = {}
+	while true:
+		_mutex.lock()
+		var desired_primary: String = EvoUserSettings.primary_model
+		var desired_secondary: String = EvoUserSettings.secondary_model
+		_mutex.unlock()
+		var primary_tag: String = desired_primary
+		var secondary_tag: String = desired_secondary
+		var primary_ready: bool = false
+		var secondary_ready: bool = false
+		var connected: bool = false
+		var decision_models: Array[String] = []
+		var all_model_names: Array[String] = []
 
-	if not _shutdown_requested:
-		var client := HTTPClient.new()
-		var err := client.connect_to_host(DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_PORT)
-		if err == OK:
-			var start_ms := Time.get_ticks_msec()
-			while not _shutdown_requested and client.get_status() in [HTTPClient.STATUS_CONNECTING, HTTPClient.STATUS_RESOLVING]:
-				client.poll()
-				if Time.get_ticks_msec() - start_ms > STATUS_TIMEOUT_MS:
-					break
-				OS.delay_msec(2)
+		if not _shutdown_requested:
+			var client := HTTPClient.new()
+			var err := client.connect_to_host(DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_PORT)
+			if err == OK:
+				var start_ms := Time.get_ticks_msec()
+				while not _shutdown_requested and client.get_status() in [HTTPClient.STATUS_CONNECTING, HTTPClient.STATUS_RESOLVING]:
+					client.poll()
+					if Time.get_ticks_msec() - start_ms > STATUS_TIMEOUT_MS:
+						break
+					OS.delay_msec(2)
 
-			if not _shutdown_requested and client.get_status() == HTTPClient.STATUS_CONNECTED:
-				var req_err := client.request(HTTPClient.METHOD_GET, "/api/tags", ["Accept: application/json"])
-				if req_err == OK:
-					while not _shutdown_requested and client.get_status() == HTTPClient.STATUS_REQUESTING:
-						client.poll()
-						if Time.get_ticks_msec() - start_ms > STATUS_TIMEOUT_MS:
-							break
-						OS.delay_msec(2)
-
-					if not _shutdown_requested and client.has_response() and client.get_response_code() == 200:
-						var rb := PackedByteArray()
-						while not _shutdown_requested and client.get_status() == HTTPClient.STATUS_BODY:
+				if not _shutdown_requested and client.get_status() == HTTPClient.STATUS_CONNECTED:
+					var req_err := client.request(HTTPClient.METHOD_GET, "/api/tags", ["Accept: application/json"])
+					if req_err == OK:
+						while not _shutdown_requested and client.get_status() == HTTPClient.STATUS_REQUESTING:
 							client.poll()
-							var chunk := client.read_response_body_chunk()
-							if chunk.size() > 0:
-								rb.append_array(chunk)
-							else:
-								if Time.get_ticks_msec() - start_ms > STATUS_TIMEOUT_MS:
-									break
-								OS.delay_msec(1)
-						var parsed = JSON.parse_string(rb.get_string_from_utf8())
-						if typeof(parsed) == TYPE_DICTIONARY and parsed.has("models"):
-							connected = true
-							var models: Array = parsed["models"]
-							decision_models = filter_decision_models_from_tags(models)
-							for m in models:
-								if typeof(m) == TYPE_DICTIONARY and m.has("name"):
-									all_model_names.append(str(m["name"]))
-		client.close()
+							if Time.get_ticks_msec() - start_ms > STATUS_TIMEOUT_MS:
+								break
+							OS.delay_msec(2)
 
-	for mname in all_model_names:
-		if mname == desired_primary:
-			primary_ready = true
-			primary_tag = mname
-		if mname == desired_secondary:
-			secondary_ready = true
-			secondary_tag = mname
+						if not _shutdown_requested and client.has_response() and client.get_response_code() == 200:
+							var rb := PackedByteArray()
+							while not _shutdown_requested and client.get_status() == HTTPClient.STATUS_BODY:
+								client.poll()
+								var chunk := client.read_response_body_chunk()
+								if chunk.size() > 0:
+									rb.append_array(chunk)
+								else:
+									if Time.get_ticks_msec() - start_ms > STATUS_TIMEOUT_MS:
+										break
+									OS.delay_msec(1)
+							var parsed = JSON.parse_string(rb.get_string_from_utf8())
+							if typeof(parsed) == TYPE_DICTIONARY and parsed.has("models"):
+								connected = true
+								var models: Array = parsed["models"]
+								decision_models = filter_decision_models_from_tags(models)
+								for m in models:
+									if typeof(m) == TYPE_DICTIONARY and m.has("name"):
+										all_model_names.append(str(m["name"]))
+			client.close()
 
-	var missing_models: Array[String] = []
-	var missing_commands: Array[String] = []
-	if not primary_ready:
-		missing_models.append(desired_primary)
-		missing_commands.append("ollama pull " + desired_primary)
-	if not secondary_ready and desired_secondary != desired_primary:
-		missing_models.append(desired_secondary)
-		missing_commands.append("ollama pull " + desired_secondary)
+		for mname in all_model_names:
+			if mname == desired_primary:
+				primary_ready = true
+				primary_tag = mname
+			if mname == desired_secondary:
+				secondary_ready = true
+				secondary_tag = mname
 
-	var status := {
-		"probed": true,
-		"connected": connected,
-		"primary_ready": primary_ready,
-		"secondary_ready": secondary_ready,
-		"both_ready": connected and primary_ready and secondary_ready,
-		"primary_tag": primary_tag,
-		"secondary_tag": secondary_tag,
-		"decision_models": decision_models,
-		"missing_models": missing_models,
-		"missing_commands": missing_commands
-	}
+		var missing_models: Array[String] = []
+		var missing_commands: Array[String] = []
+		if not primary_ready:
+			missing_models.append(desired_primary)
+			missing_commands.append("ollama pull " + desired_primary)
+		if not secondary_ready and desired_secondary != desired_primary:
+			missing_models.append(desired_secondary)
+			missing_commands.append("ollama pull " + desired_secondary)
 
-	_mutex.lock()
-	_cached_ollama_status = status
-	_status_probed = true
-	_status_probe_running = false
-	_mutex.unlock()
+		status = {
+			"probed": true,
+			"connected": connected,
+			"primary_ready": primary_ready,
+			"secondary_ready": secondary_ready,
+			"both_ready": connected and primary_ready and secondary_ready,
+			"primary_tag": primary_tag,
+			"secondary_tag": secondary_tag,
+			"decision_models": decision_models,
+			"missing_models": missing_models,
+			"missing_commands": missing_commands
+		}
+
+		_mutex.lock()
+		_cached_ollama_status = status
+		_status_probed = true
+		if _status_reprobe_requested and not _shutdown_requested:
+			_status_reprobe_requested = false
+			_mutex.unlock()
+			continue
+		_status_probe_running = false
+		_mutex.unlock()
+		break
 	return status.duplicate(true)
 
 
@@ -429,6 +445,27 @@ static func _can_enqueue_locked() -> bool:
 	)
 
 
+static func can_enqueue_jobs() -> bool:
+	_mutex.lock()
+	var ok := _can_enqueue_locked()
+	_mutex.unlock()
+	return ok
+
+
+static func needs_prefetch() -> bool:
+	_mutex.lock()
+	var ok := _can_enqueue_locked() and (not _worker_running or _pending_jobs_by_sig.size() < 2)
+	_mutex.unlock()
+	return ok
+
+
+static func has_cached_or_can_enqueue(enqueue_missing: bool) -> bool:
+	_mutex.lock()
+	var ok := not _live_signature_cache.is_empty() or (enqueue_missing and _can_enqueue_locked())
+	_mutex.unlock()
+	return ok
+
+
 static func lookup_or_enqueue_single_deme(
 	sig: String,
 	deme: EvoTypes.Deme,
@@ -464,24 +501,31 @@ static func seed_signature_cache(sig: String, entry: Dictionary) -> void:
 	_mutex.unlock()
 
 
-static func sync_and_enqueue_batch(buckets: Dictionary, state: EvoTypes.WorldState) -> Dictionary:
+static func sync_and_enqueue_batch(
+	buckets: Dictionary,
+	state: EvoTypes.WorldState,
+	enqueue_missing: bool = true
+) -> Dictionary:
 	var live_results: Dictionary = {}
 	var missing_sigs: Array[String] = []
 	if not buckets.is_empty():
 		_mutex.lock()
-		var can_enq := _can_enqueue_locked()
+		var can_enq := enqueue_missing and _can_enqueue_locked()
 		for pending_sig in _pending_jobs_by_sig.keys():
 			if not buckets.has(pending_sig):
 				_pending_jobs_by_sig.erase(pending_sig)
 		for sig in buckets.keys():
 			if _live_signature_cache.has(sig):
 				live_results[sig] = (_live_signature_cache[sig] as Dictionary).duplicate(true)
+				_newly_completed_sigs.erase(sig)
 			elif can_enq and not _pending_jobs_by_sig.has(sig):
 				missing_sigs.append(str(sig))
 		_mutex.unlock()
 
 	var new_jobs: Array[Dictionary] = []
-	for sig in missing_sigs:
+	var max_new := maxi(0, 8 - _pending_jobs_by_sig.size())
+	for i in range(mini(max_new, missing_sigs.size())):
+		var sig := missing_sigs[i]
 		var rep_deme: EvoTypes.Deme = buckets[sig]["representative"]
 		var job := build_live_job(sig, rep_deme, state)
 		if not job.is_empty():
@@ -503,13 +547,16 @@ static func prefetch_for_reps(reps_by_sig: Dictionary, state: EvoTypes.WorldStat
 	var missing_sigs: Array[String] = []
 	_mutex.lock()
 	var can_enq := _can_enqueue_locked()
-	for pending_sig in _pending_jobs_by_sig.keys():
-		if not reps_by_sig.has(pending_sig):
-			_pending_jobs_by_sig.erase(pending_sig)
-	if can_enq:
+	if not _worker_running:
+		for pending_sig in _pending_jobs_by_sig.keys():
+			if not reps_by_sig.has(pending_sig):
+				_pending_jobs_by_sig.erase(pending_sig)
+	if can_enq and _pending_jobs_by_sig.size() < 4:
 		for sig in reps_by_sig.keys():
 			if not _live_signature_cache.has(sig) and not _pending_jobs_by_sig.has(sig):
 				missing_sigs.append(str(sig))
+				if _pending_jobs_by_sig.size() + missing_sigs.size() >= 4:
+					break
 	_mutex.unlock()
 
 	if missing_sigs.is_empty():
@@ -549,6 +596,7 @@ static func _start_worker_if_needed() -> void:
 	var should_start := not _shutdown_requested and not _worker_running and not _pending_jobs_by_sig.is_empty()
 	if should_start:
 		_worker_running = true
+		_active_worker_epoch = _cache_epoch
 		task_to_reap = _worker_task_id
 		_worker_task_id = -1
 	_mutex.unlock()
@@ -584,10 +632,12 @@ static func _run_ollama_worker() -> void:
 	while not _shutdown_requested:
 		var batch: Array[Dictionary] = []
 		var status: Dictionary = {}
+		var batch_epoch: int = 0
 
 		_mutex.lock()
 		if _pending_jobs_by_sig.is_empty() or _shutdown_requested:
 			_worker_running = false
+			_active_worker_epoch = -1
 			_mutex.unlock()
 			return
 		status = _cached_ollama_status.duplicate(true)
@@ -595,8 +645,11 @@ static func _run_ollama_worker() -> void:
 		if not can_eval:
 			_pending_jobs_by_sig.clear()
 			_worker_running = false
+			_active_worker_epoch = -1
 			_mutex.unlock()
 			return
+		batch_epoch = _cache_epoch
+		_active_worker_epoch = batch_epoch
 		var keys := _pending_jobs_by_sig.keys()
 		var count := mini(4, keys.size())
 		for i in range(count):
@@ -608,14 +661,16 @@ static func _run_ollama_worker() -> void:
 		var batch_results := _evaluate_job_batch_with_ollama(batch, status)
 		if not batch_results.is_empty():
 			_mutex.lock()
-			for sig_key in batch_results.keys():
-				_live_signature_cache[sig_key] = batch_results[sig_key]
-				_newly_completed_sigs[sig_key] = batch_results[sig_key]
-			_completed_revision += 1
+			if _cache_epoch == batch_epoch:
+				for sig_key in batch_results.keys():
+					_live_signature_cache[sig_key] = batch_results[sig_key]
+					_newly_completed_sigs[sig_key] = batch_results[sig_key]
+				_completed_revision += 1
 			_mutex.unlock()
 
 	_mutex.lock()
 	_worker_running = false
+	_active_worker_epoch = -1
 	_mutex.unlock()
 
 
@@ -748,7 +803,7 @@ static func _evaluate_job_batch_with_ollama(
 
 static func has_pending_jobs() -> bool:
 	_mutex.lock()
-	var pending := _worker_running or not _pending_jobs_by_sig.is_empty()
+	var pending := not _pending_jobs_by_sig.is_empty() or (_worker_running and _active_worker_epoch == _cache_epoch)
 	_mutex.unlock()
 	return pending
 
@@ -775,7 +830,9 @@ static func wait_for_workers() -> void:
 
 	_mutex.lock()
 	_status_probe_running = false
+	_status_reprobe_requested = false
 	_worker_running = false
+	_active_worker_epoch = -1
 	_pull_running = false
 	_shutdown_requested = false
 	_pull_cancel_requested = false

@@ -371,13 +371,15 @@ class Deme extends RefCounted:
 		return d
 
 	func get_vital_status() -> String:
-		if last_energy_delta >= 10.0:
+		if population <= 0:
+			return "extinct"
+		if energy_reserves < 25.0 or last_energy_delta <= -10.0:
+			return "starving"
+		if (last_energy_delta >= 10.0 and energy_reserves >= 40.0) or energy_reserves >= 120.0:
 			return "thriving"
-		if last_energy_delta >= 0.0:
-			return "stable"
-		if energy_reserves > 40.0:
-			return "struggling"
-		return "starving"
+		if last_energy_delta < -5.0:
+			return "declining"
+		return "stable"
 
 	func get_village_tier() -> int:
 		if population >= 400:

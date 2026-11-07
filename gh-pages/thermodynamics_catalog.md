@@ -15,10 +15,12 @@ When a strategy is constructed in the **Forge (`EvoLabModal`)** or applied to a 
 * **Cultural Capacity Prerequisite (`enables_cultural_transmission`)**: Cultural traditions (`cul-*`) require at least one biological trait with `enables_cultural_transmission == true` (`bio-encephalization` or `bio-social-instinct`). When `apply_strategy_to_deme` assigns traits to a deme, it verifies `EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog)`; if no biological trait enables culture, `deme.cultural_trait_ids` is cleared to `[]`.
 * **Lineage & Deme Synchronization**: Applying a strategy sets `deme.strategy_id`, `deme.color`, `deme.biological_trait_ids`, and `deme.cultural_trait_ids`, and synchronizes the deme's `LineageNode` (`lin.strategy_id`, `lin.color`, `lin.biological_trait_ids`, `lin.cultural_trait_ids`, and `lin.acquired_trait_ids`).
 
-### 2. Combined Strategy Biophysical Footprint (`compute_strategy_vector`)
+### 2. Combined Strategy Biophysical Footprint (`compute_strategy_vector`) & Decision Affinities (`compute_strategy_baseline_probabilities`)
 A strategy's baseline 6-axis footprint (`EvoCatalog.compute_strategy_vector(strategy, traits_catalog)`) is computed by summing the vectors of all included biological and cultural traits and clamping via `EvoThermodynamics.clamp_vector` (axes 1–5 in $[-1.0, +1.0]$, `transmission_threshold` in $[0.0, +1.0]$):
 
 $$\mathbf{v}_{\text{strat}}(S) = \text{clamp}_{[-1.0, 1.0]}\left(\sum_{b \in S.\text{bio}} \mathbf{v}_b + \sum_{c \in S.\text{cul}} \mathbf{v}_c\right)$$
+
+In addition, `EvoCatalog.compute_baseline_decision_weights(bio_ids, cul_ids, traits_catalog, decisions_catalog)` and `EvoCatalog.compute_strategy_baseline_probabilities(strategy, traits_catalog, decisions_catalog)` compute the intrinsic behavioral affinity distribution induced by a deme's or strategy's biological and cultural traits (coupling explicit trait affinities—such as `cul-warrior-expansion` boosting `dec-territorial-dispute` $+1.60$ and `dec-selective-migration` $+0.80$, `cul-communal-conservation` boosting `dec-cooperate-store` $+1.50$, or `cul-interdeme-barter` boosting `dec-exchange-symbiosis` $+1.65$—with 6-axis vector alignment).
 
 ### 3. The 5 Base Archetypal Strategies (`EvoCatalog.create_base_strategies_catalog`)
 
@@ -26,10 +28,10 @@ By default, every scenario starts with `DEFAULT_STRATEGY_A_ID = "strat-cooperati
 
 | Strategy ID | Emblem & Name (EN / ES) | Hex Color | Included Biological Traits (`bio-*`) | Included Cultural Traits (`cul-*`) | Combined Biophysical Footprint<br>`(Cost, Extr, Eco, Mob, Coh, Thr)` | Evolutionary Philosophy & Gameplay Role |
 | :--- | :--- | :---: | :--- | :--- | :---: | :--- |
-| `strat-cooperation` | 🤝 **Cooperative Alliance**<br>*Alianza Cooperativa* | `#10B981` | `bio-k-strategy`<br>`bio-social-instinct` | `cul-communal-conservation` | `(+0.55, +0.70, +0.75, +0.15, +1.00, 1.00)` | **Ecological Stewardship & Stability**: Fosters maximum social cohesion (`+1.00`), communal habitat regeneration (`+0.75` eco), and $K$-selected demographic buffering. |
-| `strat-expansion` | 🧭 **Expansionist Pioneers**<br>*Pioneros Expansionistas* | `#3B82F6` | `bio-r-strategy`<br>`bio-thermal-tolerance`<br>`bio-social-instinct` | `cul-fire-processing` | `(+0.10, +0.95, -0.35, +0.90, +0.70, 1.00)` | **Rapid Dispersal & Barrier Crossing**: Combines $\times 1.35$ $r$-selected fecundity with high mobility (`+0.90`) and cooking efficiency (`+0.10` net cost) to colonize mountains and islands. |
-| `strat-trade` | ⚖️ **Merchant League**<br>*Liga Mercantil* | `#F59E0B` | `bio-k-strategy`<br>`bio-encephalization` | `cul-interdeme-barter` | `(+1.00, +1.00, +0.30, +0.55, +1.00, 1.00)` | **Commercial Symbiosis & Cultural Hub**: High-cognition diplomatic network that unlocks $+20\%$ reciprocal symbiosis surpluses, sustainable ecology (`+0.30`), and rapid horizontal cultural diffusion. |
-| `strat-war` | ⚔️ **Conquering Horde**<br>*Horda Conquistadora* | `#EF4444` | `bio-r-strategy`<br>`bio-social-instinct` | `cul-warrior-expansion`<br>`cul-extraction-tools` | `(+0.75, +1.00, -0.75, +0.90, +1.00, 1.00)` | **Martial Dominance & Intensive Extraction**: Dominates Hawk-Dove disputes and seizes rival resources with maximum extraction (`+1.00`) and mobility (`+0.90`), at severe ecological cost (`-0.75`). |
+| `strat-cooperation` | 🤝 **Cooperative Alliance**<br>*Alianza Cooperativa* | `#10B981` | `bio-k-strategy`<br>`bio-social-instinct` | `cul-communal-conservation` | `(+0.55, +0.70, +0.75, +0.15, +1.00, 1.00)` | **Ecological Stewardship, Stability & Pacts**: Fosters maximum social cohesion (`+1.00`), communal habitat regeneration (`+0.75` eco), formal Alliance Pacts, and $K$-selected demographic buffering. |
+| `strat-expansion` | 🧭 **Expansionist Pioneers**<br>*Pioneros Expansionistas* | `#3B82F6` | `bio-r-strategy`<br>`bio-thermal-tolerance`<br>`bio-social-instinct` | `cul-fire-processing` | `(+0.10, +0.95, -0.35, +0.90, +0.70, 1.00)` | **Rapid Dispersal & Barrier Crossing**: Combines density-dependent $r$-selected fecundity ($\times 1.28$ at low crowding) with high mobility (`+0.90`) and cooking efficiency (`+0.10` net cost) to colonize mountains and islands. |
+| `strat-trade` | ⚖️ **Merchant League**<br>*Liga Mercantil* | `#F59E0B` | `bio-k-strategy`<br>`bio-encephalization` | `cul-interdeme-barter` | `(+1.00, +1.00, +0.30, +0.55, +1.00, 1.00)` | **Commercial Symbiosis & Cultural Hub**: High-cognition diplomatic network that unlocks $+20\%$ reciprocal symbiosis surpluses, Alliance Pacts, sustainable ecology (`+0.30`), and rapid horizontal cultural diffusion. |
+| `strat-war` | ⚔️ **Conquering Horde**<br>*Horda Conquistadora* | `#EF4444` | `bio-r-strategy`<br>`bio-social-instinct` | `cul-warrior-expansion`<br>`cul-extraction-tools` | `(+0.75, +1.00, -0.75, +0.90, +1.00, 1.00)` | **Martial Dominance, Raids & Conquest**: Wages territorial wars of conquest, launches cross-border plunder raids, and dominates Hawk-Dove disputes with maximum extraction (`+1.00`) and mobility (`+0.90`), at severe ecological cost (`-0.75`). |
 | `strat-innovation` | 🔬 **Innovator Technocrats**<br>*Tecnócratas Innovadores* | `#A855F7` | `bio-encephalization`<br>`bio-digestive-spec` | `cul-fire-processing`<br>`cul-extraction-tools` | `(+0.70, +1.00, -0.45, +0.55, +0.80, 1.00)` | **Cognitive & Technological Acceleration**: Pairs neocortical expansion and omnivorous digestion with thermal processing and toolkits to maximize extraction (`+1.00`) and cumulative innovation. |
 
 ---
@@ -78,13 +80,13 @@ $$C_{\text{req}} = \begin{cases} \text{round4}\big(0.50 \times (A^+ - 0.60)\big)
 $$\text{is\_balanced} \iff (A^+ \le 0.60) \;\lor\; (C_{\text{curr}} \ge C_{\text{req}} - 10^{-6})$$
 
 ### 3. Automatic Vector Balancing (`validate_and_balance_thermodynamics`)
-When `is_balanced` is `false` (and `free_sandbox_mode` is disabled), the engine automatically adjusts the vector by raising `metabolic_cost` first and spilling any remainder above `1.0` into negative `ecological_impact`:
+When `is_balanced` is `false` (and `free_sandbox_mode` is disabled), the engine automatically adjusts the vector by raising `metabolic_cost` first and subtracting any excess above `1.0` directly from `ecological_impact`:
 
 $$\text{target\_metabolic} = C_{\text{req}} + \min(0,\ \text{ecological\_impact})$$
 
-$$\text{metabolic\_cost}' = \min\big(1.0,\ \text{round4}(\text{target\_metabolic})\big)$$
+$$\text{metabolic\_cost}' = \text{clamp}_{[-1.0, 1.0]}\big(\text{round4}(\text{target\_metabolic})\big)$$
 
-$$\text{ecological\_impact}' = \begin{cases} \max\big(-1.0,\ \text{round4}\big(\min(0, \text{ecological\_impact}) - (\text{target\_metabolic} - 1.0)\big)\big) & \text{if } \text{target\_metabolic} > 1.0 \\ \text{ecological\_impact} & \text{otherwise} \end{cases}$$
+$$\text{ecological\_impact}' = \begin{cases} \text{clamp}_{[-1.0, 1.0]}\big(\text{round4}\big(\text{ecological\_impact} - (\text{target\_metabolic} - 1.0)\big)\big) & \text{if } \text{target\_metabolic} > 1.0 \\ \text{ecological\_impact} & \text{otherwise} \end{cases}$$
 
 ---
 
@@ -102,7 +104,7 @@ Biological traits represent genetically heritable life-history strategies, physi
 
 | Trait ID | Name (EN / ES) | Cost | Extract | Eco | Mobility | Cohesion | Threshold | Exclusive With | Enables Culture | Biophysical & Evolutionary Role |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| `bio-r-strategy` | **r-Strategy (Prolific)**<br>*Estrategia r (Prolífica)* | `-0.15` | `+0.20` | `-0.20` | `+0.25` | `-0.15` | `0.05` | `bio-k-strategy` | No | Boosts demographic growth rate by **$\times 1.35$** and lowers metabolic cost, accelerating island colonization at the expense of habitat impact. |
+| `bio-r-strategy` | **r-Strategy (Prolific)**<br>*Estrategia r (Prolífica)* | `-0.15` | `+0.20` | `-0.20` | `+0.25` | `-0.15` | `0.05` | `bio-k-strategy` | No | Boosts demographic growth rate via a density-dependent multiplier (**$\times 1.28$** when crowding $< 0.55$, **$\times 1.16$** when $< 0.65$, **$\times 1.05$** when $\ge 0.65$) and lowers metabolic cost, accelerating colonization at the expense of habitat impact. |
 | `bio-k-strategy` | **K-Strategy (Longevity & Parental Care)**<br>*Estrategia K (Longevidad y Cuidado Parental)* | `+0.20` | `+0.25` | `+0.15` | `+0.05` | `+0.40` | `0.30` | `bio-r-strategy` | No | Moderates demographic swings ($\times 0.75$ growth/decline multiplier), improves ecological stewardship (`+0.15`), and strengthens social cohesion (`+0.40`). |
 | `bio-digestive-spec` | **Omnivorous Digestive Specialization**<br>*Especialización Digestiva Omnívora* | `+0.10` | `+0.45` | `+0.05` | `+0.15` | `0.00` | `0.10` | *None* | No | Enzymatic plasticity that substantially increases caloric extraction (`+0.45`) across diverse flora and fauna with minimal metabolic overhead (`+0.10`). |
 | `bio-thermal-tolerance` | **Thermal & Hydric Tolerance**<br>*Tolerancia Térmica e Hídrica* | `+0.15` | `+0.20` | `+0.05` | `+0.45` | `+0.10` | `0.10` | *None* | No | High spatial mobility (`+0.45`) that unlocks high-altitude mountain passes and mitigates thermal metabolic penalties in Tundra and Arid Steppe biomes. |
@@ -124,7 +126,7 @@ Cultural traditions require at least one biological trait with `enables_cultural
 | `cul-extraction-tools` | **Specialized Extraction Tools**<br>*Herramientas de Extracción Especializadas* | `+0.25` | `+0.65` | `-0.25` | `+0.10` | `+0.20` | `0.50` | Cumulative lithic/organic toolkit that massively amplifies extraction (`+0.65`) and triggers the `tech_overexploit` behavioral branch unless paired with conservation norms. |
 | `cul-communal-conservation` | **Communal Conservation Norms**<br>*Normas de Conservación Comunal* | `+0.15` | `+0.25` | `+0.55` | `0.00` | `+0.50` | `0.55` | Institutionalized harvesting quotas and taboos (`+0.55` `ecological_impact`, `+0.50` `social_cohesion`) that prevent the *Tragedy of the Commons* and actively rebuild $K$. |
 | `cul-interdeme-barter` | **Inter-Deme Barter Networks**<br>*Redes de Trueque Inter-Deme* | `+0.35` | `+0.40` | `+0.15` | `+0.30` | `+0.50` | `0.60` | Diplomatic and trade protocols that raise extraction (`+0.40`), mobility (`+0.30`), and social cohesion (`+0.50`), accelerating horizontal cultural diffusion. |
-| `cul-warrior-expansion` | **Warrior / Expansionist Tradition**<br>*Tradición Guerrera / Expansionista* | `+0.45` | `+0.30` | `-0.35` | `+0.45` | `+0.60` | `0.45` | High-cohesion (`+0.60`), high-mobility (`+0.45`) militarized organization that dominates Hawk-Dove disputes at severe metabolic (`+0.45`) and ecological (`-0.35`) cost. |
+| `cul-warrior-expansion` | **Warrior / Expansionist Tradition**<br>*Tradición Guerrera / Expansionista* | `+0.45` | `+0.30` | `-0.35` | `+0.45` | `+0.60` | `0.45` | High-cohesion (`+0.60`), high-mobility (`+0.45`) militarized organization that drives territorial wars, plunder raids, and Hawk-Dove dominance at severe metabolic (`+0.45`) and ecological (`-0.35`) cost. |
 
 ---
 
@@ -135,11 +137,11 @@ Every generation, the cognitive engine assigns a normalized probability distribu
 | Decision ID | Archetype | Name (EN / ES) | Cost | Extract | Eco | Mobility | Cohesion | Threshold | Required Traits (Any) | Behavioral Profile & Simulation Effect |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- | :--- |
 | `dec-conservative-forage` | `forage` | **Conservative Foraging**<br>*Forrajeo Conservador* | `+0.10` | `+0.35` | `+0.10` | `0.00` | `+0.05` | `0.05` | *None* | Default low-risk gathering within local regeneration limits; does not increment Baldwin counters. |
-| `dec-intensive-overexploit` | `overexploit` | **Intensive Overexploitation**<br>*Sobreexplotación Intensiva* | `+0.25` | `+0.85` | `-0.65` | `0.00` | `-0.10` | `0.10` | *None* | Maximizes immediate caloric intake (`+0.85`) while severely degrading habitat carrying capacity $K$ (`-0.65`). |
-| `dec-selective-migration` | `migrate` | **Selective Migration**<br>*Migración Selectiva* | `+0.30` | `+0.15` | `+0.15` | `+0.75` | `+0.05` | `0.10` | *None* | High spatial mobility (`+0.75`) that drives population fission (budding migration) into higher-adequacy neighboring hexes. |
-| `dec-cooperate-store` | `cooperate` | **Cooperation & Storage**<br>*Cooperación y Almacenamiento* | `+0.25` | `+0.45` | `+0.15` | `-0.10` | `+0.65` | `0.35` | *None* | Collective resource pooling and food preservation; contributes $0.35 \cdot P(\text{"cooperate"})$ to cultural innovation and builds cooperative road networks. |
-| `dec-exchange-symbiosis` | `exchange` | **Exchange / Symbiosis**<br>*Intercambio / Simbiosis* | `+0.35` | `+0.50` | `+0.20` | `+0.20` | `+0.60` | `0.45` | `bio-encephalization` OR `bio-social-instinct` | Unlocks **$+20\%$ caloric surplus** and horizontal cultural trait transmission with cohabiting or neighboring exchangers ($P(\text{"exchange"}) \ge 0.20$). |
-| `dec-territorial-dispute` | `dispute` | **Territorial Dispute**<br>*Disputa Territorial* | `+0.55` | `+0.40` | `-0.30` | `+0.25` | `+0.55` | `0.20` | *None* | Agonistic **Hawk** strategy ($P(\text{"dispute"}) \ge 0.25$); seizes Dove biomass shares or triggers destructive Hawk-Hawk clashes ($-15\%$ pop, $\times 1.25$ metabolic cost). |
+| `dec-intensive-overexploit` | `overexploit` | **Intensive Overexploitation**<br>*Sobreexplotación Intensiva* | `+0.25` | `+0.85` | `-0.65` | `0.00` | `-0.10` | `0.10` | *None* | Maximizes immediate caloric intake (`+0.85`) while severely degrading habitat carrying capacity $K$ (`-0.65`); contributes to raid and betrayal propensity. |
+| `dec-selective-migration` | `migrate` | **Selective Migration**<br>*Migración Selectiva* | `+0.30` | `+0.15` | `+0.15` | `+0.75` | `+0.05` | `0.10` | *None* | High spatial mobility (`+0.75`) that boosts migration reach ($+0.25 \cdot P(\text{"migrate"})$) and drives population fission or martial territorial invasion. |
+| `dec-cooperate-store` | `cooperate` | **Cooperation & Storage**<br>*Cooperación y Almacenamiento* | `+0.25` | `+0.45` | `+0.15` | `-0.10` | `+0.65` | `0.35` | *None* | Collective resource pooling and food preservation; contributes $0.35 \cdot P(\text{"cooperate"})$ to cultural innovation, fosters formal **Alliance Pacts**, and builds cooperative road networks. |
+| `dec-exchange-symbiosis` | `exchange` | **Exchange / Symbiosis**<br>*Intercambio / Simbiosis* | `+0.35` | `+0.50` | `+0.20` | `+0.20` | `+0.60` | `0.45` | `bio-encephalization` OR `bio-social-instinct` | Unlocks **$+20\%$ caloric surplus**, horizontal cultural trait transmission, and formal **Alliance Pacts** with cohabiting or neighboring partners. |
+| `dec-territorial-dispute` | `dispute` | **Territorial Dispute**<br>*Disputa Territorial* | `+0.55` | `+0.40` | `-0.30` | `+0.25` | `+0.55` | `0.20` | *None* | Agonistic **Hawk** strategy ($P(\text{"dispute"}) \ge 0.25$); seizes Dove biomass shares, triggers **Plunder Raids** and **Wars of Conquest**, or causes Hawk-Hawk clashes ($-15\%$ pop, $\times 1.25$ metabolic cost). |
 | `dec-explore-innovate` | `innovate` | **Exploration / Innovation**<br>*Exploración / Innovación* | `+0.50` | `+0.15` | `0.00` | `+0.40` | `+0.35` | `0.65` | *None* | High-cost (`+0.50`) experimentation that sacrifices immediate foraging yield (`+0.15`) to rapidly advance `innovation_counter`. |
 
 ---
@@ -151,5 +153,19 @@ When a deme achieves an evolutionary milestone during Phase 4 (`EvoMilestonePhas
 | Milestone Trigger | Synthesized Category | Generated Name Pattern (EN / ES) | Cost | Extract | Eco | Mobility | Cohesion | Threshold | Thermodynamic Verification |
 | :--- | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 | `allopatric_speciation` | `biological` | **Allopatric Divergence (\<Biome\>)**<br>*Divergencia Alopátrica (\<Bioma\>)* | `+0.18` | `+0.35` | `+0.10` | `+0.30` | `+0.20` | `0.20` | $A^+ = 0.85 \Rightarrow C_{\text{req}} = 0.125 \le 0.18$ (Balanced) |
-| `baldwin_assimilation` | `biological` | **Adaptive Homeostasis (\<Biome\>)**<br>*Homeostasis Adaptativa (\<Bioma\>)* | `+0.18` | `+0.35` | `+0.10` | `+0.30` | `+0.20` | `0.20` | $A^+ = 0.85 \Rightarrow C_{\text{req}} = 0.125 \le 0.18$ (Balanced) |
+| `baldwin_assimilation` | `biological` | **Adaptive Homeostasis (\<Biome\>)**<br>*Homeostasis Adaptativa (\<Bioma\>)* | $\max(0.10,\ 0.70 d_{\text{cost}})$ | $\text{clamp}(\max(0.15,\ 0.80 d_{\text{ext}}), 0, 0.85)$ | $\text{clamp}(0.60 d_{\text{eco}}, -0.50, 0.50)$ | $\text{clamp}(\max(0,\ 0.80 d_{\text{mob}}), 0, 0.85)$ | $\text{clamp}(\max(0.05,\ 0.80 d_{\text{coh}}), 0, 0.85)$ | `0.20` | Derived proportionally from the assimilated `baldwin_decision_id` vector $\mathbf{v}_d$ (or fallback `(+0.18, +0.35, +0.10, +0.30, +0.20, 0.20)`) and auto-balanced via `validate_and_balance_thermodynamics` |
 | `cultural_innovation` | `cultural` | **Cooperative Ecological Tradition (\<Biome\>)**<br>*Tradición Ecológica Cooperativa (\<Bioma\>)* | `+0.20` | `+0.35` | `+0.20` | `+0.15` | `+0.40` | `0.45` | $A^+ = 0.90 \Rightarrow C_{\text{req}} = 0.150 \le 0.20$ (Balanced) |
+
+---
+
+## Unified Vital Status System (`Deme.get_vital_status`)
+
+Both the UI (`EvoHudInspectorPanel`, `EvoWorldOverlayRenderer`) and the Cognitive Engine (`EvoHeuristicScorer._compute_vital_status`) evaluate each deme's physiological state via a unified 5-state classification based on `population`, `energy_reserves` ($E$), and `last_energy_delta` ($\Delta E$):
+
+| Vital Status ID | Condition (`types.gd` & `heuristic_scorer.gd`) | Meaning & Simulation Impact |
+| :--- | :--- | :--- |
+| `"extinct"` | `population <= 0` | Population has collapsed; excluded from biophysical and cognitive processing. |
+| `"starving"` | `energy_reserves < 25.0` **OR** `last_energy_delta <= -10.0` | Severe caloric deficit; triggers emergency migration, distress aid from pact allies, or opportunistic betrayal/raids. |
+| `"thriving"` | `(last_energy_delta >= 10.0 and energy_reserves >= 40.0)` **OR** `energy_reserves >= 120.0` | Energetic abundance; favors demographic growth, cooperative storage, innovation, and martial expansion. |
+| `"declining"` | `last_energy_delta < -5.0` *(and not `"starving"`)* | Moderate caloric contraction; shifts environmental decision weights toward selective migration or adaptive foraging. |
+| `"stable"` | Otherwise | Homeostatic balance between caloric intake and metabolic expenditure. |

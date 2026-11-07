@@ -25,17 +25,17 @@ Before launching a simulation at Generation 0, you choose which two **Evolutiona
 | `strat-war` | ⚔️ **Conquering Horde**<br>*Horda Conquistadora* | `#EF4444` | `bio-r-strategy`, `bio-social-instinct` + `cul-warrior-expansion`, `cul-extraction-tools` | Aggressive martial expansion and intensive extraction to dominate rival territories. |
 | `strat-innovation` | 🔬 **Innovator Technocrats**<br>*Tecnócratas Innovadores* | `#A855F7` | `bio-encephalization`, `bio-digestive-spec` + `cul-fire-processing`, `cul-extraction-tools` | High encephalization, thermal food processing, and specialized extraction toolkits. |
 
-### 2. Authentic Evolutionary & Socio-Cultural Dynamics
+### 2. Authentic Evolutionary, Geopolitical & Socio-Cultural Dynamics
 The simulation separates **behavioral intent** (probabilistic decision-making per deme) from **biophysical consequence** (deterministic laws of energy conservation, carrying capacity $K$, metabolic cost, and demography):
 - **$r/K$ Selection Trade-offs:** Prolific dispersal vs. high-longevity carrying-capacity buffering.
-- **The Baldwin Effect (Genetic Assimilation):** Sustained behavioral plasticity under environmental stress consolidates into heritable biological adaptations.
+- **The Baldwin Effect (Genetic Assimilation):** Sustained behavioral plasticity under environmental stress consolidates into heritable biological adaptations derived from the dominant behavioral vector.
 - **Dual Inheritance Theory:** Populations with cognitive or social capacity (*Encephalization* or *Instinctive Sociability*) unlock cumulative cultural traditions, toolmaking, and horizontal cultural transmission across trade routes.
-- **Evolutionary Game Theory:** Cohabiting and neighboring demes navigate *Hawk-Dove* territorial disputes, reciprocal symbiosis, or the *Tragedy of the Commons* when intensive overexploitation degrades $K$ below $60\%$ of $K_{\max}$.
-- **Allopatric Speciation:** Geographic isolation across mountain ridges or flooded glacial land bridges triggers phylogenetic divergence into new lineages while preserving their founding `strategy_id`.
+- **Emergent Geopolitics (Pacts, Betrayals, Plunder Raids & Territorial Wars):** Neighboring and cohabiting demes forge formal **Alliance Pacts** (providing $+15\%$ mutual caloric bonuses, distress aid transfers, and up to $+0.75$ shared military defense), execute **Opportunistic Betrayals** when famine or overcrowding strikes, launch **Plunder Raids** across borders with conserved energy looting, and wage **Wars of Conquest** (`<id>-w<gen>` warband settlements, territorial displacement, and battle sparks) or face *Hawk-Dove* disputes and the *Tragedy of the Commons* ($K < 60\%$ of $K_{\max}$).
+- **Allopatric Speciation:** Geographic isolation (beyond 3 passable hex hops from founder or living lineage kin) across mountain ridges or flooded glacial land bridges triggers phylogenetic divergence into new lineages while preserving their founding `strategy_id`.
 
-### 3. Dual-Model System 1 Cognitive Architecture (Ollama)
-- **System 1 (High-Frequency Turn Scoring — `d3:4b` & `tev1:4b`):** Evaluates each deme and its 6-hex neighborhood every generation, deterministically assigning subpopulations across the primary (`d3:4b`) and secondary (`tev1:4b`) Ollama decision models to compute normalized probability distributions over behavioral archetypes.
-- **Deterministic Milestone Synthesis (`EvoMilestonePhase`):** Synthesizes emergent traits, cultural innovations, allopatric speciation, and natural history chronicle entries within strict thermodynamic bounds.
+### 3. Dual-Model System 1 Cognitive Architecture & Environmental Blending (Ollama)
+- **System 1 (High-Frequency Turn Scoring — `d3:4b` & `tev1:4b`):** Evaluates each deme, its inherited strategy traits prior, active pacts, and its 6-hex neighborhood every generation, deterministically routing rival factions (`d3:4b` vs. `tev1:4b`) via non-blocking background threads (`_cache_epoch` invalidation) and blending neural outputs ($60\%$) with deterministic environmental & geopolitical pressures ($40\%$).
+- **Deterministic Milestone Synthesis (`EvoMilestonePhase`):** Synthesizes emergent traits, cultural innovations, allopatric speciation, macro-outcomes (*Evolutionary Hegemony*, *Dynamic Equilibrium*), and geopolitical natural history chronicle entries within strict thermodynamic bounds.
 
 ### 4. Standardized 6-Axis Biophysical Vector & Thermodynamic Conservation
 Every biological trait, cultural tradition, and behavioral decision maps to a bounded 6-axis vector:
@@ -74,7 +74,7 @@ A fertile but geographically bounded island surrounded by deep ocean where two c
 ## Interactive Modals & Analytical Tools
 
 ### Naturalist's Notebook — Evolutionary Chronicle
-Tracks every evolutionary milestone (Baldwin Effect, Cultural Innovation, Allopatric Speciation, Symbiosis, Tragedy of the Commons, Cultural Loss, and Extinction) with category filters and one-click camera jumps to the exact hexagon where the event occurred.
+Tracks every evolutionary and geopolitical milestone (**Wars**, **Plunder Raids**, **Alliance Pacts**, **Betrayals**, **Baldwin Effect**, **Cultural Innovation**, **Allopatric Speciation**, **Symbiosis**, **Tragedy of the Commons**, **Cultural Loss**, **Extinction**, **Evolutionary Hegemony**, and **Dynamic Equilibrium**) across 14 category filters with one-click camera jumps to the exact hexagon where the event occurred.
 
 ![Naturalist's Notebook — Evolutionary Chronicle Modal](gh-pages/assets/img/screenshot_notebook_modal.png)
 

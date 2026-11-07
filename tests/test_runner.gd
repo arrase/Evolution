@@ -2,9 +2,14 @@ extends SceneTree
 
 var _passed: int = 0
 var _failed: int = 0
+var _suite_cfg_dir: String = ""
+var _suite_cfg_path: String = ""
 
 
 func _init() -> void:
+	_suite_cfg_dir = "/tmp/evolution_test_suite_%d" % Time.get_ticks_usec()
+	_suite_cfg_path = _suite_cfg_dir.path_join("settings.json")
+	EvoUserSettings.config_path_override = _suite_cfg_path
 	print("=== EVOLUTION GODOT 4 CORE SIMULATION TEST SUITE ===")
 	_test_thermodynamics()
 	_test_catalog_and_presets()
@@ -20,8 +25,17 @@ func _init() -> void:
 	_test_main_scene_and_ui_integration()
 	_test_nonblocking_async_decision_and_smooth_panning()
 	_test_emergent_geopolitics_and_visual_artifacts()
+	_test_bugfix_regressions()
 
 	EvoDecisionModel.wait_for_workers()
+	var suite_catalog_path := _suite_cfg_dir.path_join("user_catalog.json")
+	if FileAccess.file_exists(suite_catalog_path):
+		DirAccess.remove_absolute(suite_catalog_path)
+	if FileAccess.file_exists(_suite_cfg_path):
+		DirAccess.remove_absolute(_suite_cfg_path)
+	if DirAccess.dir_exists_absolute(_suite_cfg_dir):
+		DirAccess.remove_absolute(_suite_cfg_dir)
+	EvoUserSettings.config_path_override = ""
 	print("====================================================")
 	print("PASSED: %d | FAILED: %d" % [_passed, _failed])
 	if _failed > 0:
@@ -239,7 +253,7 @@ func _test_strategies_duel_and_persistence() -> void:
 		DirAccess.remove_absolute(tmp_settings_path)
 	if DirAccess.dir_exists_absolute(tmp_dir):
 		DirAccess.remove_absolute(tmp_dir)
-	EvoUserSettings.config_path_override = ""
+	EvoUserSettings.config_path_override = _suite_cfg_path
 
 
 func _test_decision_model_and_normalization() -> void:
@@ -280,6 +294,7 @@ func _test_decision_model_and_normalization() -> void:
 	_assert(west.last_dominant_decision_id == "dec-conservative-forage", "West forest deme applies Ollama System 1 decision")
 	_assert(east.last_dominant_decision_id == "dec-cooperate-store", "East savanna deme applies Ollama System 1 decision")
 	_assert("Ollama System 1" in west.last_justification, "Justification reflects live neural Ollama System 1 evaluation")
+	EvoOllamaClient.clear_cache()
 
 
 func _test_hawk_dove_and_symbiosis() -> void:
@@ -610,7 +625,9 @@ func _test_main_scene_and_ui_integration() -> void:
 	_assert(total_sprites == expected_sprites and total_sprites >= 60, "All %d pixel-art sprites verified" % total_sprites)
 
 	# Verify Dual System 1 Decision Models (d3:4b + tev1:4b), Settings Persistence & Dynamic UI Text
+	EvoUserSettings.config_path_override = ""
 	_assert(EvoUserSettings.get_config_dir().ends_with("/.config/Evolution"), "Default config dir points to ~/.config/Evolution")
+	EvoUserSettings.config_path_override = _suite_cfg_path
 	_assert(EvoUserSettings.DEFAULT_CONTEXT_LENGTH == 8192, "Default context window size is 8192")
 	_assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-rift-west") == "d3:4b", "deme-rift-west assigned to d3:4b")
 	_assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-rift-east") == "tev1:4b", "deme-rift-east assigned to tev1:4b")
@@ -667,7 +684,7 @@ func _test_main_scene_and_ui_integration() -> void:
 	# Unblock startup for subsequent UI interaction tests
 	main.hud._set_startup_blocked(false)
 	DirAccess.remove_absolute(test_cfg_path)
-	EvoUserSettings.config_path_override = ""
+	EvoUserSettings.config_path_override = _suite_cfg_path
 	EvoUserSettings.primary_model = EvoUserSettings.DEFAULT_PRIMARY_MODEL
 	EvoUserSettings.secondary_model = EvoUserSettings.DEFAULT_SECONDARY_MODEL
 	EvoUserSettings.context_length = EvoUserSettings.DEFAULT_CONTEXT_LENGTH
@@ -831,9 +848,9 @@ func _test_nonblocking_async_decision_and_smooth_panning() -> void:
 		d.energy_reserves = 60.0 + float(i * 2)
 		d.lineage_id = "lineage-west" if (i % 2 == 0) else "lineage-east"
 		d.color = "#f59e0b" if (i % 2 == 0) else "#10b981"
-		d.biological_trait_ids.assign(["bio-endurance-locomotion", "bio-social-instinct"])
+		d.biological_trait_ids.assign(["bio-thermal-tolerance", "bio-social-instinct"])
 		if i % 3 == 0:
-			d.cultural_trait_ids.assign(["cul-cooperative-networks"])
+			d.cultural_trait_ids.assign(["cul-communal-conservation"])
 		d.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(d.id)
 		state.demes[d.id] = d
 		(state.cells[target_hid] as EvoTypes.HexCell).deme_ids.append(d.id)
@@ -1152,3 +1169,45 @@ func _test_emergent_geopolitics_and_visual_artifacts() -> void:
 	main.hud.notebook_modal.close_modal()
 
 	main.free()
+
+
+func _test_bugfix_regressions() -> void:
+	print("-- Testing Bugfix Regressions --")
+	# 1. _strip_migration_suffix preserves root deme IDs and strips migration/warband suffixes
+	_assert(EvoDemographyMigration._strip_migration_suffix("deme-rift-west") == "deme-rift-west", "_strip_migration_suffix preserves 'deme-rift-west'")
+	_assert(EvoDemographyMigration._strip_migration_suffix("deme-rift-west-m3-0_0") == "deme-rift-west", "_strip_migration_suffix strips '-m3-0_0' suffix")
+	_assert(EvoDemographyMigration._strip_migration_suffix("deme-rift-west-w2") == "deme-rift-west", "_strip_migration_suffix strips '-w2' suffix")
+
+	# 2. resolve_deme_decision_model_tag assigns deme-darwin-rival to secondary model
+	_assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-darwin-rival", "d3:4b", "tev1:4b") == "tev1:4b", "resolve_deme_decision_model_tag assigns 'deme-darwin-rival' to secondary model 'tev1:4b'")
+
+	# 3. is_hex_passable_for_deme rejects altitude > 0.85 (0.88 mountain barrier)
+	var mountain_cell := EvoTypes.HexCell.new()
+	mountain_cell.id = "0,1"
+	mountain_cell.biome = "mountain"
+	mountain_cell.altitude = 0.88
+	mountain_cell.carrying_capacity = 100.0
+	_assert(not EvoDemographyMigration.is_hex_passable_for_deme(mountain_cell, 1.0), "is_hex_passable_for_deme rejects mountain barrier with altitude 0.88 (> 0.85)")
+
+	# 4. validate_and_balance_thermodynamics preserves positive ecological_impact minus excess when target_metabolic > 1.0
+	var high_vec := EvoTypes.BiophysicalVector.new(0.0, 1.0, 0.30, 1.0, 1.0, 0.0)
+	# A+ = 3.0 -> required_cost = 0.5 * (3.0 - 0.60) = 1.20 -> target_metabolic = 1.20 -> excess = 0.20 -> ecological_impact = 0.30 - 0.20 = 0.10
+	var balanced_high := EvoThermodynamics.validate_and_balance_thermodynamics(high_vec, false)
+	_assert(is_equal_approx(balanced_high.metabolic_cost, 1.0), "validate_and_balance_thermodynamics caps metabolic_cost at 1.0 when target_metabolic > 1.0")
+	_assert(is_equal_approx(balanced_high.ecological_impact, 0.10), "validate_and_balance_thermodynamics preserves positive ecological_impact minus excess (0.30 - 0.20 = 0.10)")
+
+	# 5. EvoLabModal.refresh() preserves checked strategy traits in strategy_trait_checks
+	var state := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
+	var lab := EvoLabModal.new()
+	root.add_child(lab)
+	if lab._title_label == null:
+		lab._ready()
+	lab.open_modal(state, "es")
+	lab._switch_tab("strategies")
+	lab._start_new_item()
+	(lab.strategy_trait_checks["bio-thermal-tolerance"] as CheckBox).button_pressed = true
+	(lab.strategy_trait_checks["bio-social-instinct"] as CheckBox).button_pressed = true
+	lab.refresh(state)
+	_assert((lab.strategy_trait_checks["bio-thermal-tolerance"] as CheckBox).button_pressed and (lab.strategy_trait_checks["bio-social-instinct"] as CheckBox).button_pressed, "EvoLabModal.refresh() preserves checked strategy traits in strategy_trait_checks")
+	lab.free()
+

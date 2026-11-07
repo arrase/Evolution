@@ -176,8 +176,6 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	hud._missing_models_download_btn.pressed.connect(hud._on_missing_models_download_pressed)
 	mm_btns.add_child(hud._missing_models_download_btn)
 
-	build_legend_panel(hud)
-
 
 static func build_legend_panel(hud: Control) -> void:
 	var legend_panel := PanelContainer.new()

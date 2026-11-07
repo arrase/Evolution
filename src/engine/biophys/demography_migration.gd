@@ -3,35 +3,25 @@ extends RefCounted
 
 
 static func is_hex_passable_for_deme(cell: EvoTypes.HexCell, spatial_mobility: float) -> bool:
-	return cell.biome != "ocean" and (cell.altitude - 0.50) <= spatial_mobility
+	return cell.biome != "ocean" and cell.altitude <= 0.85 and (cell.altitude - 0.50) <= spatial_mobility
 
 
 static func compute_deme_divergence(deme_a: EvoTypes.Deme, deme_b: EvoTypes.Deme) -> float:
-	var set_a: Dictionary = {}
-	for tid in deme_a.biological_trait_ids:
-		set_a[tid] = true
-	for tid in deme_a.cultural_trait_ids:
-		set_a[tid] = true
-
-	var set_b: Dictionary = {}
-	for tid in deme_b.biological_trait_ids:
-		set_b[tid] = true
-	for tid in deme_b.cultural_trait_ids:
-		set_b[tid] = true
-
-	var union_set: Dictionary = set_a.duplicate()
-	for tid in set_b.keys():
-		union_set[tid] = true
-
-	if union_set.is_empty():
+	var count_a := deme_a.biological_trait_ids.size() + deme_a.cultural_trait_ids.size()
+	var count_b := deme_b.biological_trait_ids.size() + deme_b.cultural_trait_ids.size()
+	if count_a == 0 and count_b == 0:
 		return 0.0
-
 	var intersection_count: int = 0
-	for tid in set_a.keys():
-		if set_b.has(tid):
+	for tid in deme_a.biological_trait_ids:
+		if deme_b.biological_trait_ids.has(tid) or deme_b.cultural_trait_ids.has(tid):
 			intersection_count += 1
-
-	return snappedf(1.0 - float(intersection_count) / float(union_set.size()), 0.0001)
+	for tid in deme_a.cultural_trait_ids:
+		if deme_b.biological_trait_ids.has(tid) or deme_b.cultural_trait_ids.has(tid):
+			intersection_count += 1
+	var union_size := count_a + count_b - intersection_count
+	if union_size <= 0:
+		return 0.0
+	return snappedf(1.0 - float(intersection_count) / float(union_size), 0.0001)
 
 
 static func _strip_coord_suffix(name_str: String) -> String:
@@ -44,17 +34,12 @@ static func _strip_coord_suffix(name_str: String) -> String:
 
 
 static func _strip_migration_suffix(id_str: String) -> String:
-	var m_idx := id_str.find("-m")
-	var w_idx := id_str.find("-w")
-	var cut_idx := -1
-	if m_idx > 0 and w_idx > 0:
-		cut_idx = mini(m_idx, w_idx)
-	elif m_idx > 0:
-		cut_idx = m_idx
-	elif w_idx > 0:
-		cut_idx = w_idx
-	if cut_idx > 0:
-		return id_str.substr(0, cut_idx)
+	for i in range(1, id_str.length() - 2):
+		if id_str.unicode_at(i) == 45: # '-'
+			var tag := id_str.unicode_at(i + 1)
+			var d := id_str.unicode_at(i + 2)
+			if (tag == 109 or tag == 119) and d >= 48 and d <= 57: # 'm' or 'w' followed by '0'..'9'
+				return id_str.substr(0, i)
 	return id_str
 
 
@@ -62,11 +47,22 @@ static func _is_connected_to_founder(
 	cell: EvoTypes.HexCell,
 	founder_hex_id: String,
 	mobility: float,
-	cells: Dictionary
+	deme: EvoTypes.Deme,
+	state: EvoTypes.WorldState
 ) -> bool:
-	if founder_hex_id == "" or not cells.has(founder_hex_id):
+	for oid in cell.deme_ids:
+		if oid != deme.id and state.demes.has(oid) and (state.demes[oid] as EvoTypes.Deme).lineage_id == deme.lineage_id:
+			return true
+	var target_hexes: Dictionary = {}
+	if founder_hex_id != "" and state.cells.has(founder_hex_id):
+		target_hexes[founder_hex_id] = true
+	for oid in state.demes.keys():
+		var other: EvoTypes.Deme = state.demes[oid]
+		if other.id != deme.id and other.lineage_id == deme.lineage_id and state.cells.has(other.hex_id):
+			target_hexes[other.hex_id] = true
+	if target_hexes.is_empty():
 		return false
-	if cell.id == founder_hex_id:
+	if target_hexes.has(cell.id):
 		return true
 	var visited: Dictionary = {cell.id: 0}
 	var queue: Array[String] = [cell.id]
@@ -77,14 +73,14 @@ static func _is_connected_to_founder(
 		var cur_dist: int = int(visited[cur_id])
 		if cur_dist >= 3:
 			continue
-		var cur_cell: EvoTypes.HexCell = cells[cur_id]
-		for nid in HexMath.get_neighbor_ids(cur_cell.q, cur_cell.r, cells):
+		var cur_cell: EvoTypes.HexCell = state.cells[cur_id]
+		for nid in HexMath.get_neighbor_ids(cur_cell.q, cur_cell.r, state.cells):
 			if visited.has(nid):
 				continue
-			var ncell: EvoTypes.HexCell = cells[nid]
+			var ncell: EvoTypes.HexCell = state.cells[nid]
 			if not is_hex_passable_for_deme(ncell, mobility):
 				continue
-			if nid == founder_hex_id:
+			if target_hexes.has(nid):
 				return true
 			visited[nid] = cur_dist + 1
 			queue.append(nid)
@@ -183,13 +179,15 @@ static func _execute_territorial_invasion(
 		var loot := roundf(defender.energy_reserves * 0.38)
 		defender.energy_reserves = maxf(0.0, snappedf(defender.energy_reserves - loot, 0.01))
 		defender.population = maxi(0, defender.population - def_loss)
+		pre_fission_pop_by_deme[defender.id] = defender.population
 
 		var energy_fraction := attacker.energy_reserves * (float(warband_pop) / float(maxi(1, original_pop)))
 		attacker.energy_reserves = maxf(0.0, snappedf(attacker.energy_reserves - energy_fraction, 0.01))
 		var warband_energy := snappedf(energy_fraction * 0.85 + loot, 0.01)
 		var surviving_warband := maxi(10, warband_pop - att_loss)
 
-		if defender.population >= 12:
+		var retreated := false
+		if defender.population >= 10 or target_cell.deme_ids.size() >= 3:
 			var retreat_candidates: Array[EvoTypes.HexCell] = []
 			for nid in HexMath.get_neighbor_ids(target_cell.q, target_cell.r, state.cells):
 				if nid == origin_cell.id:
@@ -216,6 +214,11 @@ static func _execute_territorial_invasion(
 				defender.hex_id = retreat_cell.id
 				if not retreat_cell.deme_ids.has(defender.id):
 					retreat_cell.deme_ids.append(defender.id)
+				retreated = true
+		if not retreated and target_cell.deme_ids.size() >= 3:
+			target_cell.deme_ids.erase(defender.id)
+			defender.population = 0
+			pre_fission_pop_by_deme[defender.id] = 0
 
 		var base_id := _strip_migration_suffix(attacker.id)
 		var warband_id := "%s-w%d" % [base_id, state.generation]
@@ -288,9 +291,12 @@ static func _execute_territorial_invasion(
 		attacker.population = maxi(10, attacker.population + survivors)
 		attacker.energy_reserves = maxf(0.0, snappedf(attacker.energy_reserves - 15.0, 0.01))
 		defender.population = maxi(5, defender.population - def_loss)
+		pre_fission_pop_by_deme[defender.id] = defender.population
 
 		for pk in state.active_pacts.keys():
-			if str(pk).contains(defender.id):
+			var sep := "__" if str(pk).contains("__") else "|"
+			var parts := str(pk).split(sep)
+			if parts.size() == 2 and (parts[0] == defender.id or parts[1] == defender.id):
 				state.active_pacts[pk] = int(state.active_pacts[pk]) + 1
 
 		var flow := EvoTypes.HexEdgeFlow.new()
@@ -335,6 +341,15 @@ static func run_demography_and_migration_phase(
 	var newly_created_demes: Dictionary = {}
 	var pre_fission_pop_by_deme: Dictionary = {}
 
+	var cell_pop_by_hex: Dictionary = {}
+	for cid in state.cells.keys():
+		var c: EvoTypes.HexCell = state.cells[cid]
+		var c_pop: int = 0
+		for r_id in c.deme_ids:
+			if state.demes.has(r_id):
+				c_pop += (state.demes[r_id] as EvoTypes.Deme).population
+		cell_pop_by_hex[cid] = c_pop
+
 	for did in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[did]
 		if not state.cells.has(deme.hex_id):
@@ -357,7 +372,7 @@ static func run_demography_and_migration_phase(
 
 		var delta_e := extracted - metabolic_cost
 		var prev_reserves := deme.energy_reserves
-		var reserve_draw := minf(-delta_e, prev_reserves * 0.50) if delta_e < 0.0 else 0.0
+		var reserve_draw := minf(-delta_e, prev_reserves * 0.50) if (delta_e < 0.0 and prev_reserves > 0.30 * float(deme.population)) else 0.0
 		var effective_delta_e := delta_e + reserve_draw
 
 		deme.last_energy_delta = snappedf(delta_e, 0.01)
@@ -365,10 +380,7 @@ static func run_demography_and_migration_phase(
 
 		var raw_growth := (effective_delta_e / maxf(10.0, float(deme.population))) * 0.45
 		if deme.biological_trait_ids.has("bio-r-strategy") and raw_growth > 0.0:
-			var cell_pop: int = 0
-			for r_id in cell.deme_ids:
-				if state.demes.has(r_id):
-					cell_pop += (state.demes[r_id] as EvoTypes.Deme).population
+			var cell_pop: int = int(cell_pop_by_hex[cell.id])
 			var crowding := float(cell_pop) / maxf(10.0, cell.carrying_capacity)
 			if crowding < 0.55:
 				raw_growth *= 1.28
@@ -376,9 +388,9 @@ static func run_demography_and_migration_phase(
 				raw_growth *= 1.05
 			else:
 				raw_growth *= 1.16
-		if deme.biological_trait_ids.has("bio-k-strategy"):
-			raw_growth *= 0.75
 		var growth_rate := clampf(raw_growth, -0.45, 0.35)
+		if deme.biological_trait_ids.has("bio-k-strategy"):
+			growth_rate = clampf(growth_rate * 0.75, -0.45, 0.35)
 
 		var next_pop := int(roundf(float(deme.population) * (1.0 + growth_rate)))
 		deme.population = (deme.population - 1) if (effective_delta_e < 0.0 and next_pop >= deme.population) else next_pop
@@ -428,6 +440,7 @@ static func run_demography_and_migration_phase(
 		var martial_trigger := (
 			is_martial_expander
 			and deme.population >= 55
+			and deme.energy_reserves >= 40.0
 			and (
 				p_migrate + p_dispute >= 0.30
 				or (deme.cultural_trait_ids.has("cul-warrior-expansion") and deme.population >= 75)
@@ -481,6 +494,7 @@ static func run_demography_and_migration_phase(
 		var has_intentional_migration := (
 			martial_trigger
 			or deme.last_dominant_decision_id == "dec-selective-migration"
+			or p_migrate >= 0.15
 			or current_cell.biome == "coastal_shallows"
 			or is_emergency
 		)
@@ -509,7 +523,9 @@ static func run_demography_and_migration_phase(
 		if is_pure_martial_march and _has_vanguard_closer_to_rival(deme, cur_rival_dist, state):
 			continue
 		var v_eff_mobility := v_eff.spatial_mobility
-		var mig_mobility := clampf(v_eff_mobility + (1.0 - p_migrate) * 0.50, -1.5, 1.5)
+		var mig_mobility := clampf(v_eff_mobility + p_migrate * 0.25, -1.5, 1.5)
+		if is_emergency or current_cell.biome == "coastal_shallows":
+			mig_mobility = maxf(mig_mobility, 0.35)
 		if is_martial_expander:
 			mig_mobility = maxf(mig_mobility, 0.35)
 		var candidates: Array[EvoTypes.HexCell] = []
@@ -541,23 +557,21 @@ static func run_demography_and_migration_phase(
 		if candidates.is_empty() and not reinforce_candidates.is_empty():
 			candidates = reinforce_candidates
 
-		candidates.sort_custom(func(a: EvoTypes.HexCell, b: EvoTypes.HexCell) -> bool:
-			var sa := a.current_resources / float(a.deme_ids.size() + 1)
-			var sb := b.current_resources / float(b.deme_ids.size() + 1)
-			if is_martial_expander and cur_rival_dist < 999:
-				var da := _min_distance_to_rival(a, deme, state)
-				var db := _min_distance_to_rival(b, deme, state)
-				var bonus_a := (45.0 + float(maxi(0, 10 - da)) * 8.0) if da < cur_rival_dist else 0.0
-				var bonus_b := (45.0 + float(maxi(0, 10 - db)) * 8.0) if db < cur_rival_dist else 0.0
-				sa += bonus_a
-				sb += bonus_b
-			return sa > sb
-		)
-
 		if candidates.is_empty():
 			continue
 
-		var target_cell := candidates[0]
+		var target_cell: EvoTypes.HexCell = candidates[0]
+		if candidates.size() > 1:
+			var best_score := -INF
+			for cand in candidates:
+				var sc := cand.current_resources / float(cand.deme_ids.size() + 1)
+				if is_martial_expander and cur_rival_dist < 999:
+					var dc := _min_distance_to_rival(cand, deme, state)
+					if dc < cur_rival_dist:
+						sc += 45.0 + float(maxi(0, 10 - dc)) * 8.0
+				if sc > best_score:
+					best_score = sc
+					target_cell = cand
 		var original_pop := deme.population
 		var energy_fraction := deme.energy_reserves * (float(migrants) / float(original_pop))
 		var transferred_energy := snappedf(energy_fraction * 0.85, 0.01)
@@ -594,6 +608,11 @@ static func run_demography_and_migration_phase(
 		daughter.last_decision_probabilities = deme.last_decision_probabilities.duplicate()
 		daughter.last_dominant_decision_id = deme.last_dominant_decision_id
 		daughter.last_justification = deme.last_justification
+		if deme.has_meta("base_w_key"):
+			daughter.set_meta("base_w_key", deme.get_meta("base_w_key"))
+			daughter.set_meta("base_w_probs", deme.get_meta("base_w_probs"))
+			daughter.set_meta("base_w_elig", deme.get_meta("base_w_elig"))
+			daughter.set_meta("base_w_vec", deme.get_meta("base_w_vec"))
 
 		state.demes[daughter_id] = daughter
 		newly_created_demes[daughter_id] = true
@@ -620,6 +639,15 @@ static func run_demography_and_migration_phase(
 			if state.cells.has(deme.hex_id):
 				(state.cells[deme.hex_id] as EvoTypes.HexCell).deme_ids.erase(deme.id)
 			state.demes.erase(deme.id)
+			var extinct_pacts: Array[String] = []
+			for pk_var in state.active_pacts.keys():
+				var pk := str(pk_var)
+				var sep := "__" if pk.contains("__") else "|"
+				var parts := pk.split(sep)
+				if parts.size() == 2 and (parts[0] == deme.id or parts[1] == deme.id):
+					extinct_pacts.append(pk)
+			for pk in extinct_pacts:
+				state.active_pacts.erase(pk)
 			if not state.recent_extinction_hexes.has(deme.hex_id):
 				state.recent_extinction_hexes.append(deme.hex_id)
 
@@ -734,11 +762,40 @@ static func run_demography_and_migration_phase(
 								continue
 							kept_flows.append(fl)
 						state.active_flows = kept_flows
-						for dc in state.disused_connections:
-							if str(dc.get("from_deme_id", "")) == deme_b.id:
-								dc["from_deme_id"] = deme_a.id
-							if str(dc.get("to_deme_id", "")) == deme_b.id:
-								dc["to_deme_id"] = deme_a.id
+
+						if not b_new and not state.active_pacts.is_empty():
+							var pacts_to_erase: Array[String] = []
+							var pacts_to_set: Dictionary = {}
+							for pk_var in state.active_pacts.keys():
+								var pk := str(pk_var)
+								if not pk.contains(deme_b.id):
+									continue
+								var sep := "__" if pk.contains("__") else "|"
+								var parts := pk.split(sep)
+								if parts.size() == 2 and (parts[0] == deme_b.id or parts[1] == deme_b.id):
+									pacts_to_erase.append(pk)
+									var partner_id := parts[1] if parts[0] == deme_b.id else parts[0]
+									if partner_id != deme_a.id:
+										var new_pk := EvoTypes.make_pair_key(deme_a.id, partner_id)
+										var existing_val: int = int(state.active_pacts[new_pk]) if state.active_pacts.has(new_pk) else 0
+										var b_val: int = int(state.active_pacts[pk])
+										pacts_to_set[new_pk] = maxi(existing_val, b_val)
+							for pk in pacts_to_erase:
+								state.active_pacts.erase(pk)
+							for new_pk in pacts_to_set.keys():
+								state.active_pacts[new_pk] = pacts_to_set[new_pk]
+
+						if not b_new and not state.disused_connections.is_empty():
+							var kept_disused: Array[Dictionary] = []
+							for dc in state.disused_connections:
+								if str(dc.get("from_deme_id", "")) == deme_b.id:
+									dc["from_deme_id"] = deme_a.id
+								if str(dc.get("to_deme_id", "")) == deme_b.id:
+									dc["to_deme_id"] = deme_a.id
+								if str(dc.get("from_deme_id", "")) == str(dc.get("to_deme_id", "")):
+									continue
+								kept_disused.append(dc)
+							state.disused_connections = kept_disused
 
 						var merge_flow := EvoTypes.HexEdgeFlow.new()
 						merge_flow.from_hex_id = cell.id
@@ -756,9 +813,13 @@ static func run_demography_and_migration_phase(
 				j += 1
 			i += 1
 
+	var conn_cache: Dictionary = {}
 	for did in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[did]
 		if not state.cells.has(deme.hex_id):
+			continue
+		if had_lineage_contact.has(deme.id):
+			deme.isolation_turns = 0
 			continue
 		var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
 		var founder_hex_id := ""
@@ -769,60 +830,90 @@ static func run_demography_and_migration_phase(
 			deme.isolation_turns = 0
 			continue
 
-		var v_eff := EvoEcologyInteraction.compute_effective_vector(deme, state)
-		var connected_to_founder := _is_connected_to_founder(cell, founder_hex_id, v_eff.spatial_mobility, state.cells)
-
-		if had_lineage_contact.has(deme.id) or connected_to_founder:
+		var v_eff: EvoTypes.BiophysicalVector = effective_vec_by_deme[deme.id] if effective_vec_by_deme.has(deme.id) else EvoEcologyInteraction.compute_effective_vector(deme, state)
+		var c_key := "%s|%s|%.2f" % [cell.id, deme.lineage_id, v_eff.spatial_mobility]
+		var is_conn: bool
+		if conn_cache.has(c_key):
+			is_conn = bool(conn_cache[c_key])
+		else:
+			is_conn = _is_connected_to_founder(cell, founder_hex_id, v_eff.spatial_mobility, deme, state)
+			conn_cache[c_key] = is_conn
+		if is_conn:
 			deme.isolation_turns = 0
 		else:
 			deme.isolation_turns += 1
 
 	var dispute_flow_pairs: Dictionary = {}
 	var social_flow_pairs: Dictionary = {}
+	var friendly_flow_pairs: Dictionary = {}
 	for fl in state.active_flows:
 		var pair_ab := "%s|%s" % [fl.from_deme_id, fl.to_deme_id]
 		var pair_ba := "%s|%s" % [fl.to_deme_id, fl.from_deme_id]
+		var hex_ab := ("%s|%s" % [fl.from_hex_id, fl.to_hex_id]) if fl.from_hex_id <= fl.to_hex_id else ("%s|%s" % [fl.to_hex_id, fl.from_hex_id])
 		if fl.flow_type in ["dispute", "war", "raid", "betrayal"]:
 			dispute_flow_pairs[pair_ab] = true
 			dispute_flow_pairs[pair_ba] = true
 			social_flow_pairs[pair_ab] = true
 			social_flow_pairs[pair_ba] = true
+			if fl.from_hex_id != fl.to_hex_id:
+				dispute_flow_pairs[hex_ab] = true
+				social_flow_pairs[hex_ab] = true
 		elif fl.flow_type in ["exchange", "cooperate", "pact"]:
 			social_flow_pairs[pair_ab] = true
 			social_flow_pairs[pair_ba] = true
+			friendly_flow_pairs[pair_ab] = true
+			friendly_flow_pairs[pair_ba] = true
+			if fl.from_hex_id != fl.to_hex_id:
+				social_flow_pairs[hex_ab] = true
 
-	var surviving_ids := state.demes.keys()
-	for idx_a in range(surviving_ids.size()):
-		var id_a := str(surviving_ids[idx_a])
-		var deme_a: EvoTypes.Deme = state.demes[id_a]
-		if not state.cells.has(deme_a.hex_id):
+	var surviving_demes: Array[EvoTypes.Deme] = []
+	var surviving_cells: Array[EvoTypes.HexCell] = []
+	var surv_disp: Array[float] = []
+	var surv_over: Array[float] = []
+	var surv_coop: Array[float] = []
+	for did in state.demes.keys():
+		var d: EvoTypes.Deme = state.demes[did]
+		if not state.cells.has(d.hex_id):
 			continue
-		var cell_a: EvoTypes.HexCell = state.cells[deme_a.hex_id]
-		var p_disp_a := EvoEcologyInteraction.get_archetype_prob(deme_a, state.decisions_catalog, "dispute")
-		var p_over_a := EvoEcologyInteraction.get_archetype_prob(deme_a, state.decisions_catalog, "overexploit")
-		var p_coop_a := EvoEcologyInteraction.get_archetype_prob(deme_a, state.decisions_catalog, "cooperate")
+		surviving_demes.append(d)
+		surviving_cells.append(state.cells[d.hex_id])
+		surv_disp.append(EvoEcologyInteraction.get_archetype_prob(d, state.decisions_catalog, "dispute"))
+		surv_over.append(EvoEcologyInteraction.get_archetype_prob(d, state.decisions_catalog, "overexploit"))
+		surv_coop.append(EvoEcologyInteraction.get_archetype_prob(d, state.decisions_catalog, "cooperate"))
+
+	var s_count := surviving_demes.size()
+	for idx_a in range(s_count):
+		var deme_a := surviving_demes[idx_a]
+		var id_a := deme_a.id
+		var cell_a := surviving_cells[idx_a]
+		var qa := cell_a.q
+		var ra := cell_a.r
+		var bad_a := cell_a.altitude > 0.85 or cell_a.biome == "ocean"
+		var p_disp_a := surv_disp[idx_a]
+		var p_over_a := surv_over[idx_a]
+		var p_coop_a := surv_coop[idx_a]
 		var coop_ok_a := p_coop_a >= 0.14 or deme_a.last_dominant_decision_id == "dec-cooperate-store"
 
-		for idx_b in range(idx_a + 1, surviving_ids.size()):
-			var id_b := str(surviving_ids[idx_b])
-			var deme_b: EvoTypes.Deme = state.demes[id_b]
-			if not state.cells.has(deme_b.hex_id):
+		for idx_b in range(idx_a + 1, s_count):
+			var cell_b := surviving_cells[idx_b]
+			var dq := qa - cell_b.q
+			var dr := ra - cell_b.r
+			if absi(dq) > 1 or absi(dr) > 1 or absi(dq + dr) > 1:
 				continue
-			var cell_b: EvoTypes.HexCell = state.cells[deme_b.hex_id]
-			var dist := HexMath.hex_distance(cell_a.q, cell_a.r, cell_b.q, cell_b.r)
-			if dist > 1:
-				continue
-			var same_hex := dist == 0
-			if not same_hex and (cell_a.altitude > 0.85 or cell_b.altitude > 0.85 or cell_a.biome == "ocean" or cell_b.biome == "ocean"):
+			var same_hex := dq == 0 and dr == 0
+			if not same_hex and (bad_a or cell_b.altitude > 0.85 or cell_b.biome == "ocean"):
 				continue
 
-			var p_disp_b := EvoEcologyInteraction.get_archetype_prob(deme_b, state.decisions_catalog, "dispute")
-			var p_over_b := EvoEcologyInteraction.get_archetype_prob(deme_b, state.decisions_catalog, "overexploit")
-			var p_coop_b := EvoEcologyInteraction.get_archetype_prob(deme_b, state.decisions_catalog, "cooperate")
+			var deme_b := surviving_demes[idx_b]
+			var id_b := deme_b.id
+			var p_disp_b := surv_disp[idx_b]
+			var p_over_b := surv_over[idx_b]
+			var p_coop_b := surv_coop[idx_b]
 			var coop_ok_b := p_coop_b >= 0.14 or deme_b.last_dominant_decision_id == "dec-cooperate-store"
 
 			var pair_key := "%s|%s" % [id_a, id_b]
-			var is_rival := deme_a.lineage_id != deme_b.lineage_id and not EvoTypes.is_pact_active(state, id_a, id_b)
+			var pact_key := ("%s__%s" % [id_a, id_b]) if id_a < id_b else ("%s__%s" % [id_b, id_a])
+			var is_rival := deme_a.lineage_id != deme_b.lineage_id and int(state.active_pacts.get(pact_key, 0)) < 2
 			var has_conflict_pressure := (
 				(p_disp_a >= 0.12 or p_disp_b >= 0.12 or p_over_a >= 0.35 or p_over_b >= 0.35)
 				if same_hex
@@ -832,48 +923,50 @@ static func run_demography_and_migration_phase(
 				if not dispute_flow_pairs.has(pair_key):
 					dispute_flow_pairs[pair_key] = true
 					social_flow_pairs[pair_key] = true
-					var disp_flow := EvoTypes.HexEdgeFlow.new()
-					disp_flow.from_hex_id = cell_a.id
-					disp_flow.to_hex_id = cell_b.id
-					disp_flow.flow_type = "dispute"
-					disp_flow.intensity = snappedf(
-						clampf(maxf(maxf(p_disp_a, p_disp_b), (maxf(p_over_a, p_over_b) * 0.85) if same_hex else 0.0), 0.35, 0.90),
-						0.01
-					)
-					disp_flow.from_deme_id = id_a
-					disp_flow.to_deme_id = id_b
-					state.active_flows.append(disp_flow)
+					var hex_pair_key := ("%s|%s" % [cell_a.id, cell_b.id]) if cell_a.id <= cell_b.id else ("%s|%s" % [cell_b.id, cell_a.id])
+					if same_hex or not dispute_flow_pairs.has(hex_pair_key):
+						if not same_hex:
+							dispute_flow_pairs[hex_pair_key] = true
+						var disp_flow := EvoTypes.HexEdgeFlow.new()
+						disp_flow.from_hex_id = cell_a.id
+						disp_flow.to_hex_id = cell_b.id
+						disp_flow.flow_type = "dispute"
+						disp_flow.intensity = snappedf(
+							clampf(maxf(maxf(p_disp_a, p_disp_b), (maxf(p_over_a, p_over_b) * 0.85) if same_hex else 0.0), 0.35, 0.90),
+							0.01
+						)
+						disp_flow.from_deme_id = id_a
+						disp_flow.to_deme_id = id_b
+						state.active_flows.append(disp_flow)
 			elif coop_ok_a and coop_ok_b:
 				if not social_flow_pairs.has(pair_key):
 					social_flow_pairs[pair_key] = true
-					var coop_flow := EvoTypes.HexEdgeFlow.new()
-					coop_flow.from_hex_id = cell_a.id
-					coop_flow.to_hex_id = cell_b.id
-					coop_flow.flow_type = "cooperate"
-					coop_flow.intensity = snappedf(clampf((p_coop_a + p_coop_b) * 0.85, 0.30, 0.85), 0.01)
-					coop_flow.from_deme_id = id_a
-					coop_flow.to_deme_id = id_b
-					state.active_flows.append(coop_flow)
+					friendly_flow_pairs[pair_key] = true
+					friendly_flow_pairs["%s|%s" % [id_b, id_a]] = true
+					var hex_pair_key := ("%s|%s" % [cell_a.id, cell_b.id]) if cell_a.id <= cell_b.id else ("%s|%s" % [cell_b.id, cell_a.id])
+					if same_hex or not social_flow_pairs.has(hex_pair_key):
+						if not same_hex:
+							social_flow_pairs[hex_pair_key] = true
+						var coop_flow := EvoTypes.HexEdgeFlow.new()
+						coop_flow.from_hex_id = cell_a.id
+						coop_flow.to_hex_id = cell_b.id
+						coop_flow.flow_type = "cooperate"
+						coop_flow.intensity = snappedf(clampf((p_coop_a + p_coop_b) * 0.85, 0.30, 0.85), 0.01)
+						coop_flow.from_deme_id = id_a
+						coop_flow.to_deme_id = id_b
+						state.active_flows.append(coop_flow)
 
 	var filtered_disused: Array[Dictionary] = []
 	for conn in state.disused_connections:
 		var fa := str(conn["from_deme_id"]) if conn.has("from_deme_id") else ""
 		var fb := str(conn["to_deme_id"]) if conn.has("to_deme_id") else ""
-		if not state.demes.has(fa) or not state.demes.has(fb):
+		if fa == fb or not state.demes.has(fa) or not state.demes.has(fb):
 			continue
-		var still_active_friendly := false
-		for fl in state.active_flows:
-			if fl.flow_type in ["exchange", "cooperate", "pact"]:
-				if (fl.from_deme_id == fa and fl.to_deme_id == fb) or (fl.from_deme_id == fb and fl.to_deme_id == fa):
-					still_active_friendly = true
-					break
-		if not still_active_friendly:
+		if not friendly_flow_pairs.has("%s|%s" % [fa, fb]):
 			var conn_age := int(conn.get("age", 0))
 			if conn_age <= 0:
 				conn_age = 1
 				conn["age"] = 1
 			if conn_age <= 8:
-				conn["from_hex_id"] = (state.demes[fa] as EvoTypes.Deme).hex_id
-				conn["to_hex_id"] = (state.demes[fb] as EvoTypes.Deme).hex_id
 				filtered_disused.append(conn)
 	state.disused_connections = filtered_disused

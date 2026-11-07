@@ -33,11 +33,29 @@ func _ready() -> void:
 	set_process_unhandled_input(true)
 
 
+func _is_text_input_or_modal_active() -> bool:
+	if get_viewport() != null:
+		var focus_owner := get_viewport().gui_get_focus_owner()
+		if focus_owner is LineEdit or focus_owner is TextEdit:
+			return true
+	var p := get_parent()
+	if p != null and "hud" in p and p.hud != null:
+		var hud: Control = p.hud
+		if (
+			(hud.lab_modal != null and hud.lab_modal.visible)
+			or (hud.notebook_modal != null and hud.notebook_modal.visible)
+			or (hud.tree_modal != null and hud.tree_modal.visible)
+			or (hud._settings_popup != null and hud._settings_popup.visible)
+			or (hud._missing_models_modal != null and hud._missing_models_modal.visible)
+		):
+			return true
+	return false
+
+
 func _process(delta: float) -> void:
 	var pan_speed: float = 820.0 * delta
 
-	var line_edit_focused := get_viewport() != null and get_viewport().gui_get_focus_owner() is LineEdit
-	if not line_edit_focused:
+	if not _is_text_input_or_modal_active():
 		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
 			_target_pan.y += pan_speed
 		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
@@ -67,6 +85,10 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _is_text_input_or_modal_active():
+		_is_panning = false
+		_is_orbiting = false
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		var vp_center := (get_viewport_rect().size if is_inside_tree() else Vector2(1600.0, 960.0)) * 0.5

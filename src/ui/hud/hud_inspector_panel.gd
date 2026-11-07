@@ -385,10 +385,11 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	meters_card.add_child(m_vbox)
 
 	_add_sheet_kv(m_vbox, EvoUiStyle.tr_text(hud._lang, "🛡️ Linaje:", "🛡️ Lineage:"), lin_name)
+	var pop_fmt := "%d pop. (%s)" if hud._lang == "en" else "%d hab. (%s)"
 	_add_sheet_kv(
 		m_vbox,
 		EvoUiStyle.tr_text(hud._lang, "👥 Población:", "👥 Population:"),
-		"%d hab. (%s)" % [d.population, EvoUiStyle.get_village_tier_label(d.population, hud._lang)]
+		pop_fmt % [d.population, EvoUiStyle.get_village_tier_label(d.population, hud._lang)]
 	)
 
 	_add_milestone_bar(
@@ -434,8 +435,8 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		var dec_lbl_str := dec_id
 		if hud._world_state.decisions_catalog.has(dec_id):
 			dec_lbl_str = (hud._world_state.decisions_catalog[dec_id] as EvoTypes.DecisionDef).name
-		var is_dom := (i == 0 or dec_id == d.last_dominant_decision_id)
-		if i == 0:
+		var is_dom := (dec_id == d.last_dominant_decision_id or (d.last_dominant_decision_id == "" and i == 0))
+		if is_dom:
 			dec_lbl_str = "★ " + dec_lbl_str
 
 		_add_milestone_bar(

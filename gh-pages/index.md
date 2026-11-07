@@ -45,21 +45,21 @@ hide:
     <div>
       <i class="fa-solid fa-brain feature-icon" aria-hidden="true"></i>
       <h3>Dual-Model Cognitive Engine</h3>
-      <p>Deterministically distributes subpopulations across primary (<code>d3:4b</code>) and secondary (<code>tev1:4b</code>) Ollama System 1 decision models via background worker threads.</p>
+      <p>Deterministically distributes rival factions across primary (<code>d3:4b</code>) and secondary (<code>tev1:4b</code>) Ollama System 1 decision models via non-blocking worker threads, blended ($60\%/40\%$) with environmental &amp; geopolitical pressures.</p>
     </div>
   </div>
   <div class="feature-card">
     <div>
       <i class="fa-solid fa-frog feature-icon" aria-hidden="true"></i>
       <h3>Baldwin Effect &amp; Speciation</h3>
-      <p>Sustained behavioral plasticity (8+ turns) assimilates into heritable biological traits, while geographic isolation across mountain ridges or flooded land bridges triggers allopatric speciation.</p>
+      <p>Sustained behavioral plasticity (8+ turns) assimilates into heritable biological traits derived from the dominant decision, while geographic isolation across ridges or flooded land bridges triggers allopatric speciation.</p>
     </div>
   </div>
   <div class="feature-card">
     <div>
       <i class="fa-solid fa-chess-knight feature-icon" aria-hidden="true"></i>
-      <h3>Evolutionary Game Theory</h3>
-      <p>Cohabiting and neighboring demes navigate <em>Hawk-Dove</em> territorial disputes, reciprocal symbiosis ($+20\%$ caloric surplus &amp; horizontal cultural diffusion), and the <em>Tragedy of the Commons</em> when $K &lt; 0.60 \cdot K_{\max}$.</p>
+      <h3>Emergent Geopolitics &amp; Game Theory</h3>
+      <p>Populations forge formal <strong>Alliance Pacts</strong> ($+15\%$ caloric bonus, distress aid &amp; shared defense), execute <strong>Opportunistic Betrayals</strong>, launch <strong>Plunder Raids</strong>, wage <strong>Wars of Conquest</strong>, and navigate <em>Hawk-Dove</em> disputes &amp; the <em>Tragedy of the Commons</em>.</p>
     </div>
   </div>
   <div class="feature-card">
@@ -110,15 +110,15 @@ Unlike traditional strategy games where players issue unit-level movement orders
 
 ```mermaid
 flowchart LR
-    Env["1. Environmental Phase\n• Flip Season (wet_warm / dry_cold)\n• Glacial Sea-Level Cycle (8 gen)\n• Flood / Emerge Coastal Hexes\n• Regenerate K & Biomass R"] --> Cog["2. Cognitive Phase\n• 10-Part State Signature\n• System 1 Ollama (d3:4b / tev1:4b)\n• Neural Decision Evaluation\n• Normalized P(d) over 7 Decisions"]
-    Cog --> Bio["3. Biophysical Phase\n• Aggregate Effective Vector v_eff\n• Hawk-Dove & Symbiosis (+20%)\n• Caloric Extraction & K Degrade\n• Growth, Fission & Cultural Loss"]
+    Env["1. Environmental Phase\n• Flip Season (wet_warm / dry_cold)\n• Glacial Sea-Level Cycle (8 gen)\n• Flood / Emerge Coastal Hexes\n• Regenerate K & Biomass R"] --> Cog["2. Cognitive Phase\n• 10-Part State Signature\n• System 1 Ollama (d3:4b / tev1:4b)\n• Env & Geopolitical Blend (60/40)\n• Normalized P(d) over 7 Decisions"]
+    Cog --> Bio["3. Biophysical & Geopolitical Phase\n• Aggregate Effective Vector v_eff\n• Hawk-Dove, Symbiosis, Pacts, Betrayals & Raids\n• Caloric Extraction & K Degrade\n• Growth, Wars, Fission & Cultural Loss"]
     Bio --> Mile["4. Milestone Phase\n• Allopatric Speciation (Prio 0)\n• Baldwin Assimilation (Prio 1)\n• Cultural Innovation (Prio 2)\n• Macro-Outcome Evaluation"]
     Mile --> Prefetch["5. Async Prefetch\n• Pre-warm Next Turn Signatures\n• Non-Blocking Worker Pool"]
 ```
 
 1. **Environmental Phase (`EvoEnvPhase`)**: Advances the generation counter, alternates seasonal climate between `wet_warm` ($\gamma = 1.20$) and `dry_cold` ($\gamma = 0.75$), oscillates sea level every 8 generations in glacial scenarios, relocates or drowns submerged demes, and regenerates hex carrying capacity $K$ and resources $R$.
-2. **Cognitive Decision Phase (`EvoDecisionModel`)**: Evaluates each deme and its 6-hex neighborhood across the **7 behavioral decisions**, routing demes deterministically between primary (`d3:4b`) and secondary (`tev1:4b`) Ollama System 1 decision models.
-3. **Biophysical Consequence Phase (`EvoBiophysPhase`)**: Computes each deme's effective 6-axis vector $\mathbf{v}_{\text{eff}}$, resolves *Hawk-Dove* territorial conflicts, reciprocal symbiosis ($+20\%$ caloric bonus and horizontal cultural transmission), habitat degradation (*Tragedy of the Commons* when $K < 0.60 \cdot K_{\max}$), metabolic expenditure, demographic growth/starvation, population fission (budding migration), compatible kin merging, and demographic bottleneck cultural loss.
+2. **Cognitive Decision Phase (`EvoDecisionModel`)**: Evaluates each deme, its inherited strategy traits prior, active pacts, and its 6-hex neighborhood across the **7 behavioral decisions**, routing rival factions deterministically between primary (`d3:4b`) and secondary (`tev1:4b`) Ollama System 1 decision models and blending neural predictions ($60\%$) with environmental and geopolitical weights ($40\%$).
+3. **Biophysical & Geopolitical Consequence Phase (`EvoBiophysPhase`)**: Computes each deme's effective 6-axis vector $\mathbf{v}_{\text{eff}}$, resolves *Hawk-Dove* territorial conflicts, reciprocal symbiosis ($+20\%$ caloric bonus and horizontal cultural transmission), **Alliance Pacts** ($+15\%$ mutual bonus, distress caloric aid, and shared military defense), **Opportunistic Betrayals**, **Plunder Raids**, habitat degradation (*Tragedy of the Commons* when $K < 0.60 \cdot K_{\max}$), metabolic expenditure, demographic growth/starvation, **Territorial Wars of Conquest** (`<id>-w<gen>` settlements and defender retreat), population fission (budding migration), compatible kin merging, and demographic bottleneck cultural loss.
 4. **Milestone & Macro-Outcome Phase (`EvoMilestonePhase`)**: Synthesizes thermodynamically balanced emergent traits for *Allopatric Speciation*, *The Baldwin Effect*, or *Cumulative Cultural Innovation*, logs entries to the *Naturalist's Notebook*, and checks global macro-outcomes (*Total Extinction*, *Evolutionary Hegemony*, or *Ecological Equilibrium*).
 
 ---

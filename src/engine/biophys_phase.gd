@@ -29,8 +29,16 @@ static func _build_edge_flows(
 	state: EvoTypes.WorldState,
 	turn_geopolitical_flows: Array[EvoTypes.HexEdgeFlow]
 ) -> void:
+	if turn_geopolitical_flows.is_empty():
+		return
+	var active_set: Dictionary = {}
+	for fl in state.active_flows:
+		active_set[fl] = true
 	for geo_flow in turn_geopolitical_flows:
-		if not state.active_flows.has(geo_flow):
+		if geo_flow.from_deme_id == geo_flow.to_deme_id and geo_flow.from_hex_id == geo_flow.to_hex_id and geo_flow.flow_type != "migration":
+			continue
+		if not active_set.has(geo_flow):
+			active_set[geo_flow] = true
 			state.active_flows.append(geo_flow)
 
 

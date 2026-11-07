@@ -66,6 +66,11 @@ const VILLAGE_SPRITES: Array[String] = [
 	"prop_raid_loot",
 	"prop_pact_totem",
 	"prop_betrayal_ruin",
+	"act_war",
+	"act_raid",
+	"act_pact",
+	"act_betrayal",
+	"effect_battle_sparks",
 	"villager_idle",
 	"villager_walk1",
 	"villager_walk2"

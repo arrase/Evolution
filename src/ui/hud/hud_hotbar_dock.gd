@@ -174,7 +174,7 @@ static func build_legend_panel(hud: Control) -> void:
 	hud._legend_panel.offset_left = 428
 	hud._legend_panel.offset_right = 736
 	hud._legend_panel.offset_top = 10
-	hud._legend_panel.offset_bottom = 356
+	hud._legend_panel.offset_bottom = 434
 	hud._legend_panel.z_index = 22
 	hud._legend_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
 	hud.add_child(hud._legend_panel)
@@ -409,3 +409,43 @@ static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lan
 	tier_lbl.add_theme_font_size_override("font_size", 10)
 	tier_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	hud._legend_vbox.add_child(tier_lbl)
+
+	var flow_sep := HSeparator.new()
+	hud._legend_vbox.add_child(flow_sep)
+
+	var geo_title := Label.new()
+	geo_title.text = EvoUiStyle.tr_text(lang, "🗺️ Leyenda Geopolítica", "🗺️ Geopolitical Legend")
+	geo_title.add_theme_font_size_override("font_size", 12)
+	geo_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
+	hud._legend_vbox.add_child(geo_title)
+
+	var legend_defs := [
+		{"key": "legend_flow_pact", "icon": "icon_pact", "color": Color("#10b981")},
+		{"key": "legend_flow_war", "icon": "icon_war", "color": Color("#ef4444")},
+		{"key": "legend_flow_raid", "icon": "icon_raid", "color": Color("#f97316")},
+		{"key": "legend_flow_betrayal", "icon": "icon_betrayal", "color": Color("#be123c")}
+	]
+	for def in legend_defs:
+		var f_row := HBoxContainer.new()
+		f_row.add_theme_constant_override("separation", 6)
+		hud._legend_vbox.add_child(f_row)
+
+		var f_sw := ColorRect.new()
+		f_sw.custom_minimum_size = Vector2(12, 12)
+		f_sw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		f_sw.color = def["color"]
+		f_row.add_child(f_sw)
+
+		var f_icon := TextureRect.new()
+		f_icon.custom_minimum_size = Vector2(14, 14)
+		f_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		f_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		f_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		f_icon.texture = EvoUiStyle.get_pixel_icon(str(def["icon"]))
+		f_row.add_child(f_icon)
+
+		var f_lbl := Label.new()
+		f_lbl.text = EvoI18n.t(lang, str(def["key"]))
+		f_lbl.add_theme_font_size_override("font_size", 11)
+		f_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
+		f_row.add_child(f_lbl)

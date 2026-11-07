@@ -33,6 +33,20 @@ static func _select_distinct_color(current_color: String, lineage_tree: Dictiona
 	return "#3D85C6"
 
 
+static func _get_root_lineage_id(lid: String, lineage_tree: Dictionary) -> String:
+	var cur := lid
+	var visited: Dictionary = {cur: true}
+	var steps := 0
+	while lineage_tree.has(cur) and steps < 64:
+		var p_id := (lineage_tree[cur] as EvoTypes.LineageNode).parent_id
+		if p_id == "" or not lineage_tree.has(p_id) or visited.has(p_id):
+			break
+		visited[p_id] = true
+		cur = p_id
+		steps += 1
+	return cur
+
+
 static func run_milestone_phase(
 	state: EvoTypes.WorldState,
 	lang: String = "es"
@@ -130,6 +144,7 @@ static func run_milestone_phase(
 
 		if state.demes.has(target_id):
 			var deme: EvoTypes.Deme = state.demes[target_id]
+			deme.set_meta("baldwin_decision_id", dec_id)
 			var new_trait := EvoDecisionModel.synthesize_milestone_trait(state, deme, trigger_type, lang)
 			state.traits_catalog[new_trait.id] = new_trait
 
@@ -142,8 +157,20 @@ static func run_milestone_phase(
 
 			if trigger_type == "baldwin_assimilation":
 				deme.baldwin_counters[dec_id] = 0
+				if state.lineage_tree.has(deme.lineage_id):
+					var lin_b: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id]
+					lin_b.biological_trait_ids = deme.biological_trait_ids.duplicate()
+					lin_b.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
+					if not lin_b.acquired_trait_ids.has(new_trait.id):
+						lin_b.acquired_trait_ids.append(new_trait.id)
 			elif trigger_type == "cultural_innovation":
 				deme.innovation_counter = maxf(0.0, snappedf(deme.innovation_counter - 1.0, 0.0001))
+				if state.lineage_tree.has(deme.lineage_id):
+					var lin_c: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id]
+					lin_c.biological_trait_ids = deme.biological_trait_ids.duplicate()
+					lin_c.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
+					if not lin_c.acquired_trait_ids.has(new_trait.id):
+						lin_c.acquired_trait_ids.append(new_trait.id)
 			elif trigger_type == "allopatric_speciation":
 				var old_lineage_id := deme.lineage_id
 				deme.isolation_turns = 0
@@ -260,7 +287,7 @@ static func run_milestone_phase(
 		if e.event_type == "extinction":
 			has_prior_extinction = true
 			var e_root_id := EvoDemographyMigration._strip_migration_suffix(e.deme_id)
-			if not ancestor_lineages.has(e.lineage_id) or (e_root_id != survivor_root_id and not e.deme_id.contains("-m")):
+			if not ancestor_lineages.has(e.lineage_id) or (e_root_id != survivor_root_id and e_root_id == e.deme_id):
 				has_non_migrant_extinction = true
 		elif e.event_type == "single_survivor":
 			already_logged_single = true
@@ -268,16 +295,28 @@ static func run_milestone_phase(
 			already_logged_eq = true
 
 	var living_lineages: Dictionary = {}
+	var living_root_lineages: Dictionary = {}
 	var total_pop: int = 0
 	for d in living_demes:
 		living_lineages[d.lineage_id] = true
+		living_root_lineages[_get_root_lineage_id(d.lineage_id, state.lineage_tree)] = true
 		total_pop += d.population
 
 	var total_lineages := state.lineage_tree.size()
-	var has_extinct_lineage := false
+	var root_all_extinct: Dictionary = {}
 	for lid in state.lineage_tree.keys():
-		if not ancestor_lineages.has(lid) and (state.lineage_tree[lid] as EvoTypes.LineageNode).extinct_generation >= 0:
-			has_extinct_lineage = true
+		var r_id := _get_root_lineage_id(str(lid), state.lineage_tree)
+		if living_root_lineages.has(r_id):
+			continue
+		if not root_all_extinct.has(r_id):
+			root_all_extinct[r_id] = true
+		if (state.lineage_tree[lid] as EvoTypes.LineageNode).extinct_generation < 0:
+			root_all_extinct[r_id] = false
+
+	var has_extinct_root_lineage := false
+	for r_id in root_all_extinct.keys():
+		if bool(root_all_extinct[r_id]):
+			has_extinct_root_lineage = true
 			break
 
 	var is_single_survivor_deme := (
@@ -288,8 +327,8 @@ static func run_milestone_phase(
 	)
 	var is_single_surviving_lineage := (
 		total_lineages > 1
-		and has_extinct_lineage
-		and living_lineages.size() == 1
+		and has_extinct_root_lineage
+		and living_root_lineages.size() == 1
 	)
 
 	if has_prior_extinction and not already_logged_single and (is_single_survivor_deme or is_single_surviving_lineage):
@@ -344,7 +383,7 @@ static func run_milestone_phase(
 		else:
 			state.quiet_turns = 0
 
-		if state.generation >= 30 and state.quiet_turns >= 8 and not already_logged_eq:
+		if state.generation >= 30 and state.quiet_turns >= 8 and not already_logged_eq and not already_logged_single:
 			var eq_title := "Ecological & Demographic Equilibrium Reached" if is_en else "Equilibrio Ecológico y Demográfico Alcanzado"
 			var eq_body := (
 				"Across 8 consecutive generations (4 full seasonal cycles), %d active subpopulations (%d total individuals) stabilized in dynamic equilibrium with local carrying capacity." % [living_demes.size(), total_pop]

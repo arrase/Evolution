@@ -79,6 +79,7 @@ const C_SELECTION := Color("#fde047")
 
 var world_state: EvoTypes.WorldState
 var camera: CameraController
+var lang: String = "es"
 var active_lens: String = "biome"
 var active_tool: String = "inspect"
 var selected_hex_id: String = "0,0"
@@ -223,9 +224,17 @@ func refresh() -> void:
 
 
 func refresh_village_decisions() -> void:
+	var any_arch_changed := false
 	for village in _villages:
 		var deme: EvoTypes.Deme = village["deme"]
-		village["archetype"] = _get_deme_dominant_archetype(deme)
+		var new_arch := _get_deme_dominant_archetype(deme)
+		if village["archetype"] != new_arch:
+			village["archetype"] = new_arch
+			any_arch_changed = true
+	if any_arch_changed:
+		_static_props = EvoPropFloraRenderer.collect_static_props(self)
+		_network_layer.queue_redraw()
+		_overlay_layer.queue_redraw()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -336,7 +345,7 @@ func _reproject() -> void:
 
 
 func _rebuild_cell_topology() -> void:
-	var topo_sig: Array = [snappedf(world_state.sea_level, 0.001), world_state.cells.size()]
+	var topo_sig: Array = [world_state.cells.size()]
 	for hex_id in world_state.cells:
 		var c: EvoTypes.HexCell = world_state.cells[hex_id]
 		topo_sig.append(c.biome if not _is_water(c) else "ocean")
@@ -372,8 +381,10 @@ func _layout_columns() -> void:
 		sort_sig.append(_get_cell_top_z(c))
 
 	if sort_sig != _last_sort_signature or _sorted_hex_ids.size() != world_state.cells.size():
+		var cam_changed: bool = _last_sort_signature.size() < 2 or float(_last_sort_signature[0]) != _built_yaw or float(_last_sort_signature[1]) != _built_pitch or _sorted_hex_ids.size() != world_state.cells.size()
 		_last_sort_signature = sort_sig
-		_sorted_hex_ids.assign(world_state.cells.keys())
+		if cam_changed:
+			_sorted_hex_ids.assign(world_state.cells.keys())
 		var depths: Dictionary = {}
 		for hex_id in _sorted_hex_ids:
 			var cell: EvoTypes.HexCell = world_state.cells[hex_id]
@@ -383,14 +394,18 @@ func _layout_columns() -> void:
 		for i in range(_sorted_hex_ids.size()):
 			var hex_id := _sorted_hex_ids[i]
 			var cell: EvoTypes.HexCell = world_state.cells[hex_id]
-			var world_xy := HexMath.axial_to_world(cell.q, cell.r)
 			var top_z := _get_cell_top_z(cell)
-			_hex_polys[hex_id] = _project_hex(world_xy, top_z)
-			_hex_centers[hex_id] = _project(world_xy, top_z)
+			var proj_key := Vector3(_built_yaw, _built_pitch, top_z)
+			if cam_changed or not _hex_polys.has(hex_id) or cell.get_meta("_proj_key", Vector3.INF) != proj_key:
+				cell.set_meta("_proj_key", proj_key)
+				var world_xy := HexMath.axial_to_world(cell.q, cell.r)
+				_hex_polys[hex_id] = _project_hex(world_xy, top_z)
+				_hex_centers[hex_id] = _project(world_xy, top_z)
 
 			var column: Node2D = _columns[hex_id]
 			column.position = Vector2.ZERO
-			_terrain_layer.move_child(column, i)
+			if column.get_index() != i:
+				_terrain_layer.move_child(column, i)
 
 	_terrain_layer.modulate = Color(0.94, 0.96, 0.99, 1.0) if (active_lens == "biome" and world_state.season == "dry_cold") else Color.WHITE
 
@@ -398,6 +413,8 @@ func _layout_columns() -> void:
 		var hex_id := _sorted_hex_ids[i]
 		var cell: EvoTypes.HexCell = world_state.cells[hex_id]
 		var is_ocean := _is_water(cell)
+		if not is_ocean:
+			_columns[hex_id].position = Vector2.ZERO
 		var eff_biome: String = "ocean" if is_ocean else cell.biome
 		var top_z := _get_cell_top_z(cell)
 		var k_ratio: float = clampf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)

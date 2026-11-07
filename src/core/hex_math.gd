@@ -10,6 +10,8 @@ const DIRECTIONS: Array[Vector2i] = [
 	Vector2i(-1, 1),
 	Vector2i(0, 1)
 ]
+static var _grid37_neighbors: Dictionary = {}
+static var _grid91_neighbors: Dictionary = {}
 
 static func make_id(q: int, r: int) -> String:
 	return "%d,%d" % [q, r]
@@ -26,6 +28,31 @@ static func hex_distance(q1: int, r1: int, q2: int, r2: int) -> int:
 	return int((abs(q1 - q2) + abs(r1 - r2) + abs(s1 - s2)) / 2)
 
 static func get_neighbor_ids(q: int, r: int, valid_cells: Dictionary) -> Array[String]:
+	var cell_count := valid_cells.size()
+	if cell_count == 91:
+		var ikey91: int = (q + 8) * 16 + (r + 8)
+		if _grid91_neighbors.has(ikey91):
+			return _grid91_neighbors[ikey91]
+		var cached91: Array[String] = []
+		for dir in DIRECTIONS:
+			var nid := "%d,%d" % [q + dir.x, r + dir.y]
+			if valid_cells.has(nid):
+				cached91.append(nid)
+		if valid_cells.has("0,0") and valid_cells.has("5,0"):
+			_grid91_neighbors[ikey91] = cached91
+		return cached91
+	if cell_count == 37:
+		var ikey: int = (q + 8) * 16 + (r + 8)
+		if _grid37_neighbors.has(ikey):
+			return _grid37_neighbors[ikey]
+		var cached: Array[String] = []
+		for dir in DIRECTIONS:
+			var nid := "%d,%d" % [q + dir.x, r + dir.y]
+			if valid_cells.has(nid):
+				cached.append(nid)
+		if valid_cells.has("0,0") and valid_cells.has("3,0"):
+			_grid37_neighbors[ikey] = cached
+		return cached
 	var result: Array[String] = []
 	for dir in DIRECTIONS:
 		var nid := make_id(q + dir.x, r + dir.y)
