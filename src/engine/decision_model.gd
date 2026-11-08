@@ -107,7 +107,7 @@ static func blend_with_environmental_weights(
 	for dec_id in eligible_ids:
 		var m_prob := float(norm_model.get(dec_id, 0.0))
 		var e_weight := float(env_weights.get(dec_id, 0.0))
-		blended[dec_id] = 0.60 * m_prob + 0.40 * e_weight
+		blended[dec_id] = 0.75 * m_prob + 0.25 * e_weight
 	return EvoHeuristicScorer.normalize_decision_probabilities(blended, eligible_ids)
 
 
@@ -312,7 +312,7 @@ static func prefetch_for_state(state: EvoTypes.WorldState) -> void:
 		deme.set_meta("eval_sig", sig)
 		if not reps_by_sig.has(sig):
 			reps_by_sig[sig] = deme
-			if reps_by_sig.size() >= 6:
+			if reps_by_sig.size() >= 8:
 				break
 
 	EvoOllamaClient.prefetch_for_reps(reps_by_sig, state)

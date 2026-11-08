@@ -402,8 +402,8 @@ static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lan
 	var tier_lbl := Label.new()
 	tier_lbl.text = EvoUiStyle.tr_text(
 		lang,
-		"Aldeas: I Campamento · II Caserío · III Aldea · IV Poblado\nCaminos: 🛣️ Cooperación · ⚔️ Disputa · 🧭 Migración",
-		"Villages: I Camp · II Hamlet · III Village · IV Settlement\nPaths: 🛣️ Cooperation · ⚔️ Dispute · 🧭 Migration"
+		"Aldeas: I Campamento · II Caserío · III Aldea · IV Poblado · V Metrópolis\nCaminos: 🛣️ Cooperación · ⚔️ Disputa · 🧭 Migración",
+		"Villages: I Camp · II Hamlet · III Village · IV Settlement · V Metropolis\nPaths: 🛣️ Cooperation · ⚔️ Dispute · 🧭 Migration"
 	)
 	tier_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tier_lbl.add_theme_font_size_override("font_size", 10)
@@ -421,7 +421,10 @@ static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lan
 
 	var legend_defs := [
 		{"key": "legend_flow_pact", "icon": "icon_pact", "color": Color("#10b981")},
+		{"key": "legend_flow_merge", "icon": "icon_merge", "color": Color("#eab308")},
+		{"key": "legend_flow_tribute", "icon": "icon_tribute", "color": Color("#f59e0b")},
 		{"key": "legend_flow_war", "icon": "icon_war", "color": Color("#ef4444")},
+		{"key": "legend_flow_siege", "icon": "icon_siege", "color": Color("#dc2626")},
 		{"key": "legend_flow_raid", "icon": "icon_raid", "color": Color("#f97316")},
 		{"key": "legend_flow_betrayal", "icon": "icon_betrayal", "color": Color("#be123c")}
 	]

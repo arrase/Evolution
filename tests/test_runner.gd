@@ -25,6 +25,7 @@ func _init() -> void:
 	_test_main_scene_and_ui_integration()
 	_test_nonblocking_async_decision_and_smooth_panning()
 	_test_emergent_geopolitics_and_visual_artifacts()
+	_test_social_memory_defense_tribute_and_synoecism()
 	_test_bugfix_regressions()
 
 	EvoDecisionModel.wait_for_workers()
@@ -1213,4 +1214,333 @@ func _test_bugfix_regressions() -> void:
 	lab.refresh(state)
 	_assert((lab.strategy_trait_checks["bio-thermal-tolerance"] as CheckBox).button_pressed and (lab.strategy_trait_checks["bio-social-instinct"] as CheckBox).button_pressed, "EvoLabModal.refresh() preserves checked strategy traits in strategy_trait_checks")
 	lab.free()
+
+
+func _test_social_memory_defense_tribute_and_synoecism() -> void:
+	print("-- Testing Social Memory, Multi-Tier Defense, Vendettas, Tribute, Synoecism & New Sprites --")
+	# 1. LLM Historical Memory & Rich Neighbor Context
+	var state_mem := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-war")
+	state_mem.generation = 5
+	var d_focus: EvoTypes.Deme = state_mem.demes["deme-rift-west"]
+	var d_rival: EvoTypes.Deme = state_mem.demes["deme-rift-east"]
+	(state_mem.cells[d_focus.hex_id] as EvoTypes.HexCell).deme_ids.erase(d_focus.id)
+	(state_mem.cells[d_rival.hex_id] as EvoTypes.HexCell).deme_ids.erase(d_rival.id)
+	d_focus.hex_id = "0,0"
+	d_rival.hex_id = "1,0"
+	(state_mem.cells["0,0"] as EvoTypes.HexCell).deme_ids.append(d_focus.id)
+	(state_mem.cells["1,0"] as EvoTypes.HexCell).deme_ids.append(d_rival.id)
+	d_focus.population = 80
+	d_focus.defense_tier = 2
+	d_focus.merged_count = 1
+	d_rival.population = 120
+	d_rival.defense_tier = 0
+	d_rival.last_dominant_decision_id = "dec-territorial-dispute"
+
+	var d_kin := d_focus.duplicate_deme()
+	d_kin.id = "deme-kin-test"
+	d_kin.name = "Clan Kin"
+	d_kin.hex_id = "0,-1"
+	d_kin.population = 45
+	d_kin.defense_tier = 1
+	d_kin.last_dominant_decision_id = "dec-conservative-forage"
+	state_mem.demes[d_kin.id] = d_kin
+	(state_mem.cells["0,-1"] as EvoTypes.HexCell).deme_ids.append(d_kin.id)
+
+	var d_ally := d_focus.duplicate_deme()
+	d_ally.id = "deme-ally-test"
+	d_ally.name = "Clan Ally"
+	d_ally.lineage_id = "lineage-ally-distinct"
+	d_ally.hex_id = "-1,0"
+	d_ally.population = 85
+	d_ally.defense_tier = 2
+	d_ally.last_dominant_decision_id = "dec-cooperate-store"
+	state_mem.demes[d_ally.id] = d_ally
+	(state_mem.cells["-1,0"] as EvoTypes.HexCell).deme_ids.append(d_ally.id)
+	state_mem.active_pacts[EvoTypes.make_pair_key(d_focus.id, d_ally.id)] = 3
+
+	_assert(
+		EvoHeuristicScorer._format_neighbor_occupant_label(d_focus, d_rival, state_mem) == "rival:martial:stronger:def0",
+		"Neighbor occupant label formats rival martial stronger deme with defense tier"
+	)
+	_assert(
+		EvoHeuristicScorer._format_neighbor_occupant_label(d_focus, d_kin, state_mem) == "kin:forage:weaker:def1",
+		"Neighbor occupant label formats kin forage weaker deme with defense tier"
+	)
+	_assert(
+		EvoHeuristicScorer._format_neighbor_occupant_label(d_focus, d_ally, state_mem) == "ally:cooperate:equal:def2",
+		"Neighbor occupant label formats allied cooperate equal deme with defense tier"
+	)
+
+	state_mem.active_pacts[EvoTypes.make_pair_key(d_focus.id, d_rival.id)] = -3
+	var mem_raid_entry := EvoTypes.ChronicleEntry.new()
+	mem_raid_entry.id = "chronicle-raid-4-%s-%s" % [d_rival.id, d_focus.id]
+	mem_raid_entry.generation = 4
+	mem_raid_entry.event_type = "raid"
+	mem_raid_entry.hex_id = d_focus.hex_id
+	mem_raid_entry.deme_id = d_rival.id
+	state_mem.chronicle.append(mem_raid_entry)
+	EvoHeuristicScorer.invalidate_state_caches(state_mem)
+
+	_assert(
+		EvoHeuristicScorer._format_neighbor_occupant_label(d_focus, d_rival, state_mem) == "vendetta:martial:stronger:def0",
+		"Neighbor occupant label reflects active vendetta against rival"
+	)
+	var geo_sum := EvoHeuristicScorer.build_geopolitics_summary(d_focus, state_mem.cells["0,0"], state_mem)
+	_assert(int(geo_sum.get("active_pacts", -1)) == 1, "build_geopolitics_summary reports active_pacts == 1")
+	_assert(int(geo_sum.get("active_vendettas", -1)) == 1, "build_geopolitics_summary reports active_vendettas == 1")
+	_assert(int(geo_sum.get("defense_tier", -1)) == 2, "build_geopolitics_summary reports defense_tier == 2")
+	_assert(bool(geo_sum.get("horde_threat", false)), "build_geopolitics_summary detects nearby horde_threat")
+	var mem_str := str(geo_sum.get("memory", ""))
+	_assert(
+		mem_str.contains("raided@G4") and mem_str.contains("vendettas=1") and mem_str.contains("horde_nearby"),
+		"build_geopolitics_summary memory digest includes raid history, vendettas and horde threat (%s)" % mem_str
+	)
+
+	var compact_state := EvoHeuristicScorer.build_compact_system_one_state(d_focus, state_mem)
+	_assert(compact_state.contains("def=Lv2, merged=1"), "build_compact_system_one_state includes def=Lv2 and merged=1")
+	_assert(compact_state.contains("memory=") and compact_state.contains("raided@G4"), "build_compact_system_one_state includes historical memory")
+	_assert(compact_state.contains(":def"), "build_compact_system_one_state Neighbors list includes relational labels and defense tier")
+	_assert(compact_state.contains("\"active_vendettas\":1") and compact_state.contains("\"defense_tier\":2"), "build_compact_system_one_state geopolitics JSON includes active_vendettas and defense_tier")
+
+	# 2. Multi-Tier Defense (0 -> 1 -> 2 -> 3) & Castle Raid Immunity
+	var state_def := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-war")
+	var d_def: EvoTypes.Deme = state_def.demes["deme-rift-west"]
+	var d_att: EvoTypes.Deme = state_def.demes["deme-rift-east"]
+	(state_def.cells[d_def.hex_id] as EvoTypes.HexCell).deme_ids.erase(d_def.id)
+	(state_def.cells[d_att.hex_id] as EvoTypes.HexCell).deme_ids.erase(d_att.id)
+	d_def.hex_id = "0,0"
+	d_att.hex_id = "1,0"
+	(state_def.cells["0,0"] as EvoTypes.HexCell).deme_ids.append(d_def.id)
+	(state_def.cells["1,0"] as EvoTypes.HexCell).deme_ids.append(d_att.id)
+	var def_cell: EvoTypes.HexCell = state_def.cells["0,0"]
+	def_cell.current_resources = 320.0
+	d_def.population = 120
+	d_def.energy_reserves = 260.0
+	var def_arch_probs := {
+		d_def.id: [0.55, 0.25, 0.05, 0.05],
+		d_att.id: [0.05, 0.05, 0.60, 0.20]
+	}
+	_assert(d_def.defense_tier == 0, "Deme starts at defense_tier 0")
+
+	var res_before_t1 := d_def.energy_reserves
+	var cell_before_t1 := def_cell.current_resources
+	EvoEcologyInteraction._run_defense_fortification_phase(state_def, "en", def_arch_probs)
+	_assert(d_def.defense_tier == 1, "_run_defense_fortification_phase upgrades defense_tier 0 -> 1 (Palisade)")
+	_assert(d_def.energy_reserves < res_before_t1 and def_cell.current_resources < cell_before_t1, "Tier 1 fortification consumes deme reserves and hex resources")
+
+	EvoEcologyInteraction._run_defense_fortification_phase(state_def, "en", def_arch_probs)
+	_assert(d_def.defense_tier == 2, "_run_defense_fortification_phase upgrades defense_tier 1 -> 2 (Stone Wall)")
+
+	EvoEcologyInteraction._run_defense_fortification_phase(state_def, "en", def_arch_probs)
+	_assert(d_def.defense_tier == 3, "_run_defense_fortification_phase upgrades defense_tier 2 -> 3 (Castle)")
+	var fortify_chronicles := 0
+	for e in state_def.chronicle:
+		if e.event_type == "fortify" and e.deme_id == d_def.id:
+			fortify_chronicles += 1
+	_assert(fortify_chronicles >= 2, "Upgrading to Tier 2 and Tier 3 logs 'fortify' ChronicleEntries")
+
+	state_def.season = "dry_cold"
+	d_att.population = 110
+	d_att.energy_reserves = 20.0
+	(state_def.cells["1,0"] as EvoTypes.HexCell).current_resources = 15.0
+	d_att.last_decision_probabilities = {"dec-territorial-dispute": 0.60, "dec-intensive-overexploit": 0.25, "dec-conservative-forage": 0.15}
+	var vec_att := EvoEcologyInteraction.compute_effective_vector(d_att, state_def)
+	var raid_ext_map := {d_att.id: 10.0, d_def.id: 85.0}
+	_assert(
+		not EvoEcologyInteraction._can_attempt_raid(d_att, d_def, state_def.cells["1,0"], state_def, vec_att, raid_ext_map, [0.05, 0.05, 0.60, 0.25]),
+		"Tier 3 Castle is immune to _can_attempt_raid"
+	)
+	d_def.defense_tier = 0
+	_assert(
+		EvoEcologyInteraction._can_attempt_raid(d_att, d_def, state_def.cells["1,0"], state_def, vec_att, raid_ext_map, [0.05, 0.05, 0.60, 0.25]),
+		"Undefended deme (Tier 0) is vulnerable to _can_attempt_raid under same conditions"
+	)
+	var forces_t0 := EvoDemographyMigration._compute_combat_forces(d_att, 55, d_def, state_def)
+	d_def.defense_tier = 3
+	var forces_t3 := EvoDemographyMigration._compute_combat_forces(d_att, 55, d_def, state_def)
+	_assert(forces_t3.y > forces_t0.y * 1.50, "Tier 3 Castle significantly boosts defender force in _compute_combat_forces (%.1f vs %.1f)" % [forces_t3.y, forces_t0.y])
+
+	# 3. Vendettas & Tribute Appeasement
+	var state_trib := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-trade")
+	var t_raider: EvoTypes.Deme = state_trib.demes["deme-rift-west"]
+	var t_trader: EvoTypes.Deme = state_trib.demes["deme-rift-east"]
+	(state_trib.cells[t_raider.hex_id] as EvoTypes.HexCell).deme_ids.erase(t_raider.id)
+	(state_trib.cells[t_trader.hex_id] as EvoTypes.HexCell).deme_ids.erase(t_trader.id)
+	t_raider.hex_id = "0,0"
+	t_trader.hex_id = "1,0"
+	(state_trib.cells["0,0"] as EvoTypes.HexCell).deme_ids.append(t_raider.id)
+	(state_trib.cells["1,0"] as EvoTypes.HexCell).deme_ids.append(t_trader.id)
+	state_trib.season = "dry_cold"
+	(state_trib.cells["0,0"] as EvoTypes.HexCell).current_resources = 18.0
+	(state_trib.cells["1,0"] as EvoTypes.HexCell).current_resources = 220.0
+	t_raider.population = 85
+	t_raider.energy_reserves = 22.0
+	t_trader.population = 45
+	t_trader.energy_reserves = 120.0
+	t_trader.defense_tier = 0
+	t_raider.last_decision_probabilities = {"dec-territorial-dispute": 0.55, "dec-intensive-overexploit": 0.30, "dec-conservative-forage": 0.15}
+	t_trader.last_decision_probabilities = {"dec-exchange-symbiosis": 0.55, "dec-cooperate-store": 0.30, "dec-conservative-forage": 0.15}
+	var trib_vecs := {
+		t_raider.id: EvoEcologyInteraction.compute_effective_vector(t_raider, state_trib),
+		t_trader.id: EvoEcologyInteraction.compute_effective_vector(t_trader, state_trib)
+	}
+	var trib_hawks := {t_raider.id: 1.0, t_trader.id: 1.0}
+	var trib_ext := {t_raider.id: 0.0, t_trader.id: 0.0}
+	var trib_flows: Array[EvoTypes.HexEdgeFlow] = []
+	EvoEcologyInteraction.run_resource_and_symbiosis_phase(state_trib, "en", trib_vecs, trib_hawks, trib_ext, trib_flows)
+	_assert(t_raider.population == 85 and t_trader.population == 45, "Paying tribute avoids raid casualties on both sides")
+	_assert(t_raider.energy_reserves > 22.0, "Raider receives tribute energy reserves (%.1f)" % t_raider.energy_reserves)
+	var trib_pk := EvoTypes.make_pair_key(t_raider.id, t_trader.id)
+	_assert(int(state_trib.active_pacts.get(trib_pk, 0)) == 1, "Tribute establishes temporary truce (active_pacts == 1)")
+	var has_tribute_flow := false
+	for fl in state_trib.active_flows:
+		if fl.flow_type == "tribute":
+			has_tribute_flow = true
+			break
+	_assert(has_tribute_flow, "Tribute payment emits 'tribute' HexEdgeFlow")
+	var has_tribute_chronicle := false
+	for e in state_trib.chronicle:
+		if e.event_type == "tribute":
+			has_tribute_chronicle = true
+			break
+	_assert(has_tribute_chronicle, "Tribute payment logs 'tribute' ChronicleEntry")
+
+	# Verify raid/betrayal sets negative active_pacts and EvoTypes.is_vendetta_active == true
+	state_trib.active_pacts[trib_pk] = 0
+	t_trader.last_decision_probabilities = {"dec-conservative-forage": 0.85, "dec-territorial-dispute": 0.15}
+	t_trader.defense_tier = 0
+	t_trader.energy_reserves = 110.0
+	state_trib.chronicle.clear()
+	EvoEcologyInteraction._execute_raid_if_successful(
+		t_raider,
+		t_trader,
+		state_trib.cells["0,0"],
+		state_trib.cells["1,0"],
+		state_trib,
+		"en",
+		trib_vecs[t_raider.id],
+		trib_vecs[t_trader.id],
+		{t_raider.id: 15.0, t_trader.id: 60.0},
+		trib_flows,
+		[0.0, 0.0, 0.55, 0.30],
+		[0.0, 0.0, 0.15, 0.0]
+	)
+	_assert(int(state_trib.active_pacts.get(trib_pk, 0)) <= -2 and EvoTypes.is_vendetta_active(state_trib, t_raider.id, t_trader.id), "Raid sets negative active_pacts and activates vendetta")
+	EvoEcologyInteraction._execute_betrayal(
+		t_raider,
+		t_trader,
+		state_trib.cells["0,0"],
+		state_trib.cells["1,0"],
+		trib_pk,
+		state_trib,
+		"en",
+		{t_raider.id: 15.0, t_trader.id: 60.0},
+		trib_flows
+	)
+	_assert(int(state_trib.active_pacts.get(trib_pk, 0)) == -4 and EvoTypes.is_vendetta_active(state_trib, t_raider.id, t_trader.id), "Betrayal sets active_pacts to -4 (deep vendetta)")
+
+	# 4. City Unification (Synoecism) & LLM Request Reduction (Same Hex & Adjacent Hexes)
+	# 4a. Same-hex synoecism with active_pacts >= 3
+	var state_syn1 := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-trade")
+	var s1_a: EvoTypes.Deme = state_syn1.demes["deme-rift-west"]
+	var s1_b: EvoTypes.Deme = state_syn1.demes["deme-rift-east"]
+	(state_syn1.cells[s1_a.hex_id] as EvoTypes.HexCell).deme_ids.erase(s1_a.id)
+	(state_syn1.cells[s1_b.hex_id] as EvoTypes.HexCell).deme_ids.erase(s1_b.id)
+	s1_a.hex_id = "0,0"
+	s1_b.hex_id = "0,0"
+	(state_syn1.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([s1_a.id, s1_b.id])
+	s1_a.population = 125
+	s1_b.population = 115
+	s1_a.energy_reserves = 120.0
+	s1_b.energy_reserves = 110.0
+	s1_a.last_decision_probabilities = {"dec-cooperate-store": 0.70, "dec-conservative-forage": 0.30}
+	s1_b.last_decision_probabilities = {"dec-exchange-symbiosis": 0.70, "dec-conservative-forage": 0.30}
+	var s1_b_color := s1_b.color
+	state_syn1.active_pacts[EvoTypes.make_pair_key(s1_a.id, s1_b.id)] = 3
+	var s1_init_pops := {s1_a.id: s1_a.population, s1_b.id: s1_b.population}
+	var s1_vecs := {
+		s1_a.id: EvoEcologyInteraction.compute_effective_vector(s1_a, state_syn1),
+		s1_b.id: EvoEcologyInteraction.compute_effective_vector(s1_b, state_syn1)
+	}
+	var s1_ext := {s1_a.id: 80.0, s1_b.id: 75.0}
+	EvoDemographyMigration.run_demography_and_migration_phase(state_syn1, "en", s1_init_pops, s1_vecs, {}, s1_ext)
+	_assert(state_syn1.demes.size() == 1, "Same-hex synoecism (active_pacts >= 3) merges 2 allied demes into 1 unified city")
+	_assert(s1_a.merged_count >= 1, "Unified city increments merged_count (%d)" % s1_a.merged_count)
+	_assert(s1_a.population > 200, "Unified city combines populations (%d)" % s1_a.population)
+	_assert(s1_a.secondary_color == s1_b_color and s1_a.secondary_color != "", "Unified city records partner secondary_color (%s)" % s1_a.secondary_color)
+	_assert(s1_a.get_village_tier() == 5 and s1_a.get_village_roman() == "V", "Unified metropolis reaches Tier 5 ('V')")
+	_assert(
+		EvoUiStyle.get_village_tier_label(s1_a.population, "es", s1_a.merged_count) == "V · Metrópolis" and EvoUiStyle.get_village_tier_label(s1_a.population, "en", s1_a.merged_count) == "V · Metropolis",
+		"EvoUiStyle.get_village_tier_label returns Tier V Metropolis label in ES and EN"
+	)
+
+	# 4b. Adjacent-hex synoecism with active_pacts >= 4
+	var state_syn2 := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-innovation")
+	var s2_a: EvoTypes.Deme = state_syn2.demes["deme-rift-west"]
+	var s2_b: EvoTypes.Deme = state_syn2.demes["deme-rift-east"]
+	(state_syn2.cells[s2_a.hex_id] as EvoTypes.HexCell).deme_ids.erase(s2_a.id)
+	(state_syn2.cells[s2_b.hex_id] as EvoTypes.HexCell).deme_ids.erase(s2_b.id)
+	s2_a.hex_id = "0,0"
+	s2_b.hex_id = "1,0"
+	(state_syn2.cells["0,0"] as EvoTypes.HexCell).deme_ids.append(s2_a.id)
+	(state_syn2.cells["1,0"] as EvoTypes.HexCell).deme_ids.append(s2_b.id)
+	s2_a.population = 105
+	s2_b.population = 85
+	s2_a.energy_reserves = 110.0
+	s2_b.energy_reserves = 95.0
+	s2_a.last_decision_probabilities = {"dec-cooperate-store": 0.65, "dec-exchange-symbiosis": 0.25, "dec-conservative-forage": 0.10}
+	s2_b.last_decision_probabilities = {"dec-exchange-symbiosis": 0.55, "dec-cooperate-store": 0.30, "dec-explore-innovate": 0.15}
+	var s2_b_color := s2_b.color
+	state_syn2.active_pacts[EvoTypes.make_pair_key(s2_a.id, s2_b.id)] = 4
+	var s2_init_pops := {s2_a.id: s2_a.population, s2_b.id: s2_b.population}
+	var s2_vecs := {
+		s2_a.id: EvoEcologyInteraction.compute_effective_vector(s2_a, state_syn2),
+		s2_b.id: EvoEcologyInteraction.compute_effective_vector(s2_b, state_syn2)
+	}
+	var s2_ext := {s2_a.id: 70.0, s2_b.id: 60.0}
+	EvoDemographyMigration.run_demography_and_migration_phase(state_syn2, "en", s2_init_pops, s2_vecs, {}, s2_ext)
+	_assert(state_syn2.demes.size() == 1, "Adjacent-hex synoecism (active_pacts >= 4) merges 2 neighboring allied demes into 1 city")
+	_assert(s2_a.merged_count == 1 and s2_a.secondary_color == s2_b_color, "Adjacent-hex unified city sets merged_count == 1 and secondary_color")
+	_assert(s2_a.defense_tier >= 2, "Synoecism elevates unified city defense_tier (%d)" % s2_a.defense_tier)
+	var has_merge_flow := false
+	for fl in state_syn2.active_flows:
+		if fl.flow_type == "merge" and fl.from_hex_id == "1,0" and fl.to_hex_id == "0,0":
+			has_merge_flow = true
+			break
+	_assert(has_merge_flow, "Adjacent-hex synoecism emits inter-hex 'merge' HexEdgeFlow")
+	var has_merge_chronicle := false
+	for e in state_syn2.chronicle:
+		if e.event_type == "merge":
+			has_merge_chronicle = true
+			break
+	_assert(has_merge_chronicle, "Synoecism logs 'merge' ChronicleEntry")
+	EvoMilestonePhase.run_milestone_phase(state_syn2, "en")
+	_assert(state_syn2.macro_outcome_type != "single_survivor", "Peaceful city unification does not falsely trigger single_survivor extinction outcome")
+
+	# 5. All 11 New Procedural Sprite Assets & UI Icons
+	EvoPixelArtGen.ensure_all_assets(true)
+	var phase3_sprites: Array[String] = [
+		"tier5_metropolis",
+		"prop_unity_monument",
+		"prop_defense_palisade",
+		"prop_defense_wall",
+		"prop_defense_fortress",
+		"prop_tribute_chest",
+		"prop_siege_engine",
+		"icon_defense",
+		"icon_merge",
+		"icon_tribute",
+		"icon_siege"
+	]
+	for skey in phase3_sprites:
+		var subdir := "ui" if skey.begins_with("icon_") else "villages"
+		var file_path := "res://assets/sprites/%s/%s.png" % [subdir, skey]
+		_assert(FileAccess.file_exists(file_path), "New Phase 3 sprite PNG exists on disk: %s" % file_path)
+		var tex := EvoPixelArtGen.get_texture(skey)
+		_assert(tex != null and tex.get_width() >= 16 and tex.get_height() >= 16, "Loaded Phase 3 sprite Texture2D is valid and non-empty: %s" % skey)
+
+	for icon_key in ["defense", "merge", "tribute", "siege", "fortify"]:
+		var ui_tex := EvoUiStyle.get_pixel_icon(icon_key)
+		_assert(ui_tex != null, "EvoUiStyle.get_pixel_icon('%s') returns valid Texture2D" % icon_key)
+
 

@@ -1,8 +1,8 @@
 # Cognitive Engine & Multi-Model Ollama AI
 
-**Evolution** features a non-blocking, dual-model **System 1 Cognitive Architecture** (`EvoDecisionModel`, `EvoOllamaClient`, `EvoHeuristicScorer`) that evaluates each subpopulation's ecological, energetic, and geopolitical neighborhood every generation.
+**Evolution** features a non-blocking, dual-model **System 1 Cognitive Architecture** (`EvoDecisionModel`, `EvoOllamaClient`, `EvoHeuristicScorer`) that evaluates each subpopulation's ecological, energetic, historical, and geopolitical neighborhood every generation.
 
-Every subpopulation's behavioral decisions are evaluated by local **Ollama System 1 decision models** (`d3:4b` and `tev1:4b`) and blended ($60\%$ neural model probability / $40\%$ environmental & geopolitical pressure via `blend_with_environmental_weights`) so that inherited strategy traits, habitat scarcity, active alliances, and rival borders dynamically shape behavior. To guarantee smooth 60 FPS rendering and instant UI responsiveness, the cognitive engine combines **deterministic deme-to-model routing**, **10-part ecological state signature caching**, **epoch-guarded thread safety (`_cache_epoch`)**, and **background worker thread batching**.
+Every subpopulation's behavioral decisions are evaluated by local **Ollama System 1 decision models** (`d3:4b` and `tev1:4b`) and blended (**$75\%$ neural model probability / $25\%$ environmental & geopolitical pressure** via `blend_with_environmental_weights`) so that inherited strategy traits, historical memory of wars/betrayals/pacts, multi-tier fortifications, and rival borders dynamically shape behavior while keeping LLM strategic choices dominant. To guarantee smooth 60 FPS rendering and high cache hit rates, the cognitive engine combines **deterministic deme-to-model routing**, **coarsened 10-part ecological state signature caching**, **6-generation historical memory & rich neighbor relational tags**, **epoch-guarded thread safety (`_cache_epoch`)**, and **background worker thread batching with 8-signature prefetching**.
 
 ---
 
@@ -10,10 +10,10 @@ Every subpopulation's behavioral decisions are evaluated by local **Ollama Syste
 
 ```mermaid
 flowchart TD
-    Deme["Deme + Strategy Prior + 6-Hex Neighborhood State"] --> Sig["1. Compute 10-Part Signature\nmodel | season | biome | adequacy | health |\nvitality | competition(pacts/surplus) | traits | dominant | neighbors"]
+    Deme["Deme + Strategy Prior + 6-Gen Memory + 6-Hex Neighborhood"] --> Sig["1. Compute Coarsened 10-Part Signature\nmodel | season | biome | adequacy(0..2) | health(0..2) |\nvitality | competition(p/v/h/d/s) | traits | dominant_hash | neighbors"]
     Sig --> CacheCheck{"Signature in\n_live_signature_cache?"}
-    CacheCheck -- "Cache Hit" --> Blend["Blend 60% Live Ollama P(d)\n+ 40% Env & Geopolitical Weights"]
-    CacheCheck -- "Cache Miss" --> Queue["Enqueue Signature in\n_pending_jobs_by_sig (with _cache_epoch)"]
+    CacheCheck -- "Cache Hit" --> Blend["Blend 75% Live Ollama P(d)\n+ 25% Env & Geopolitical Weights"]
+    CacheCheck -- "Cache Miss" --> Queue["Enqueue Signature in\n_pending_jobs_by_sig (up to 8 Prefetch Signatures)"]
     Queue --> Worker["Background WorkerThreadPool\nBatch up to 4 Jobs Concurrently\nPOST 127.0.0.1:11434/v1/systemone"]
     Worker --> HotSwap["Verify job_epoch == _cache_epoch\nIncrement _completed_revision & Hot-Swap P(d)"]
 ```
@@ -42,55 +42,72 @@ Rather than evaluating every deme with a single monolithic prompt, **Evolution**
 
 ---
 
-## 10-Part Ecological State Signature (`compute_deme_evaluation_signature`)
+## Coarsened 10-Part Ecological State Signature (`compute_deme_evaluation_signature`)
 
-Subpopulations experiencing identical ecological, demographic, and geopolitical conditions share a canonical **10-part pipe-delimited signature** (`heuristic_scorer.gd:437-554`), preventing redundant LLM evaluations across turns and across parallel demes:
+Subpopulations experiencing equivalent strategic, ecological, and geopolitical conditions share a canonical, **coarsened 10-part pipe-delimited signature** (`heuristic_scorer.gd:565-672`), maximizing cross-turn and cross-deme LLM cache hit rates while still distinguishing genuine strategic regime shifts (such as new vendettas, nearby conquering hordes, or fortification upgrades):
 
 $$\text{sig} = \texttt{model} \mid \texttt{season} \mid \texttt{biome} \mid \texttt{adequacy} \mid \texttt{health} \mid \texttt{vitality} \mid \texttt{competition} \mid \texttt{traits} \mid \texttt{dominant} \mid \texttt{neighbors}$$
 
-| Segment # | Component Key | Formula / Bucket Definition | Purpose |
+| Segment # | Component Key | Formula / Coarsened Bucket Definition | Purpose |
 | :---: | :--- | :--- | :--- |
 | **1** | `model_key` | `deme.decision_model_tag` (`d3:4b` or `tev1:4b`) | Separates cache entries by assigned cognitive model. |
 | **2** | `season` | `"wet_warm"` or `"dry_cold"` | Captures seasonal regeneration multiplier ($\gamma = 1.20$ vs $0.75$). |
 | **3** | `biome` | `current_cell.biome` | Captures local habitat class (`tropical_forest`, `savanna`, etc.). |
-| **4** | `adequacy_bucket` | $\min\big(6,\ \lfloor \text{adequacy\_ratio} \times 2.0 \rfloor\big)$ where $\text{adequacy\_ratio} = \dfrac{R_{\text{cell}}}{\max(10.0,\ 0.48 \cdot P_{\text{cell\_total}})}$ | Quantizes local food abundance relative to total hex population into 7 tiers (`0..6`). |
-| **5** | `health_bucket` | $\lfloor (K_{\text{cell}} / \max(1.0, K_{\max})) \times 4.0 \rfloor$ | Quantizes ecological carrying capacity health $K / K_{\max}$ into 5 tiers (`0..4`). |
+| **4** | `adequacy_bucket` | `0` if $< 0.85$ (scarcity), `1` if $\le 1.35$ (balanced), `2` if $> 1.35$ (surplus), where $\text{adequacy\_ratio} = \dfrac{R_{\text{cell}}}{\max(10.0,\ 0.48 \cdot P_{\text{cell\_total}})}$ | Coarsens local caloric abundance into 3 strategic tiers (`0..2`) to avoid cache invalidation from minor resource fluctuations. |
+| **5** | `health_bucket` | `0` if $< 0.35$ (degraded), `1` if $\le 0.80$ (moderate), `2` if $> 0.80$ (healthy), based on $K_{\text{cell}} / \max(1.0, K_{\max})$ | Coarsens carrying capacity health $K / K_{\max}$ into 3 tiers (`0..2`). |
 | **6** | `vitality` | `"starving"`, `"declining"`, `"stable"`, `"thriving"`, or `"extinct"` | Unified vital status based on `energy_reserves` and `last_energy_delta`. |
-| **7** | `competition_key` | `"%d:%d:%s:%d:p%d:s%d" % [rival_count, kin_count, "viable" if pop >= 40 else "small", 1 if has_nearby_rival else 0, pact_count, surplus_flag]` | Captures intra-hex/adjacent rivals, fission viability, active Alliance Pacts (`p%d`), and rival wealth disparity (`s%d`). |
+| **7** | `competition_key` | `"%d:%d:%s:%d:p%d:v%d:h%d:d%d:s%d"` encoding `[rival_count, kin_count, "viable" if pop >= 40 else "small", nearby_rival_flag, pact_count, vendetta_flag, horde_flag, defense_tier, surplus_flag]` | Captures local competition, fission viability, active Alliance Pacts (`p%d`), active Vendettas (`v%d`), nearby Conquering Horde threats (`h%d`), Multi-Tier Defense level (`d%d`), and rival wealth disparity (`s%d`). |
 | **8** | `traits_key` | Sorted comma-joined `biological_trait_ids + cultural_trait_ids` with 5-axis biophysical vectors | Encodes exact genetic and cultural capabilities and custom Lab edits. |
-| **9** | `dominant_key` | `"%s:%d:%d:%x" % [last_dominant_decision_id, baldwin_bucket, innov_bucket, dec_hash]` | Preserves behavioral momentum, Baldwin/innovation progress, and decision catalog state. |
-| **10** | `neighbor_key` | Top 2 passable neighbors ranked by $R / \max(10, P)$: `"%s:%s:%d" % [biome, "empty"\|"occupied", round(R/100)]` | Summarizes adjacent dispersal and trade opportunities. |
+| **9** | `dominant_key` | `"%x" % dec_hash` (rolling hash over eligible decisions and their 5-axis vectors) | Tracks catalog edits while omitting per-turn Baldwin/innovation counter increments so identical strategic states reuse cached LLM evaluations across turns. |
+| **10** | `neighbor_key` | Top 3 passable neighbors ranked by $R / \max(10, P)$: `"%s:%s:%d" % [biome, occ_sig_tag, round(R / 150.0)]` where `occ_sig_tag` $\in \{\texttt{empty}, \texttt{kin}, \texttt{ally}, \texttt{vendetta}, \texttt{rival\_martial}, \texttt{rival}\}$ | Summarizes adjacent dispersal, alliance, vendetta, and martial threat topology. |
 
 ---
 
-## Live Ollama Inference Protocol & Environmental Blending (`EvoOllamaClient` & `EvoHeuristicScorer`)
+## Live Ollama Inference Protocol, Historical Memory & Environmental Blending (`EvoOllamaClient` & `EvoHeuristicScorer`)
 
-### 1. Compact System 1 State Briefing, Strategy Priors & Geopolitics
-When querying Ollama (`POST http://127.0.0.1:11434/v1/systemone`), `EvoHeuristicScorer.build_compact_system_one_state` constructs a structured JSON payload containing:
+### 1. Sliding 6-Generation Historical Memory & Rich Neighbor Context (`/v1/systemone`)
+When querying Ollama (`POST http://127.0.0.1:11434/v1/systemone`), `EvoOllamaClient._build_system_one_payload` sends a structured JSON payload (`state: { briefing, strategy_traits_prior, geopolitics, memory }`, `decisions`, `model`) constructed by `EvoHeuristicScorer`:
 
-* **`state`**: A dense 4-line biophysical and neighborhood summary:
+* **Sliding 6-Generation Memory Digest (`inspect_geopolitical_context`)**:
+  * Scans `state.chronicle` across the last **6 generations** (`entry.generation >= state.generation - 6`) for events involving the deme's `hex_id` or `deme.name`, extracting up to 3 recent chronological tokens:
+    * `raided@G<gen>` (plunder raid suffered or launched)
+    * `war@G<gen>` (territorial war of conquest or repelled invasion)
+    * `betrayal@G<gen>` (broken alliance pact ambush)
+    * `pact@G<gen>` (formalized alliance pact)
+    * `fortify@G<gen>` (Stone Wall or Castle upgrade)
+    * `merge@G<gen>` (city unification / synoecism)
+    * `tribute@G<gen>` (tribute appeasement paid or collected)
+    * `siege@G<gen>` (fortified siege repelled at the walls)
+  * Appends `vendettas=<count>` when the deme holds active multi-turn grudges (`active_pacts < 0` via `EvoTypes.is_vendetta_active`) and `horde_nearby` when a rival martial population (`pop >= 55` with `cul-warrior-expansion`, a `-w<gen>` warband ID, or dominant `dec-territorial-dispute`) is detected within a **1–2 passable hex radius**.
+* **Rich Neighbor Relational Tags (`_format_neighbor_occupant_label`)**:
+  * In the 4-line state briefing, each of the top 3 passable neighbor hexes formats its primary occupant as `<rel_tag>:<posture_tag>:<strength_tag>:def<tier>`:
+    * **Relational Tag (`rel_tag`)**: `kin` (same lineage), `ally` (`is_pact_active`), `vendetta` (`is_vendetta_active`), or `rival`.
+    * **Posture Tag (`posture_tag`)**: `martial` (if carrying `cul-warrior-expansion` or dominant `dec-territorial-dispute`) or the neighbor's dominant decision archetype (`forage`, `cooperate`, `exchange`, etc.).
+    * **Relative Strength Tag (`strength_tag`)**: `stronger` ($P_{\text{neighbor}} > 1.2 \cdot P_{\text{deme}}$), `weaker` ($P_{\text{neighbor}} < 0.8 \cdot P_{\text{deme}}$), or `equal`.
+    * **Defense Tier (`def<0..3>`)**: The neighbor settlement's current fortification tier (`def0` unfortified through `def3` Castle).
+* **Compact 4-Line Briefing (`build_compact_system_one_state`)**:
   ```text
-  Gen 6 (wet_warm) | Hex 2,-1 (arid_steppe): resources=260/335 (health=88% of Kmax=380), caloricAdequacy=3.87x, temp=+0.60, hum=0.30, alt=0.42
-  Deme "Eastern Savanna Hominids": pop=140 (thriving), reserves=180, delta=+8 | CellCompetition: totalPop=140, cohabiting=0 (rivals=0, kin=0)
+  Gen 8 (wet_warm) | Hex 2,-1 (arid_steppe): resources=260/335 (health=88% of Kmax=380), caloricAdequacy=3.87x, temp=+0.60, hum=0.30, alt=0.42
+  Deme "Eastern Savanna Hominids": pop=140 (thriving), reserves=180, delta=+8, def=Lv2, merged=1 | CellCompetition: totalPop=140, cohabiting=0 (rivals=0, kin=0)
   Traits: K-Strategy[cost:+0.20,extract:+0.25,eco:+0.15,mobility:+0.05,cohesion:+0.40]; Instinctive Sociability[cost:+0.20,extract:+0.20,eco:+0.05,mobility:+0.10,cohesion:+0.60]
-  lastDominant=dec-cooperate-store, baldwin=5/8, innovation=0.72/2.0 | Neighbors: 1,-1(savanna, res=260, pop=0, empty), 2,0(savanna, res=260, pop=0, empty)
+  lastDominant=dec-cooperate-store, baldwin=5/8, innovation=0.72/1.0, memory=fortify@G7,pact@G5;horde_nearby | Neighbors: 1,-1(savanna, res=260, pop=95, rival:martial:weaker:def1), 2,0(savanna, res=240, pop=110, ally:cooperate:equal:def2)
   ```
-* **`strategy_traits_prior`**: Normalized baseline decision probabilities computed from the deme's biological and cultural traits (`EvoCatalog.compute_baseline_decision_weights`).
-* **`geopolitics`**: Real-time diplomatic and military context (`active_pacts`, `adjacent_rivals`, `neighbor_max_reserves`, `env_adequacy`).
+* **`strategy_traits_prior` (`build_top_strategy_prior`)**: Top 3 intrinsic baseline decision weights computed from the deme's biological and cultural traits (`EvoCatalog.compute_baseline_decision_weights`).
+* **`geopolitics` (`build_geopolitics_summary`)**: Real-time diplomatic, military, and urban context (`active_pacts`, `active_vendettas`, `adjacent_rivals`, `defense_tier`, `merged_count`, `horde_threat`, `memory`, `neighbor_max_reserves`, `env_adequacy`).
 * **`decisions`**: Eligible behavioral decisions and their 5-axis biophysical vectors.
 
 ### 2. Environmental & Geopolitical Weight Blending (`blend_with_environmental_weights`)
-To ensure that live neural evaluations remain tightly grounded in biophysical reality, `EvoHeuristicScorer.blend_with_environmental_weights` combines **$60\%$ of the live Ollama model probability (`0.60 * m_prob`) with $40\%$ of the deterministic environmental & geopolitical weight (`0.40 * e_weight`)** computed by `compute_environmental_decision_weights`:
+To keep neural evaluations grounded in biophysical reality while preserving high responsiveness to the LLM's strategic reasoning, `EvoDecisionModel.blend_with_environmental_weights` combines **$75\%$ of the live Ollama model probability (`0.75 * m_prob`) with $25\%$ of the deterministic environmental & geopolitical weight (`0.25 * e_weight`)** computed by `compute_environmental_decision_weights`:
 
-$$\tilde{p}(d) = 0.60 \cdot P_{\text{Ollama}}(d) + 0.40 \cdot P_{\text{env}}(d)$$
+$$\tilde{p}(d) = 0.75 \cdot P_{\text{Ollama}}(d) + 0.25 \cdot P_{\text{env}}(d)$$
 
-where $P_{\text{env}}(d)$ modulates the deme's trait-based prior according to caloric adequacy ($R / 0.48 P_{\text{cell}}$), carrying-capacity health ($K / K_{\max}$), vital status (`starving`, `declining`, `stable`, `thriving`), active formal pacts (`pact_count`), and adjacent rival wealth or threat.
+where $P_{\text{env}}(d)$ modulates the deme's intrinsic `strategy_traits_prior` according to caloric adequacy ($R / 0.48 P_{\text{cell}}$), carrying-capacity health ($K / K_{\max}$), vital status (`starving`, `declining`, `stable`, `thriving`), active formal pacts (`pact_count`), active vendettas (`vendetta_count`), nearby conquering horde threats (`has_horde_threat`), and fortification status (`defense_tier`).
 
-### 3. Non-Blocking Worker Pool, Epoch-Guarded Cache & Prefetching
-* **Concurrent HTTP Batching**: `_run_ollama_worker` runs on Godot's `WorkerThreadPool`, popping up to **4 pending signatures per batch** and polling non-blocking `HTTPClient` connections concurrently (`EVAL_TIMEOUT_MS = 60000` ms, `keep_alive = "30m"`).
+### 3. Non-Blocking Worker Pool, Epoch-Guarded Cache & 8-Signature Batch Prefetching
+* **Concurrent HTTP Batching**: `_run_ollama_worker` runs on Godot's `WorkerThreadPool`, popping up to **4 pending signatures per HTTP worker batch** and polling non-blocking `HTTPClient` connections concurrently (`EVAL_TIMEOUT_MS = 60000` ms, `keep_alive = "30m"`).
+* **8-Signature Queue & Post-Turn Prefetching (`prefetch_for_state` & `sync_and_enqueue_batch`)**: At Stage 5 of every generation (and during turn synchronization), the engine deduplicates uncached deme signatures across the valley and enqueues up to **8 unique representative signatures** (`reps_by_sig.size() >= 8`) into `_pending_jobs_by_sig`. Furthermore, when two allied settlements unite via **Synoecism (`merge`)**, their consolidation into a single `Deme` instance directly reduces the number of active subpopulations and LLM requests per turn.
 * **Epoch-Guarded Cache Invalidation (`_cache_epoch`)**: Calling `clear_caches()` (e.g., when switching scenarios or resetting the world) increments `_cache_epoch` under `_mutex`; in-flight worker batches verify `job_epoch == _cache_epoch` before storing results in `_live_signature_cache`, preventing stale responses from earlier runs from polluting a new simulation.
-* **Live Intra-Turn Hot-Swap**: Whenever a background batch completes, `_completed_revision` increments. On the very next frame (`_process`), `EvoMainController` calls `EvoDecisionModel.apply_completed_live_results`, immediately updating deme decision bars, justifications, and 2.5D village action structures without stalling UI rendering.
-* **Post-Turn Prefetching (`prefetch_for_state`)**: At Stage 5 of every generation, the engine computes the next turn's signatures for all surviving demes and enqueues any uncached states ahead of time—so when playing at `1x` (`1.50s/gen`), live LLM scores are already cached before the next generation triggers. While any batch remains pending, automatic generational progression waits for the models to complete their evaluation.
+* **Live Intra-Turn Hot-Swap**: Whenever a background batch completes, `_completed_revision` increments. On the very next frame (`_process`), `EvoMainController` calls `EvoDecisionModel.apply_completed_live_results`, immediately updating deme decision bars, justifications, and 2.5D village action structures without stalling UI rendering. While any batch remains pending, automatic generational progression waits for the models to complete their evaluation.
 
 ---
 

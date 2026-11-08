@@ -346,6 +346,9 @@ class Deme extends RefCounted:
 	var last_decision_probabilities: Dictionary = {"dec-conservative-forage": 1.0} # String -> float
 	var last_dominant_decision_id: String = "dec-conservative-forage"
 	var last_justification: String = ""
+	var defense_tier: int = 0
+	var merged_count: int = 0
+	var secondary_color: String = ""
 
 	func duplicate_deme() -> Deme:
 		var d := Deme.new()
@@ -368,6 +371,9 @@ class Deme extends RefCounted:
 		d.last_decision_probabilities = last_decision_probabilities.duplicate()
 		d.last_dominant_decision_id = last_dominant_decision_id
 		d.last_justification = last_justification
+		d.defense_tier = defense_tier
+		d.merged_count = merged_count
+		d.secondary_color = secondary_color
 		return d
 
 	func get_vital_status() -> String:
@@ -382,16 +388,20 @@ class Deme extends RefCounted:
 		return "stable"
 
 	func get_village_tier() -> int:
-		if population >= 400:
+		if merged_count >= 1 and (population >= 220 or defense_tier >= 3):
+			return 5
+		if population >= 400 or defense_tier >= 3:
 			return 4
-		if population >= 150:
+		if population >= 150 or defense_tier == 2:
 			return 3
-		if population >= 50:
+		if population >= 50 or defense_tier == 1:
 			return 2
 		return 1
 
 	func get_village_roman() -> String:
 		var tier := get_village_tier()
+		if tier == 5:
+			return "V"
 		if tier == 4:
 			return "IV"
 		if tier == 3:
@@ -421,7 +431,10 @@ class Deme extends RefCounted:
 			"lastConfidence": last_confidence,
 			"lastDecisionProbabilities": last_decision_probabilities.duplicate(),
 			"lastDominantDecisionId": last_dominant_decision_id,
-			"lastJustification": last_justification
+			"lastJustification": last_justification,
+			"defenseTier": defense_tier,
+			"mergedCount": merged_count,
+			"secondaryColor": secondary_color
 		}
 
 	static func from_dict(dict_data: Dictionary) -> Deme:
@@ -461,6 +474,12 @@ class Deme extends RefCounted:
 			var fallback_dec_id := d.last_dominant_decision_id if d.last_dominant_decision_id != "" else "dec-conservative-forage"
 			d.last_decision_probabilities = {fallback_dec_id: 1.0}
 		d.last_justification = str(dict_data["lastJustification"])
+		if dict_data.has("defenseTier"):
+			d.defense_tier = int(dict_data["defenseTier"])
+		if dict_data.has("mergedCount"):
+			d.merged_count = int(dict_data["mergedCount"])
+		if dict_data.has("secondaryColor"):
+			d.secondary_color = str(dict_data["secondaryColor"])
 		return d
 
 
@@ -862,3 +881,10 @@ static func is_pact_active(state: WorldState, id_a: String, id_b: String) -> boo
 		return false
 	var key := (id_a + "__" + id_b) if id_a < id_b else (id_b + "__" + id_a)
 	return int(state.active_pacts.get(key, 0)) >= 2
+
+
+static func is_vendetta_active(state: WorldState, id_a: String, id_b: String) -> bool:
+	if state.active_pacts.is_empty():
+		return false
+	var key := (id_a + "__" + id_b) if id_a < id_b else (id_b + "__" + id_a)
+	return int(state.active_pacts.get(key, 0)) < 0

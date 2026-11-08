@@ -12,7 +12,7 @@ const STATUS_COLORS: Dictionary = {
 
 const NON_SWAYING_SPRITES: Array[String] = ["mossy_rock", "fallen_log", "rock_mountain", "tree_stump", "soil_crack"]
 const VILLAGER_POSES: Array[String] = ["villager_idle", "villager_walk1", "villager_walk2"]
-const TRAVELER_ROAD_KINDS: Array[String] = ["collab", "bridge", "pact"]
+const TRAVELER_ROAD_KINDS: Array[String] = ["collab", "bridge", "pact", "tribute", "merge"]
 
 const BIOME_FLORA_PALETTES: Dictionary = {
 	"tropical_forest": [
@@ -147,6 +147,9 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 				"in_war": geo["in_war"],
 				"in_raid": geo["in_raid"],
 				"in_betrayal": geo["in_betrayal"],
+				"in_tribute": geo["in_tribute"],
+				"in_siege": geo["in_siege"],
+				"in_merge": geo["in_merge"],
 				"geo_icons": geo["geo_icons"],
 				"status_col": status_col,
 				"strat_color": strat_color,
@@ -179,10 +182,14 @@ static func get_village_building_layout(
 		3:
 			items.append({"sprite": "tier3_townhall", "offset": Vector2(0, -44) * sf, "scale": 2.58 * sf})
 			items.append({"sprite": "tier3_house", "offset": Vector2(-62, -10) * sf, "scale": 2.38 * sf})
-		_:
+		4:
 			items.append({"sprite": "tier4_citadel", "offset": Vector2(0, -48) * sf, "scale": 2.65 * sf})
 			items.append({"sprite": "tier4_tower", "offset": Vector2(-66, -14) * sf, "scale": 2.38 * sf})
 			items.append({"sprite": "tier4_windmill", "offset": Vector2(66, -14) * sf, "scale": 2.38 * sf})
+		_:
+			items.append({"sprite": "tier5_metropolis", "offset": Vector2(0, -50) * sf, "scale": 2.68 * sf})
+			items.append({"sprite": "tier4_tower", "offset": Vector2(-68, -14) * sf, "scale": 2.40 * sf})
+			items.append({"sprite": "tier3_townhall", "offset": Vector2(68, -14) * sf, "scale": 2.38 * sf})
 
 	if has_culture:
 		var totem_scale := (2.12 + mini(3, cultural_count) * 0.16) * sf
@@ -221,11 +228,22 @@ static func _draw_village(r: Node2D, village: Dictionary) -> void:
 		EvoWorldOverlayRenderer.draw_ellipse_filled(ci, b_foot + Vector2(0, -3.0 * sf), 26.0 * sf, 14.5 * sf, Color("#7c5c3b") * modulate_col)
 		EvoWorldOverlayRenderer.draw_ellipse_filled(ci, b_foot + Vector2(0, -3.0 * sf), 21.5 * sf, 11.5 * sf, Color("#cbb082") * modulate_col)
 
-	var plinth_r := 50.0 * sf
+	var def_tier: int = deme.defense_tier
+	var is_merged: bool = deme.merged_count > 0
+	var plinth_r := (54.5 if is_merged else 50.0) * sf
 	var rim_r := plinth_r + 5.5 * sf
 	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, plaza_center, rim_r, rim_r * 0.58, Color("#5c4028") * modulate_col)
 	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, plaza_center, plinth_r, plinth_r * 0.58, Color("#c2a378") * modulate_col)
 	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, plaza_center, plinth_r * 0.74, plinth_r * 0.74 * 0.58, Color("#d9be96") * modulate_col)
+	if is_merged:
+		EvoWorldOverlayRenderer.draw_ellipse_outline(
+			ci,
+			plaza_center,
+			plinth_r * 0.64,
+			plinth_r * 0.64 * 0.58,
+			Color("#fbbf24") * modulate_col,
+			2.4 * sf
+		)
 
 	# Inner Strategy Mosaic / Carpet Ring
 	var mosaic_outer_r := plinth_r * 0.52
@@ -286,9 +304,65 @@ static func _draw_village(r: Node2D, village: Dictionary) -> void:
 		pole_top + Vector2(1.0 * sf, 5.5 * sf)
 	])
 	ci.draw_colored_polygon(flag_hi_pts, strat_hi * modulate_col)
+	if is_merged:
+		var sec_col := Color(deme.secondary_color) if deme.secondary_color != "" else Color("#fbbf24")
+		var sec_flag_pts := PackedVector2Array([
+			pole_top + Vector2(1.0 * sf, 10.5 * sf),
+			pole_top + Vector2(16.0 * sf, 13.5 * sf - wave * 0.8),
+			pole_top + Vector2(1.0 * sf, 18.5 * sf)
+		])
+		ci.draw_colored_polygon(sec_flag_pts, sec_col * modulate_col)
 
-	var ring_r := plinth_r + 4.5 * sf
+	# Procedural Defense Perimeter Rings around plaza_center
+	var def_r := plinth_r + 3.2 * sf
+	if def_tier == 1:
+		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, def_r, def_r * 0.58, Color("#5c3317") * modulate_col, 3.5 * sf)
+		for s_i in range(22):
+			var ang := TAU * float(s_i) / 22.0
+			if absf(ang - PI * 0.5) < 0.24:
+				continue
+			var st_base := plaza_center + Vector2(cos(ang) * def_r, sin(ang) * def_r * 0.58)
+			var st_top := st_base + Vector2(0.0, -5.5 * sf)
+			ci.draw_line(st_base, st_top, Color("#78350f") * modulate_col, 2.4 * sf)
+			ci.draw_circle(st_top, 1.3 * sf, Color("#fde68a") * modulate_col)
+	elif def_tier == 2:
+		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, def_r, def_r * 0.58, Color("#475569") * modulate_col, 5.5 * sf)
+		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, def_r, def_r * 0.58, Color("#94a3b8") * modulate_col, 3.2 * sf)
+		for m_i in range(20):
+			var ang := TAU * float(m_i) / 20.0
+			if absf(ang - PI * 0.5) < 0.24:
+				continue
+			var m_pt := plaza_center + Vector2(cos(ang) * def_r, sin(ang) * def_r * 0.58) + Vector2(0.0, -2.2 * sf)
+			ci.draw_rect(Rect2(m_pt - Vector2(2.0 * sf, 2.0 * sf), Vector2(4.0 * sf, 3.5 * sf)), Color("#cbd5e1") * modulate_col, true)
+	elif def_tier >= 3:
+		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, def_r, def_r * 0.58, Color("#334155") * modulate_col, 7.0 * sf)
+		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, def_r, def_r * 0.58, Color("#94a3b8") * modulate_col, 4.2 * sf)
+		for m_i in range(20):
+			var ang := TAU * float(m_i) / 20.0
+			if absf(ang - PI * 0.5) < 0.24:
+				continue
+			var m_pt := plaza_center + Vector2(cos(ang) * def_r, sin(ang) * def_r * 0.58) + Vector2(0.0, -2.5 * sf)
+			ci.draw_rect(Rect2(m_pt - Vector2(2.2 * sf, 2.2 * sf), Vector2(4.4 * sf, 4.0 * sf)), Color("#e2e8f0") * modulate_col, true)
+		for b_ang in [PI * 0.25, PI * 0.75, PI * 1.25, PI * 1.75]:
+			var b_pt := plaza_center + Vector2(cos(b_ang) * def_r, sin(b_ang) * def_r * 0.58)
+			ci.draw_circle(b_pt, 6.2 * sf, Color("#64748b") * modulate_col)
+			ci.draw_circle(b_pt + Vector2(0.0, -2.2 * sf), 4.6 * sf, strat_color * modulate_col)
+			ci.draw_circle(b_pt + Vector2(0.0, -3.5 * sf), 1.8 * sf, Color("#fbbf24") * modulate_col)
+
+	var ring_r := plinth_r + (6.8 if def_tier > 0 else 4.5) * sf
 	EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, ring_r, ring_r * 0.58, status_col * modulate_col, 3.4)
+
+	if bool(village.get("in_siege", false)):
+		var siege_pulse := 0.65 + 0.35 * sin(r._anim_time * 6.5)
+		var siege_r := plinth_r + 12.5 * sf
+		EvoWorldOverlayRenderer.draw_ellipse_outline(
+			ci,
+			plaza_center,
+			siege_r,
+			siege_r * 0.58,
+			Color(0.98, 0.32, 0.12, 0.85 * siege_pulse) * modulate_col,
+			3.2 * sf
+		)
 
 	if deme.id == r.selected_deme_id:
 		var sel_r := plinth_r + 11.0 * sf
@@ -471,8 +545,20 @@ static func collect_village_building_props(village: Dictionary, props: Array[Pro
 		| (2 if bool(village.get("in_war", false)) else 0)
 		| (4 if bool(village.get("in_raid", false)) else 0)
 		| (8 if bool(village.get("in_betrayal", false)) else 0)
+		| (16 if bool(village.get("in_tribute", false)) else 0)
+		| (32 if bool(village.get("in_siege", false)) else 0)
 	)
-	var vp_key: Array = [tier, sf, c_count, arch, flags, m, v_pos]
+	var vp_key: Array = [
+		tier,
+		sf,
+		c_count,
+		arch,
+		flags,
+		deme.defense_tier,
+		deme.merged_count,
+		m,
+		v_pos
+	]
 	if deme.has_meta("_vp_key") and (deme.get_meta("_vp_key") as Array) == vp_key:
 		props.append_array(deme.get_meta("_vp_val") as Array[Prop])
 		return
@@ -493,14 +579,35 @@ static func collect_village_building_props(village: Dictionary, props: Array[Pro
 
 
 static func _draw_settlement_props(village: Dictionary, props: Array[Prop]) -> void:
+	var deme: EvoTypes.Deme = village["deme"]
 	var v_world: Vector2 = village["world_xy"]
 	var v_pos: Vector2 = village["pos"]
 	var top_z: float = village["top_z"]
 	var sf: float = village["sf"]
 	var m: Color = village["modulate"]
+	if deme.defense_tier == 1:
+		var off := Vector2(0, 38) * sf
+		var p := world_prop("prop_defense_palisade", v_world, top_z, off, 2.20 * sf, m)
+		p.set_foot(v_pos + off)
+		props.append(p)
+	elif deme.defense_tier == 2:
+		var off := Vector2(0, 38) * sf
+		var p := world_prop("prop_defense_wall", v_world, top_z, off, 2.25 * sf, m)
+		p.set_foot(v_pos + off)
+		props.append(p)
+	elif deme.defense_tier >= 3:
+		var off := Vector2(0, 39) * sf
+		var p := world_prop("prop_defense_fortress", v_world, top_z, off, 2.30 * sf, m)
+		p.set_foot(v_pos + off)
+		props.append(p)
 	if bool(village.get("has_pact", false)):
-		var off := Vector2(0, 34) * sf
+		var off := (Vector2(-36, 30) if deme.defense_tier > 0 else Vector2(0, 34)) * sf
 		var p := world_prop("prop_pact_totem", v_world, top_z, off, 2.15 * sf, m)
+		p.set_foot(v_pos + off)
+		props.append(p)
+	if deme.merged_count > 0:
+		var off := Vector2(36, 30) * sf
+		var p := world_prop("prop_unity_monument", v_world, top_z, off, 2.15 * sf, m)
 		p.set_foot(v_pos + off)
 		props.append(p)
 	if bool(village.get("in_war", false)):
@@ -513,6 +620,16 @@ static func _draw_settlement_props(village: Dictionary, props: Array[Prop]) -> v
 		var p := world_prop("prop_raid_loot", v_world, top_z, off, 2.15 * sf, m)
 		p.set_foot(v_pos + off)
 		props.append(p)
+	if bool(village.get("in_tribute", false)):
+		var off := Vector2(56, 16) * sf
+		var p := world_prop("prop_tribute_chest", v_world, top_z, off, 2.10 * sf, m)
+		p.set_foot(v_pos + off)
+		props.append(p)
+	if bool(village.get("in_siege", false)):
+		var off := Vector2(-66, 18) * sf
+		var p := world_prop("prop_siege_engine", v_world, top_z, off, 2.25 * sf, m)
+		p.set_foot(v_pos + off)
+		props.append(p)
 	if bool(village.get("in_betrayal", false)):
 		var off := Vector2(0, -28) * sf
 		var p := world_prop("prop_betrayal_ruin", v_world, top_z, off, 2.20 * sf, m)
@@ -523,12 +640,16 @@ static func _draw_settlement_props(village: Dictionary, props: Array[Prop]) -> v
 static func build_geopolitics_by_deme(state: EvoTypes.WorldState) -> Dictionary:
 	var geo_by_deme: Dictionary = {}
 	for did in state.demes.keys():
+		var d: EvoTypes.Deme = state.demes[did]
 		var empty_icons: Array[String] = []
 		geo_by_deme[did] = {
 			"has_pact": false,
 			"in_war": false,
 			"in_raid": false,
 			"in_betrayal": false,
+			"in_tribute": false,
+			"in_siege": false,
+			"in_merge": d.merged_count > 0,
 			"geo_icons": empty_icons
 		}
 	for pk_var in state.active_pacts.keys():
@@ -541,7 +662,7 @@ static func build_geopolitics_by_deme(state: EvoTypes.WorldState) -> Dictionary:
 				geo_by_deme[parts[1]]["has_pact"] = true
 	for flow in state.active_flows:
 		var ft := flow.flow_type
-		if not ft in ["war", "raid", "betrayal", "pact"]:
+		if not ft in ["war", "raid", "betrayal", "pact", "tribute", "siege", "merge"]:
 			continue
 		var flag_key := "has_pact" if ft == "pact" else ("in_" + ft)
 		if flow.from_deme_id != "" or flow.to_deme_id != "":
@@ -559,14 +680,23 @@ static func build_geopolitics_by_deme(state: EvoTypes.WorldState) -> Dictionary:
 					if geo_by_deme.has(did):
 						geo_by_deme[did][flag_key] = true
 	for did in geo_by_deme.keys():
+		var d: EvoTypes.Deme = state.demes[did]
 		var entry: Dictionary = geo_by_deme[did]
 		var icons: Array[String] = entry["geo_icons"]
+		if d.defense_tier > 0:
+			icons.append("defense")
+		if d.merged_count > 0 or bool(entry["in_merge"]):
+			icons.append("merge")
+		if bool(entry["in_siege"]):
+			icons.append("siege")
 		if bool(entry["in_war"]):
 			icons.append("war")
 		if bool(entry["in_betrayal"]):
 			icons.append("betrayal")
 		if bool(entry["in_raid"]):
 			icons.append("raid")
+		if bool(entry["in_tribute"]):
+			icons.append("tribute")
 		if bool(entry["has_pact"]):
 			icons.append("pact")
 	return geo_by_deme
@@ -577,6 +707,9 @@ static func resolve_deme_geopolitics(state: EvoTypes.WorldState, deme: EvoTypes.
 	var in_war := false
 	var in_raid := false
 	var in_betrayal := false
+	var in_tribute := false
+	var in_siege := false
+	var in_merge := deme.merged_count > 0
 	if not state.active_pacts.is_empty():
 		for other_id in state.demes.keys():
 			if other_id != deme.id and EvoTypes.is_pact_active(state, deme.id, other_id):
@@ -597,13 +730,27 @@ static func resolve_deme_geopolitics(state: EvoTypes.WorldState, deme: EvoTypes.
 				in_betrayal = true
 			"pact":
 				has_pact = true
+			"tribute":
+				in_tribute = true
+			"siege":
+				in_siege = true
+			"merge":
+				in_merge = true
 	var geo_icons: Array[String] = []
+	if deme.defense_tier > 0:
+		geo_icons.append("defense")
+	if deme.merged_count > 0 or in_merge:
+		geo_icons.append("merge")
+	if in_siege:
+		geo_icons.append("siege")
 	if in_war:
 		geo_icons.append("war")
 	if in_betrayal:
 		geo_icons.append("betrayal")
 	if in_raid:
 		geo_icons.append("raid")
+	if in_tribute:
+		geo_icons.append("tribute")
 	if has_pact:
 		geo_icons.append("pact")
 	return {
@@ -611,6 +758,9 @@ static func resolve_deme_geopolitics(state: EvoTypes.WorldState, deme: EvoTypes.
 		"in_war": in_war,
 		"in_raid": in_raid,
 		"in_betrayal": in_betrayal,
+		"in_tribute": in_tribute,
+		"in_siege": in_siege,
+		"in_merge": in_merge,
 		"geo_icons": geo_icons
 	}
 

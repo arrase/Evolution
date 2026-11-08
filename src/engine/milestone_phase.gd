@@ -322,6 +322,7 @@ static func run_milestone_phase(
 	var is_single_survivor_deme := (
 		total_lineages == 1
 		and living_demes.size() == 1
+		and survivor.merged_count == 0
 		and state.generation >= 15
 		and has_non_migrant_extinction
 	)
@@ -329,6 +330,7 @@ static func run_milestone_phase(
 		total_lineages > 1
 		and has_extinct_root_lineage
 		and living_root_lineages.size() == 1
+		and not (living_demes.size() == 1 and survivor.merged_count > 0 and not has_non_migrant_extinction)
 	)
 
 	if has_prior_extinction and not already_logged_single and (is_single_survivor_deme or is_single_surviving_lineage):

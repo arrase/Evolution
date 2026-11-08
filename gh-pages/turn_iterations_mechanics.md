@@ -20,13 +20,13 @@ sequenceDiagram
     Turn->>Env: run_environmental_phase(state, lang)
     Note over Env: Increment gen, flip season,<br/>glacial sea cycle, flood/emerge,<br/>regenerate K & R, +15 mana
     Turn->>Cog: evaluate_all_demes(state, lang)
-    Note over Cog: Compute 10-part signatures,<br/>sync Ollama System 1 cache + env blend,<br/>assign normalized P(d)
+    Note over Cog: Compute coarsened 10-part signatures,<br/>6-gen memory & neighbor tags,<br/>sync Ollama System 1 (75/25 blend)
     Turn->>Bio: run_biophysical_phase(state, lang)
-    Note over Bio: 3A. Ecology, Game Theory & Geopolitics:<br/>Hawk-Dove, Extraction, Symbiosis, K Degrade,<br/>Alliance Pacts, Betrayals & Plunder Raids<br/>3B. Demography, Wars & Migration:<br/>Metabolism, Growth, Wars, Fission, Bottlenecks, Merging
+    Note over Bio: 3A. Ecology, Game Theory, Diplomacy & Walls:<br/>Hawk-Dove, Extraction, Trade (up to 1.35x), K Degrade,<br/>Pacts, Coalitions, Vendettas, Tribute, Raids & Fortification<br/>3B. Demography, Sieges, Wars & Synoecism:<br/>Metabolism & Upkeep, Growth, Wars/Sieges, Fission, Synoecism
     Turn->>Mile: run_milestone_phase(state, lang)
     Note over Mile: Synthesize top milestone trait<br/>(Speciation > Baldwin > Innovation),<br/>check Macro-Outcomes
     Turn->>Pre: prefetch_for_state(state)
-    Note over Pre: Pre-warm next turn's uncached<br/>signatures on background worker
+    Note over Pre: Pre-warm up to 8 next-turn<br/>signatures on background worker
     Turn-->>Main: Return { generation, new_entries, has_milestone, has_macro_outcome }
 ```
 
@@ -40,13 +40,13 @@ sequenceDiagram
    * Applies glacial sea-level cycles (every 8 generations), coastal flooding/emergence, submerged deme relocation (`altitude <= 0.85` and `altitude - 0.50 <= v_eff.spatial_mobility`, with a $10\%$ transit population loss and `"migration"` flow) or drowning (`"extinction"` if no passable non-ocean refuge neighbor exists), passive $K$ recovery ($+5\%$ normal or $+0.5\%$ after a Tragedy of the Commons), and seasonal biomass $R$ regeneration.
    * Regenerates player Selective Pressure ("Mana") points: `state.selective_pressure_points += state.selective_pressure_regen_per_turn` (`+15` per generation).
 2. **Cognitive Phase (`EvoDecisionModel.evaluate_all_demes`)**:
-   * Evaluates every surviving deme via the Dual-Model System 1 Ollama engine blended ($60\%/40\%$) with environmental and geopolitical pressures, and assigns a normalized probability distribution $P(d)$ across all eligible behavioral decisions (`last_decision_probabilities`) along with `last_dominant_decision_id`, `last_confidence`, and `last_justification`.
+   * Evaluates every surviving deme via the Dual-Model System 1 Ollama engine (`/v1/systemone`) with its 6-generation historical memory digest and rich neighbor relational labels, blended (**$75\%$ live LLM / $25\%$ environmental & geopolitical pressures**), and assigns a normalized probability distribution $P(d)$ across all eligible behavioral decisions (`last_decision_probabilities`) along with `last_dominant_decision_id`, `last_confidence`, and `last_justification`.
 
 ---
 
-## Stage 3A: Ecology, Extraction, Game Theory & Geopolitics (`EvoEcologyInteraction`)
+## Stage 3A: Ecology, Extraction, Diplomacy, Raids & Fortifications (`EvoEcologyInteraction`)
 
-Once every deme has its probability distribution $P(d)$ and effective 6-axis vector $\mathbf{v}_{\text{eff}}$, `EvoEcologyInteraction.run_resource_and_symbiosis_phase` resolves intra-hex and inter-hex ecological and geopolitical interactions in eight sequential steps:
+Once every deme has its probability distribution $P(d)$ and effective 6-axis vector $\mathbf{v}_{\text{eff}}$, `EvoEcologyInteraction.run_resource_and_symbiosis_phase` resolves intra-hex and inter-hex ecological, diplomatic, and defensive interactions in nine sequential steps:
 
 ### Step 1: Initial Caloric Demand ($D_i$)
 Each resident deme $i$ in a hexagon requests biomass proportional to its population $P_i$ and effective `extraction_efficiency`:
@@ -89,11 +89,14 @@ $$E_{\text{total}} = \min(R_{\text{cell}},\ D_{\text{total}}), \qquad E_i = \beg
 
 $$R_{\text{cell}} \leftarrow \max\big(0.0,\ \text{snapped}(R_{\text{cell}} - E_{\text{total}},\ 0.01)\big)$$
 
-### Step 5: Reciprocal Symbiosis & Horizontal Cultural Transmission
+### Step 5: Reciprocal Symbiosis, Complementary Inter-Biome/Cross-Cultural Trade & Horizontal Transmission
 Symbiosis operates both **intra-hex** (among cohabiting Exchangers with $P(\text{"exchange"}) \ge 0.20$) and **inter-hex** (between an Exchanger and any Exchanger in an adjacent passable neighbor hex with `altitude <= 0.85`):
 
-1. **$+20\%$ Non-Zero-Sum Caloric Bonus**: Each participating Exchanger receives a one-time **$+20\%$ boost** to its extracted energy for the turn:
-   $$E_i \leftarrow \text{snapped}(E_i \times 1.20,\ 0.0001)$$
+1. **Complementary Caloric Trade Surplus (`1.15x` to `1.35x`)**:
+   * **Intra-Hex Symbiosis**: Each cohabiting Exchanger receives a one-time **$+20\%$ boost** ($E_i \leftarrow E_i \times 1.20$).
+   * **Inter-Hex Complementary Trade**: When trading across neighboring hexes, the caloric multiplier rewards ecological and cultural complementarity:
+     $$M_{\text{trade}} = 1.15 + \begin{cases} 0.12 & \text{if } \text{biome}_A \neq \text{biome}_B \\ 0.00 & \text{otherwise} \end{cases} + \begin{cases} 0.08 & \text{if } \text{cultural\_trait\_ids}_A \neq \text{cultural\_trait\_ids}_B \\ 0.00 & \text{otherwise} \end{cases}$$
+     scaling extracted energy up to **$1.35\times$ (`+35%`)** when exchanging across distinct biomes ($+12\%$) and distinct cultural repertoires ($+8\%$).
 2. **Active Trade Road Flow**: Spawns an `"exchange"` `HexEdgeFlow` (`intensity = 0.60` intra-hex, `0.55` inter-hex) rendered as a cobblestone trade road or wooden bridge with caravan carts.
 3. **Horizontal Cultural Diffusion**: For every ordered pair `(donor, receiver)` of interacting Exchangers:
    * If `receiver` has biological cultural capacity (`enables_cultural_transmission == true`, i.e., `bio-encephalization` or `bio-social-instinct`),
@@ -114,37 +117,57 @@ After extraction, the resident demes' combined ecological impact $\Sigma_{\text{
   Conversely, if degradation did not trigger, no resident deme is overexploiting ($P(\text{"overexploit"}) < 0.30$), and $\Sigma_{\text{eco}} > +0.10$ (e.g., demes practicing `cul-communal-conservation`), the population actively enriches its habitat:
   $$K_{\text{cell}} \leftarrow \text{clamp}\Big(\text{snapped}\big(K_{\text{cell}} \times (1.0 + 0.05 \cdot \Sigma_{\text{eco}}),\ 0.01\big),\ 10.0,\ K_{\max}\Big)$$
 
-### Step 7: Alliance Pacts & Opportunistic Betrayals (`_run_pacts_and_betrayals`)
+### Step 7: Alliance Pacts, Defensive Coalitions, Opportunistic Betrayals & Vendettas (`_run_pacts_and_betrayals`)
 Next, `EvoEcologyInteraction` evaluates all cohabiting and adjacent passable (`altitude <= 0.85`, non-ocean) deme pairs `pair_key = "idA__idB"` tracked in `state.active_pacts`:
 
+* **Multi-Turn Vendettas / Grudges (`active_pacts < 0`, `EvoTypes.is_vendetta_active`)**:
+  * Negative values in `state.active_pacts[pair_key]` represent active hostility memory (set to `-4` turns after a betrayal, `-3` after a territorial conquest, and `-2` after a raid or repelled war).
+  * Each turn, a negative vendetta counter increments by `+1` toward `0` (deleting the entry once it reaches `0`). While `prev_turns < 0`, the pair cannot form an Alliance Pact and appears as `vendetta` in cognitive neighbor briefings and the HUD Inspector.
 * **Opportunistic Betrayal (`_execute_betrayal`)**:
-  If a formal pact already exists (`prev_turns >= 2`) and one partner is under severe demographic or ecological stress (`energy_reserves < 42.0`, `last_energy_delta <= -6.0`, `R < 0.25 * P`, or hex crowding $> 0.72 \cdot K$) **AND** exhibits opportunistic or aggressive tendencies ($P(\text{"overexploit"}) + P(\text{"dispute"}) \ge 0.24$, `cul-warrior-expansion`, `strat-war`, or `social_cohesion < 0.35`), the stressed partner breaks the pact in a surprise betrayal:
+  If a formal pact already exists (`prev_turns >= 2`) and one partner is under severe demographic or ecological stress (`energy_reserves < 42.0`, `last_energy_delta <= -6.0`, `R < 0.25 * P`, or hex crowding $> 0.72 \cdot K$) **AND** exhibits opportunistic or aggressive tendencies ($P(\text{"overexploit"}) + P(\text{"dispute"}) \ge 0.24$, `cul-warrior-expansion`, `strat-war`, or `social_cohesion < 0.35`)—and is not deterred by a heavily fortified partner (`victim.defense_tier >= 2` deters betrayal unless betrayer hostility exceeds cooperation $+ 0.15$)—the stressed partner breaks the pact in a surprise ambush:
   1. **Conserved Caloric Plunder**: Plunders $\text{loot}_{\text{desired}} = \text{clamp}(0.30 \cdot E_{\text{reserves, victim}} + 0.25 \cdot E_{\text{victim}},\ 10.0,\ 45.0)$ directly from the victim's `energy_reserves` and current-turn extracted energy $E_{\text{victim}}$, adding the exact stolen sum to the betrayer's reserves (capped at `220.0`).
   2. **Ambush Casualties**: Inflicts $\max(3,\ \text{round}(0.14 \cdot P_{\text{victim}}))$ casualties on the victim (floor `5`).
-  3. **Severed Pact & Chronicle**: Deletes `state.active_pacts[pair_key]`, records a severed link in `state.disused_connections`, spawns a crimson `"betrayal"` flow (`intensity = 1.0`), and logs a `"betrayal"` Chronicle entry.
-* **Alliance Pact Formation & Mutual Aid**:
-  If both partners are cooperative ($P(\text{"cooperate"}) + P(\text{"exchange"}) \ge 0.30$, $P(\text{"dispute"}) < 0.22$, and neither carries `cul-warrior-expansion`), `state.active_pacts[pair_key]` increments by $+1$:
-  1. **Formalization (`next_turns == 2`)**: When a pair reaches `2` consecutive cooperative turns (`EvoTypes.is_pact_active == true`), a `"pact"` Chronicle entry is recorded.
-  2. **$+15\%$ Mutual Caloric Bonus & Distress Aid (`next_turns >= 2`)**: Each ally that did not already receive the $+20\%$ symbiosis bonus receives a **$+15\%$ boost** to its extracted energy ($E_i \leftarrow E_i \times 1.15$). In addition, if one partner is in caloric distress while the other holds surplus reserves ($E_{\text{reserves}} > 60.0$), the surplus ally transfers $\min(14.0,\ (E_{\text{reserves}} - 50.0) \times 0.25)$ energy to the distressed partner. Spawns an emerald `"pact"` highway flow (`intensity = 0.80`) and provides up to **$+0.75$ shared military defense** (`compute_pact_defense_bonus`) against raids and invasions.
+  3. **Deep Vendetta & Chronicle**: Sets `state.active_pacts[pair_key] = -4` (a 4-turn blood vendetta), records a severed link in `state.disused_connections`, spawns a crimson `"betrayal"` flow (`intensity = 1.0`), and logs a `"betrayal"` Chronicle entry.
+* **Alliance Pact Formation, Defensive Coalitions & Mutual Aid**:
+  * **Defensive Coalition Threshold**: Normally, pact formation requires $P(\text{"cooperate"}) + P(\text{"exchange"}) \ge 0.30$, $P(\text{"dispute"}) < 0.22$, and no `cul-warrior-expansion`. However, when either partner faces an adjacent non-allied warrior threat (`_has_adjacent_warrior_threat`), the required cooperation threshold drops to **`0.22`** (and two strongly cooperative demes $\ge 0.36$ can form a defensive pact even if carrying `cul-warrior-expansion`), incrementing `state.active_pacts[pair_key]` by $+1$.
+  * **Formalization (`next_turns == 2`)**: When a pair reaches `2` consecutive cooperative turns (`EvoTypes.is_pact_active == true`), a `"pact"` Chronicle entry is recorded.
+  * **$+15\%$ Mutual Caloric Bonus, Distress Aid & Shared Defense (`next_turns >= 2`)**: Each ally that did not already receive the symbiosis bonus receives a **$+15\%$ boost** to its extracted energy ($E_i \leftarrow E_i \times 1.15$). If one partner is in caloric distress while the other holds surplus reserves ($E_{\text{reserves}} > 60.0$), the surplus ally transfers $\min(14.0,\ (E_{\text{reserves}} - 50.0) \times 0.25)$ energy to the distressed partner. Spawns an emerald `"pact"` highway flow (`intensity = 0.80`) and provides up to **$+1.10$ shared military defense** (`compute_pact_defense_bonus`, where each cohabiting/adjacent ally contributes $0.25 \cdot \text{clamp}(P_{\text{ally}} / \max(20, P_{\text{victim}}), 0.4, 1.5) + 0.08 \cdot \text{ally.defense\_tier}$) against raids and invasions.
 
-### Step 8: Cross-Border Plunder Raids (`_run_raids`)
-Non-allied, non-close-kin cohabiting or adjacent demes (`altitude <= 0.85`) with raiding capability (`cul-warrior-expansion`, `strat-war`, $P(\text{"dispute"}) \ge 0.20$, or $P(\text{"overexploit"}) \ge 0.30$) and $P(\text{"dispute"}) + P(\text{"overexploit"}) \ge 0.28$ under environmental pressure launch **Plunder Raids** (`_execute_raid_if_successful`):
+### Step 8: Cross-Border Plunder Raids & Tribute Appeasement (`_run_raids`)
+Non-allied, non-close-kin cohabiting or adjacent demes (`altitude <= 0.85`) with raiding capability (`cul-warrior-expansion`, `strat-war`, $P(\text{"dispute"}) \ge 0.20$, or $P(\text{"overexploit"}) \ge 0.30$) and $P(\text{"dispute"}) + P(\text{"overexploit"}) \ge 0.28$ under environmental pressure attempt **Plunder Raids** (`_execute_raid_if_successful`) against targets with `defense_tier < 3` (**Tier 3 Castles are completely immune to minor plunder raids**):
 
-* **Force Comparison**: The attacker's `raider_score` (scaled by population, $P(\text{"dispute"})$, `social_cohesion`, `spatial_mobility`, and `+0.35` for `cul-warrior-expansion`) is compared against the target's `defense_score` (which includes `compute_pact_defense_bonus` up to $+0.75$ from adjacent pact allies).
-* **Successful Raid (`raider_score > defense_score * 0.75`)**:
-  1. **Conserved Loot Transfer**: Plunders $\text{loot}_{\text{desired}} = \text{clamp}\big((0.28 \cdot E_{\text{reserves, victim}} + 0.24 \cdot E_{\text{victim}}) \cdot \text{force\_ratio},\ 10.0,\ 42.0\big)$ from the victim's `energy_reserves` and extracted energy $E_{\text{victim}}$ and transfers the exact stolen calories to the raider (`<= 220.0`).
-  2. **Skirmish Casualties & Visuals**: Raider loses $2.5\%$ population (`max 1`), defender loses $4.0\%$ (`max 2`), an orange `"raid"` flow is spawned, and a `"raid"` Chronicle entry is logged.
+* **Force Comparison**: The attacker's `raider_score` (scaled by population, $P(\text{"dispute"})$, `social_cohesion`, `spatial_mobility`, and `+0.35` for `cul-warrior-expansion`) is compared against the target's `defense_score`, which adds `DEFENSE_TIER_BONUS[defense_tier]` (`+0.45` at Lv.1, `+0.95` at Lv.2, `+1.55` at Lv.3) and `compute_pact_defense_bonus` (up to `+1.10`).
+* **Tribute / Appeasement (`tribute`)**:
+  If an under-fortified cooperative or mercantile settlement (`defense_tier < 2`, `energy_reserves >= 55.0`, and either $P(\text{"exchange"}) \ge 0.28$ or $(P(\text{"cooperate"}) + P(\text{"exchange"}) \ge 0.65 \land P(\text{"dispute"}) < 0.10)$) faces a superior raider (`raider_score > defense_score * 0.92`), it deters the raid through diplomatic tribute:
+  1. **18% Reserve Tribute**: Transfers $\text{tribute} = \text{clamp}(0.18 \cdot E_{\text{reserves, target}},\ 10.0,\ 28.0)$ directly from the target's reserves to the raider (capped at `240.0`).
+  2. **Zero Casualties & Temporary Truce**: Neither population suffers casualties, `state.active_pacts[pair_key]` is set to `1` (establishing a temporary truce and clearing any prior vendetta), a golden `"tribute"` caravan flow (`intensity = 0.75`) is spawned, and a `"tribute"` Chronicle entry is logged.
+* **Successful Plunder Raid (`raider_score > defense_score * 0.75`)**:
+  1. **Fortification Loot & Casualty Mitigation**: Perimeter defenses scale down both plundered calories (`loot_shield_mult`: `0.75x` at Lv.1 Palisade, `0.40x` at Lv.2 Stone Wall) and defender casualties (`cas_shield_mult`: `0.75x` at Lv.1, `0.50x` at Lv.2).
+  2. **Conserved Loot Transfer**: Plunders $\text{loot}_{\text{desired}} = \text{clamp}\big((0.28 \cdot E_{\text{reserves, victim}} + 0.24 \cdot E_{\text{victim}}) \cdot \text{force\_ratio} \cdot \text{loot\_shield\_mult},\ 6.0,\ 42.0\big)$ from the victim's `energy_reserves` and extracted energy $E_{\text{victim}}$ and transfers the exact stolen calories to the raider (`<= 240.0`).
+  3. **Skirmish Casualties, Vendetta & Visuals**: Raider loses $2.5\%$ population (`max 1`), defender loses $4.0\% \times \text{cas\_shield\_mult}$ (`max 1`), `state.active_pacts[pair_key]` is set to $\le -2$ (vendetta), an orange `"raid"` flow is spawned, and a `"raid"` Chronicle entry is logged.
+
+### Step 9: Multi-Tier Defense Fortification (`_run_defense_fortification_phase`)
+Settlements with `defense_tier < 3` that experience security pressure (facing an adjacent rival, an active vendetta, or practicing `dec-cooperate-store` / `cul-communal-conservation` / `cul-symbolic-storage` / `bio-k-strategy` with $P(\text{"cooperate"}) + P(\text{"dispute"}) \ge 0.20$) can upgrade their perimeter fortifications by one tier per turn:
+
+| Tier | Fortification Name | Defense Bonus | Raid Protection | Requirements (`pop` / `reserves` / `hex R`) | Base Cost (`reserves` + `hex R`) | Upkeep / Turn |
+| :---: | :--- | :---: | :--- | :---: | :---: | :---: |
+| **Lv. 1** | **Palisade & Watchtower** | **`+0.45` (`+45%`)** | `-25%` raid loot & casualties (`0.75x`) | `pop >= 38`, `res >= 58`, `R >= 35` | `25.0` reserves + `15.0` hex $R$ | `1.5` energy |
+| **Lv. 2** | **Stone Wall & Fort** | **`+0.95` (`+95%`)** | `-60%` raid loot (`0.40x`), `-50%` casualties (`0.50x`), betrayal deterrence | `pop >= 65`, `res >= 92`, `R >= 55` | `45.0` reserves + `25.0` hex $R$ | `3.0` energy |
+| **Lv. 3** | **Castle / Fortified Citadel** | **`+1.55` (`+155%`)** | **Immune to minor plunder raids**, heavy siege attrition to attackers | `pop >= 100`, `res >= 130`, `R >= 75` | `65.0` reserves + `35.0` hex $R$ | `5.0` energy |
+
+* **15% Conservation & Storage Discount (`* 0.85`)**: Demes carrying `cul-communal-conservation`, `cul-symbolic-storage`, or `bio-k-strategy` receive a **$15\%$ reduction** on required reserves, reserve cost, and hex biomass cost.
+* **Allied Co-Financing**: If a deme has at least `req_res - 35.0` reserves, cohabiting or adjacent Pact allies holding `energy_reserves >= 80.0` automatically co-finance the shortfall (contributing up to $\min(30.0,\ E_{\text{reserves, ally}} - 55.0)$ per ally). Upgrading to Tier 2 or Tier 3 logs a `"fortify"` Chronicle entry.
 
 ---
 
-## Stage 3B: Demography, Storage, Territorial Wars, Migration & Bottlenecks (`EvoDemographyMigration`)
+## Stage 3B: Demography, Upkeep, Territorial Wars, Sieges & Synoecism (`EvoDemographyMigration`)
 
-### Step 1: Metabolic Expenditure & Food Storage Buffering
-Each deme expends energy $C_{\text{metabolic}}$ based on its population $P_i$, effective `metabolic_cost`, ambient thermal extremity $|T_{\text{cell}}|$ (mitigated by positive `spatial_mobility`), and any Hawk-Hawk combat penalty ($\text{hawk\_mult} \in \{1.0, 1.25\}$):
+### Step 1: Metabolic Expenditure, Fortification Upkeep & Food Storage Buffering
+Each deme expends energy $C_{\text{metabolic}}$ based on its population $P_i$, effective `metabolic_cost`, ambient thermal extremity $|T_{\text{cell}}|$ (mitigated by positive `spatial_mobility`), and any Hawk-Hawk combat penalty ($\text{hawk\_mult} \in \{1.0, 1.25\}$), plus per-turn **fortification maintenance upkeep** $C_{\text{upkeep}} \in \{0.0, 1.5, 3.0, 5.0\}$ for `defense_tier` `0..3`:
 
 $$C_{\text{metabolic}} = P_i \times 0.42 \times \Big(1.0 + 0.55 \cdot v_{\text{eff}}.\text{metabolic\_cost} + 0.20 \cdot |T_{\text{cell}}| \cdot \max\big(0.0,\ 1.0 - \max(0.0, v_{\text{eff}}.\text{spatial\_mobility})\big)\Big) \times \text{hawk\_mult}$$
 
-The raw net energy balance is $\Delta E = E_i - C_{\text{metabolic}}$. If the deme runs a caloric deficit ($\Delta E < 0.0$) but holds substantial stored reserves ($E_{\text{reserves}, t} > 0.30 \cdot P_i$), up to **$50\%$ of its prior reserves** buffers the deficit for demographic calculations:
+The raw net energy balance is $\Delta E = E_i - C_{\text{metabolic}} - C_{\text{upkeep}}$. If a fortified settlement exhausts its reserves ($E_{\text{reserves}, t+1} \le 0.0$) under severe starvation ($\Delta E < -8.0$), its unmaintained walls degrade by `defense_tier -= 1`. If the deme runs a caloric deficit ($\Delta E < 0.0$) but holds substantial stored reserves ($E_{\text{reserves}, t} > 0.30 \cdot P_i$), up to **$50\%$ of its prior reserves** buffers the deficit for demographic calculations:
 
 $$\Delta E_{\text{eff}} = \begin{cases} \Delta E + \min(-\Delta E,\ 0.50 \cdot E_{\text{reserves}, t}) & \text{if } \Delta E < 0.0 \;\land\; E_{\text{reserves}, t} > 0.30 \cdot P_i \\ \Delta E & \text{otherwise} \end{cases}$$
 
@@ -159,7 +182,7 @@ Life-history traits scale $g_0$ before re-clamping to $[-0.45, +0.35]$:
 
 * **`bio-r-strategy` (Prolific, Density-Dependent on Crowding $P_{\text{hex}} / K$)**:
   $$m_r = \begin{cases} 1.28 & \text{if } P_{\text{hex}} / K < 0.55 \\ 1.16 & \text{if } 0.55 \le P_{\text{hex}} / K < 0.65 \\ 1.05 & \text{if } P_{\text{hex}} / K \ge 0.65 \end{cases}, \qquad g = \text{clamp}(g_0 \times m_r,\ -0.45,\ +0.35)$$
-* **`bio-k-strategy` (Longevity & Parental Care)**: $g = \text{clamp}(g_0 \times 0.75,\ -0.45,\ +0.35)$
+* **`bio-k-strategy` (Longevity & Parental Care)**: $g = \text{clamp}(g_0 \times 0.88,\ -0.45,\ +0.35)$
 
 $$P_{t+1} = \begin{cases} P_i - 1 & \text{if } \Delta E_{\text{eff}} < 0.0 \;\land\; \text{round}\big(P_i \cdot (1.0 + g)\big) \ge P_i \\ \text{round}\big(P_i \cdot (1.0 + g)\big) & \text{otherwise} \end{cases}$$
 
@@ -169,18 +192,23 @@ $$P_{t+1} = \begin{cases} P_i - 1 & \text{if } \Delta E_{\text{eff}} < 0.0 \;\la
   $$\Delta I = \big(P(\text{"innovate"}) + 0.35 \cdot P(\text{"cooperate"})\big) \times 0.45$$
   $$\text{innovation\_counter}_{t+1} = \min\big(2.0,\ \text{snapped}(\text{innovation\_counter}_t + \Delta I,\ 0.0001)\big)$$
 
-### Step 4: Territorial Wars of Conquest & Population Fission (Budding Migration)
+### Step 4: Territorial Wars of Conquest, Fortified Sieges & Population Fission
 When a deme with $P_i \ge 20$ evaluates expansion into neighboring hexes, passability (`is_hex_passable_for_deme`) requires **`ncell.biome != "ocean"`**, **`ncell.altitude <= 0.85`** (impassable mountain peaks above `0.85` block traversal), and `ncell.altitude - 0.50 <= mig_mobility`, where:
 
 $$\text{mig\_mobility} = \text{clamp}\big(v_{\text{eff}}.\text{spatial\_mobility} + 0.25 \cdot P(\text{"migrate"}),\ -1.5,\ +1.5\big)$$
 
 (elevated to at least `0.35` during emergency scarcity, on `coastal_shallows`, or for martial expanders).
 
-1. **Territorial Wars of Conquest (`_execute_territorial_invasion`)**:
+1. **Territorial Wars of Conquest & Fortified Sieges (`_execute_territorial_invasion`)**:
    * **Trigger**: A martial expander (`cul-warrior-expansion`, `strat-war`, or $P(\text{"dispute"}) \ge 0.28$) with $P_i \ge 32$ and $P(\text{"dispute"}) + P(\text{"migrate"}) \ge 0.30$ (with hex crowding $\ge 0.28$ or $P(\text{"dispute"}) \ge 0.26$) prioritizes invading adjacent hexes occupied by non-allied rival demes (`_pick_rival_target_in_hex`).
-   * **Warband & Combat Resolution**: The attacker commits a warband of $\text{warband\_pop} = \text{clamp}(\text{round}(0.48 \cdot P_i),\ 12,\ P_i - 14)$ warriors. Combat strength `_compute_combat_forces` weighs population, `social_cohesion`, `spatial_mobility`, $P(\text{"dispute"})$, `cul-warrior-expansion`, high-ground altitude, and the defender's `compute_pact_defense_bonus` (up to $+0.75$ from adjacent pact allies).
-   * **Attacker Victory (`att_force >= def_force`)**: The warband seizes $38\%$ of the defender's `energy_reserves`, inflicts combat casualties on both sides, forces the surviving defender to retreat to an adjacent passable hex (or eliminates it if trapped), establishes a conquered settlement (`<base_id>-w<gen>`) on the target hex inheriting `strategy_id` and `lineage_id`, spawns a red `"war"` invasion flow (`intensity = 1.0`), and logs a `"war"` victory Chronicle entry.
-   * **Invasion Repelled (`att_force < def_force`)**: The warband suffers $42\%$ casualties and retreats back to the attacker (`-15.0` energy reserves), the defender suffers $16\%$ casualties, the defender's formal pacts strengthen (`+1`), a `"war"` flow (`intensity = 0.85`) is spawned, and a `"war"` repelled Chronicle entry is logged.
+   * **Warband, Flanking & Fortification Force Resolution**: The attacker commits a warband of $\text{warband\_pop} = \text{clamp}(\text{round}(0.48 \cdot P_i),\ 12,\ P_i - 14)$ warriors. Combat strength `_compute_combat_forces` weighs:
+     * **Attacker Force (`att_force`)**: Warband population, `social_cohesion`, `spatial_mobility`, $P(\text{"dispute"})$, `cul-warrior-expansion`, and a **Flanking Bonus** (`+0.28` per allied/same-lineage deme with `pop >= 35` adjacent to the target hex, up to `+0.85`).
+     * **Defender Force (`def_force`)**: Defender population, `social_cohesion`, high-ground altitude, `DEFENSE_TIER_BONUS[defender.defense_tier]` (`+0.45` Lv.1, `+0.95` Lv.2, `+1.55` Lv.3), and `compute_pact_defense_bonus` (up to `+1.10` from adjacent pact allies).
+   * **Attacker Victory (`att_force >= def_force`)**: The warband seizes $38\%$ of the defender's `energy_reserves`, inflicts combat casualties on both sides, forces the surviving defender to retreat to an adjacent passable hex with `defense_tier = 0` (or eliminates it if trapped), establishes a conquered settlement (`<base_id>-w<gen>`) on the target hex inheriting `strategy_id`, `lineage_id`, and **captured fortifications (`max(0, defender.defense_tier - 1)`)**, sets a `-3` vendetta, spawns a red `"war"` invasion flow (`intensity = 1.0`), and logs a `"war"` victory Chronicle entry.
+   * **Fortified Siege / Invasion Repelled (`att_force < def_force`)**:
+     * **Heavy Siege Attrition**: The attacking warband suffers $(42\% + 6\% \cdot \text{def\_tier})$ casualties and retreats back to the attacker (`-15.0` energy reserves), while the defender suffers reduced casualties $(16\% - 2\% \cdot \text{def\_tier})$.
+     * **Wall Repair vs. Siege Degradation**: If `defender.defense_tier >= 1`, an allied or unified defender holding `energy_reserves >= 10.0` spends `10.0` energy to repair and preserve its fortifications; otherwise, an isolated defender against a massive warband (`warband_pop >= 55%` of `defender.population`) suffers `defense_tier -= 1` wall damage.
+     * **Chronicle & Siege Flow**: Strengthens the defender's formal pacts (`+1`), sets a `-2` vendetta with the attacker, spawns a crimson `"siege"` flow (`intensity = 0.90`, with siege engine props) when `def_tier >= 1` (or `"war"` when unfortified), and logs a `"siege"` (or `"war"`) Chronicle entry.
 2. **Peaceful Population Fission (Budding Migration)**:
    * **Migrant Cohort Size**: $\text{migrants} = \lfloor P_i \times \max(P(\text{"migrate"}),\ 0.28 \text{ if emergency/shallows}) \times 0.45 \rfloor$.
    * **Trigger**: Requires $\text{migrants} \ge 10$, remaining parent population $P_i - \text{migrants} \ge 10$, and $P(\text{"migrate"}) \ge 0.15$, `dec-selective-migration`, `"coastal_shallows"`, or emergency scarcity ($R_{\text{cell}} < 0.20 \cdot P_i \land E_{\text{reserves}} < 0.35 \cdot P_i$).
@@ -193,9 +221,18 @@ $$\text{mig\_mobility} = \text{clamp}\big(v_{\text{eff}}.\text{spatial\_mobility
   2. **Sub-Critical Bottleneck**: Dropping below **$50$ individuals** ($P_{\text{current}} < 50$),
   the deme loses its most complex cultural tradition (the trait in `cultural_trait_ids` with the highest `transmission_threshold`) and logs a `"cultural_loss"` Chronicle entry.
 
-### Step 6: Compatible Kin Merging & Isolation Tracking
-* **Kin Merging**: If two demes of the **same `lineage_id`** cohabit the same hex and their Jaccard trait divergence is $< 0.25$, they fuse into a single consolidated settlement (summing `population` and `energy_reserves`, taking the union of traits, and computing population-weighted averages of `innovation_counter` and `baldwin_counters`).
-* **Geographic Isolation Counter (`isolation_turns`)**: Reset to `0` if the deme is on its lineage's `founder_hex_id`, merged with kin this turn, cohabits with another living deme of the same `lineage_id`, or is connected within **3 passable hex hops** (`_is_connected_to_founder`: `altitude <= 0.85` and `altitude - 0.50 <= v_eff.spatial_mobility`) to `founder_hex_id` **or to any hex occupied by a living peer deme of the same `lineage_id`**. Otherwise, `deme.isolation_turns += 1`.
+### Step 6: Compatible Kin Merging, City Unification (Synoecism) & Isolation Tracking
+* **Compatible Kin Merging (Intra-Hex)**: If two demes of the **same `lineage_id`** cohabit the same hex and their Jaccard trait divergence is $< 0.25$, they fuse into a single consolidated settlement (summing `population` and `energy_reserves`, taking the union of traits, and computing population-weighted averages of `innovation_counter` and `baldwin_counters`).
+* **City Unification / Synoecism (`merge`, Tier 5 Unified Metropolis)**:
+  Long-standing allied settlements—even across **different lineages and founding strategies**—can unite into a single multi-lineage city (`_merge_deme_into(..., is_synoecism = true)` and `_run_adjacent_synoecism`):
+  1. **Cohabiting Synoecism**: Two demes sharing the same hex with a deep formal alliance (`active_pacts >= 3`) unite immediately.
+  2. **Adjacent-Hex Synoecism**: Two passable neighboring settlements (`distance == 1`) with `active_pacts >= 4` (or **`active_pacts >= 3` when either settlement is fortified `defense_tier >= 1` or faces an adjacent rival threat**), both having $P(\text{"cooperate"}) + P(\text{"exchange"}) \ge 0.30$ and combined population $\le 1.25 \times \max(K_{\max, 1}, K_{\max, 2})$, unite into the stronger/better-fortified host hexagon.
+  3. **Urban & Cognitive Effects**:
+     * Combines `population` and `energy_reserves` (capped at `280.0`), merges compatible biological and cultural traits, transfers all active pacts, increments `deme.merged_count += 1 + joiner.merged_count`, and records the partner's strategy emblem color in `deme.secondary_color` (rendered as a twin-pennant flagpole on the unified plaza).
+     * Elevates shared fortifications (`defense_tier = min(3, max(2, combined_tier + 1))` when `population >= 90`) and expands the host hexagon's carrying capacity $K$ (`min(K_max * 1.35, K + 35.0)`).
+     * Elevates the settlement to **Architectural Tier 5 (`V · Metropolis`)** when `merged_count >= 1` and (`population >= 220` or `defense_tier >= 3`), spawns a golden `"merge"` unification avenue flow (`intensity = 0.85`), and logs a `"merge"` Chronicle entry.
+     * **Direct LLM Request Reduction**: Because two subpopulations consolidate into a single `Deme` instance, synoecism directly reduces the number of active LLM inference evaluations per generation—without counting as a competitive extinction for `single_survivor` hegemony.
+* **Geographic Isolation Counter (`isolation_turns`)**: Reset to `0` if the deme is on its lineage's `founder_hex_id`, merged with kin or allies this turn, cohabits with another living deme of the same `lineage_id`, or is connected within **3 passable hex hops** (`_is_connected_to_founder`: `altitude <= 0.85` and `altitude - 0.50 <= v_eff.spatial_mobility`) to `founder_hex_id` **or to any hex occupied by a living peer deme of the same `lineage_id`**. Otherwise, `deme.isolation_turns += 1`.
 
 ---
 

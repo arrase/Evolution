@@ -97,15 +97,27 @@ static func _compute_combat_forces(
 	var att_warrior := 0.45 if attacker.cultural_trait_ids.has("cul-warrior-expansion") else 0.0
 	var att_r_strat := 0.20 if attacker.biological_trait_ids.has("bio-r-strategy") else 0.0
 	var def_warrior := 0.35 if defender.cultural_trait_ids.has("cul-warrior-expansion") else 0.0
+	var fort_bonus: float = EvoEcologyInteraction.DEFENSE_TIER_BONUS[clampi(defender.defense_tier, 0, 3)]
+
+	var flank_bonus := 0.0
+	if state.cells.has(defender.hex_id):
+		var dcell: EvoTypes.HexCell = state.cells[defender.hex_id]
+		var nids := HexMath.get_neighbor_ids(dcell.q, dcell.r, state.cells)
+		for oid in state.demes.keys():
+			var ally_att: EvoTypes.Deme = state.demes[oid]
+			if ally_att.id == attacker.id or ally_att.lineage_id != attacker.lineage_id or ally_att.population < 35:
+				continue
+			if ally_att.hex_id == defender.hex_id or nids.has(ally_att.hex_id):
+				flank_bonus = minf(0.85, flank_bonus + 0.28)
 
 	var att_force := (
 		float(warband_pop)
-		* (1.0 + 0.55 * maxf(0.0, att_vec.extraction_efficiency) + att_warrior + att_r_strat)
+		* (1.0 + 0.55 * maxf(0.0, att_vec.extraction_efficiency) + att_warrior + att_r_strat + flank_bonus)
 		* (0.75 + p_att_disp)
 	)
 	var def_force := (
 		float(defender.population)
-		* (1.0 + 0.60 * maxf(0.0, def_vec.social_cohesion) + pact_bonus + def_warrior)
+		* (1.0 + 0.60 * maxf(0.0, def_vec.social_cohesion) + pact_bonus + def_warrior + fort_bonus)
 	)
 	return Vector2(att_force, def_force)
 
@@ -176,6 +188,7 @@ static func _execute_territorial_invasion(
 	var def_force := forces.y
 
 	if att_force >= def_force:
+		var captured_tier := maxi(0, defender.defense_tier - 1)
 		var att_loss := maxi(2, int(round(float(warband_pop) * clampf(0.22 * (def_force / maxf(1.0, att_force)), 0.08, 0.35))))
 		var def_loss := maxi(4, int(round(float(defender.population) * clampf(0.35 * (att_force / maxf(1.0, def_force)), 0.20, 0.55))))
 		var loot := roundf(defender.energy_reserves * 0.38)
@@ -214,13 +227,19 @@ static func _execute_territorial_invasion(
 				var retreat_cell := retreat_candidates[0]
 				target_cell.deme_ids.erase(defender.id)
 				defender.hex_id = retreat_cell.id
+				defender.defense_tier = 0
 				if not retreat_cell.deme_ids.has(defender.id):
 					retreat_cell.deme_ids.append(defender.id)
 				retreated = true
 		if not retreated and target_cell.deme_ids.size() >= 3:
 			target_cell.deme_ids.erase(defender.id)
 			defender.population = 0
+			defender.defense_tier = 0
 			pre_fission_pop_by_deme[defender.id] = 0
+		elif not retreated:
+			defender.defense_tier = 0
+
+		state.active_pacts[EvoTypes.make_pair_key(attacker.id, defender.id)] = -3
 
 		var base_id := _strip_migration_suffix(attacker.id)
 		var warband_id := "%s-w%d" % [base_id, state.generation]
@@ -246,6 +265,7 @@ static func _execute_territorial_invasion(
 		warband.baldwin_counters = {}
 		warband.innovation_counter = 0.0
 		warband.isolation_turns = 0
+		warband.defense_tier = captured_tier
 		warband.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(warband_id)
 		warband.last_confidence = attacker.last_confidence
 		warband.last_decision_probabilities = attacker.last_decision_probabilities.duplicate()
@@ -287,8 +307,10 @@ static func _execute_territorial_invasion(
 		entry.lineage_id = attacker.lineage_id
 		state.chronicle.append(entry)
 	else:
-		var att_loss := maxi(4, int(round(float(warband_pop) * 0.42)))
-		var def_loss := maxi(2, int(round(float(defender.population) * 0.16)))
+		var def_tier := clampi(defender.defense_tier, 0, 3)
+		var loss_rate := 0.28 + 0.06 * float(def_tier)
+		var att_loss := maxi(4, int(round(float(warband_pop) * loss_rate)))
+		var def_loss := maxi(2, int(round(float(defender.population) * (0.16 - 0.02 * float(def_tier)))))
 		var survivors := maxi(0, warband_pop - att_loss)
 		attacker.population = maxi(10, attacker.population + survivors)
 		attacker.energy_reserves = maxf(0.0, snappedf(attacker.energy_reserves - 15.0, 0.01))
@@ -299,7 +321,12 @@ static func _execute_territorial_invasion(
 			var sep := "__" if str(pk).contains("__") else "|"
 			var parts := str(pk).split(sep)
 			if parts.size() == 2 and (parts[0] == defender.id or parts[1] == defender.id):
-				state.active_pacts[pk] = int(state.active_pacts[pk]) + 1
+				if int(state.active_pacts[pk]) > 0:
+					state.active_pacts[pk] = int(state.active_pacts[pk]) + 1
+
+		var ad_pk := EvoTypes.make_pair_key(attacker.id, defender.id)
+		if int(state.active_pacts.get(ad_pk, 0)) <= 0:
+			state.active_pacts[ad_pk] = mini(-2, int(state.active_pacts.get(ad_pk, 0)))
 
 		var flow := EvoTypes.HexEdgeFlow.new()
 		flow.from_hex_id = origin_cell.id
@@ -310,6 +337,45 @@ static func _execute_territorial_invasion(
 		flow.to_deme_id = defender.id
 		state.active_flows.append(flow)
 		geo_flows.append(flow)
+
+		if def_tier >= 1:
+			var is_isolated_defender := defender.merged_count == 0 and EvoEcologyInteraction.compute_pact_defense_bonus(defender, state) <= 0.0
+			if att_force >= def_force * 0.80:
+				if defender.energy_reserves >= 10.0 and not is_isolated_defender:
+					defender.energy_reserves = maxf(0.0, snappedf(defender.energy_reserves - 10.0, 0.01))
+				else:
+					defender.energy_reserves = maxf(0.0, snappedf(defender.energy_reserves - 10.0, 0.01))
+					defender.defense_tier = maxi(0, defender.defense_tier - 1)
+			elif is_isolated_defender and att_force >= def_force * 0.45:
+				defender.energy_reserves = maxf(0.0, snappedf(defender.energy_reserves - 10.0, 0.01))
+				defender.defense_tier = maxi(0, defender.defense_tier - 1)
+
+			var siege_flow := EvoTypes.HexEdgeFlow.new()
+			siege_flow.from_hex_id = origin_cell.id
+			siege_flow.to_hex_id = target_cell.id
+			siege_flow.flow_type = "siege"
+			siege_flow.intensity = 0.90
+			siege_flow.from_deme_id = attacker.id
+			siege_flow.to_deme_id = defender.id
+			state.active_flows.append(siege_flow)
+			geo_flows.append(siege_flow)
+
+			var siege_params := {
+				"defender": defender.name,
+				"attacker": attacker.name,
+				"hex": target_cell.id,
+				"casualties": str(att_loss + def_loss)
+			}
+			var siege_entry := EvoTypes.ChronicleEntry.new()
+			siege_entry.id = "chronicle-siege-%d-%s-%s" % [state.generation, defender.id, attacker.id]
+			siege_entry.generation = state.generation
+			siege_entry.event_type = "siege"
+			siege_entry.title = EvoI18n.t(lang, "chronicle_siege_title", siege_params)
+			siege_entry.causal_explanation = EvoI18n.t(lang, "chronicle_siege_desc", siege_params)
+			siege_entry.hex_id = target_cell.id
+			siege_entry.deme_id = defender.id
+			siege_entry.lineage_id = defender.lineage_id
+			state.chronicle.append(siege_entry)
 
 		var params := {
 			"defender": defender.name,
@@ -372,13 +438,16 @@ static func run_demography_and_migration_phase(
 			* hawk_mult
 		)
 
-		var delta_e := extracted - metabolic_cost
+		var fort_upkeep: float = [0.0, 1.5, 3.0, 5.0][clampi(deme.defense_tier, 0, 3)]
+		var delta_e := extracted - metabolic_cost - fort_upkeep
 		var prev_reserves := deme.energy_reserves
 		var reserve_draw := minf(-delta_e, prev_reserves * 0.50) if (delta_e < 0.0 and prev_reserves > 0.30 * float(deme.population)) else 0.0
 		var effective_delta_e := delta_e + reserve_draw
 
 		deme.last_energy_delta = snappedf(delta_e, 0.01)
 		deme.energy_reserves = maxf(0.0, snappedf(prev_reserves + delta_e, 0.01))
+		if deme.energy_reserves <= 0.0 and delta_e < -8.0 and deme.defense_tier > 0:
+			deme.defense_tier = maxi(0, deme.defense_tier - 1)
 
 		var raw_growth := (effective_delta_e / maxf(10.0, float(deme.population))) * 0.45
 		if deme.biological_trait_ids.has("bio-r-strategy") and raw_growth > 0.0:
@@ -392,7 +461,7 @@ static func run_demography_and_migration_phase(
 				raw_growth *= 1.16
 		var growth_rate := clampf(raw_growth, -0.45, 0.35)
 		if deme.biological_trait_ids.has("bio-k-strategy"):
-			growth_rate = clampf(growth_rate * 0.75, -0.45, 0.35)
+			growth_rate = clampf(growth_rate * 0.88, -0.45, 0.35)
 
 		var next_pop := int(roundf(float(deme.population) * (1.0 + growth_rate)))
 		deme.population = (deme.population - 1) if (effective_delta_e < 0.0 and next_pop >= deme.population) else next_pop
@@ -478,8 +547,19 @@ static func run_demography_and_migration_phase(
 					var other: EvoTypes.Deme = state.demes[oid]
 					if other.lineage_id == deme.lineage_id or EvoTypes.is_pact_active(state, deme.id, other.id):
 						continue
+					var already_raided := false
+					for fl in state.active_flows:
+						if fl.flow_type in ["raid", "tribute"] and fl.from_deme_id == deme.id and fl.to_deme_id == other.id:
+							already_raided = true
+							break
+					if already_raided:
+						continue
 					var forces := _compute_combat_forces(deme, warband_pop, other, state)
-					if forces.x >= forces.y * 0.65 or adequacy < 0.80:
+					if (
+						forces.x >= forces.y * 0.82
+						or (adequacy < 0.75 and forces.x >= forces.y * 0.68)
+						or (deme.cultural_trait_ids.has("cul-warrior-expansion") and forces.x >= forces.y * 0.45)
+					):
 						var ratio := forces.x / maxf(1.0, forces.y)
 						if ratio > best_ratio:
 							best_ratio = ratio
@@ -736,99 +816,92 @@ static func run_demography_and_migration_phase(
 				if state.demes.has(id_a) and state.demes.has(id_b):
 					var deme_a: EvoTypes.Deme = state.demes[id_a]
 					var deme_b: EvoTypes.Deme = state.demes[id_b]
-					if deme_a.lineage_id == deme_b.lineage_id and compute_deme_divergence(deme_a, deme_b) <= 0.25:
-						var total_pop := deme_a.population + deme_b.population
-						var a_new := newly_created_demes.has(deme_a.id)
-						var b_new := newly_created_demes.has(deme_b.id)
-						var w_a := 1.0 if (b_new and not a_new) else (0.0 if (a_new and not b_new) else float(deme_a.population) / float(total_pop))
-						var w_b := 1.0 - w_a
-
-						deme_a.innovation_counter = minf(
-							2.0,
-							snappedf(deme_a.innovation_counter * w_a + deme_b.innovation_counter * w_b, 0.0001)
+					var same_lineage_merge := deme_a.lineage_id == deme_b.lineage_id and compute_deme_divergence(deme_a, deme_b) <= 0.25
+					var pact_synoecism := int(state.active_pacts.get(EvoTypes.make_pair_key(deme_a.id, deme_b.id), 0)) >= 3
+					if same_lineage_merge or pact_synoecism:
+						_merge_deme_into(
+							state,
+							deme_a,
+							deme_b,
+							cell,
+							newly_created_demes,
+							had_lineage_contact,
+							pact_synoecism,
+							lang
 						)
-
-						var all_keys: Dictionary = {}
-						for k in deme_a.baldwin_counters.keys():
-							all_keys[k] = true
-						for k in deme_b.baldwin_counters.keys():
-							all_keys[k] = true
-						var merged_counters: Dictionary = {}
-						for k in all_keys.keys():
-							var ca: int = int(deme_a.baldwin_counters[k]) if deme_a.baldwin_counters.has(k) else 0
-							var cb: int = int(deme_b.baldwin_counters[k]) if deme_b.baldwin_counters.has(k) else 0
-							merged_counters[k] = int(roundf(float(ca) * w_a + float(cb) * w_b))
-						deme_a.baldwin_counters = merged_counters
-
-						deme_a.population = total_pop
-						deme_a.energy_reserves = snappedf(deme_a.energy_reserves + deme_b.energy_reserves, 0.01)
-						for tid in deme_b.biological_trait_ids:
-							if EvoEcologyInteraction._can_acquire_trait(deme_a, tid, state.traits_catalog):
-								deme_a.biological_trait_ids.append(tid)
-						for tid in deme_b.cultural_trait_ids:
-							if EvoEcologyInteraction._can_acquire_trait(deme_a, tid, state.traits_catalog):
-								deme_a.cultural_trait_ids.append(tid)
-
-						var kept_flows: Array[EvoTypes.HexEdgeFlow] = []
-						for fl in state.active_flows:
-							if fl.to_deme_id == deme_b.id:
-								fl.to_deme_id = deme_a.id
-							if fl.from_deme_id == deme_b.id:
-								fl.from_deme_id = deme_a.id
-							if fl.from_deme_id == fl.to_deme_id and fl.from_hex_id == fl.to_hex_id and fl.flow_type != "migration":
-								continue
-							kept_flows.append(fl)
-						state.active_flows = kept_flows
-
-						if not b_new and not state.active_pacts.is_empty():
-							var pacts_to_erase: Array[String] = []
-							var pacts_to_set: Dictionary = {}
-							for pk_var in state.active_pacts.keys():
-								var pk := str(pk_var)
-								if not pk.contains(deme_b.id):
-									continue
-								var sep := "__" if pk.contains("__") else "|"
-								var parts := pk.split(sep)
-								if parts.size() == 2 and (parts[0] == deme_b.id or parts[1] == deme_b.id):
-									pacts_to_erase.append(pk)
-									var partner_id := parts[1] if parts[0] == deme_b.id else parts[0]
-									if partner_id != deme_a.id:
-										var new_pk := EvoTypes.make_pair_key(deme_a.id, partner_id)
-										var existing_val: int = int(state.active_pacts[new_pk]) if state.active_pacts.has(new_pk) else 0
-										var b_val: int = int(state.active_pacts[pk])
-										pacts_to_set[new_pk] = maxi(existing_val, b_val)
-							for pk in pacts_to_erase:
-								state.active_pacts.erase(pk)
-							for new_pk in pacts_to_set.keys():
-								state.active_pacts[new_pk] = pacts_to_set[new_pk]
-
-						if not b_new and not state.disused_connections.is_empty():
-							var kept_disused: Array[Dictionary] = []
-							for dc in state.disused_connections:
-								if str(dc.get("from_deme_id", "")) == deme_b.id:
-									dc["from_deme_id"] = deme_a.id
-								if str(dc.get("to_deme_id", "")) == deme_b.id:
-									dc["to_deme_id"] = deme_a.id
-								if str(dc.get("from_deme_id", "")) == str(dc.get("to_deme_id", "")):
-									continue
-								kept_disused.append(dc)
-							state.disused_connections = kept_disused
-
-						var merge_flow := EvoTypes.HexEdgeFlow.new()
-						merge_flow.from_hex_id = cell.id
-						merge_flow.to_hex_id = cell.id
-						merge_flow.flow_type = "merge"
-						merge_flow.intensity = 0.65
-						merge_flow.from_deme_id = deme_b.id
-						merge_flow.to_deme_id = deme_a.id
-						state.active_flows.append(merge_flow)
-
-						state.demes.erase(deme_b.id)
-						cell.deme_ids.remove_at(j)
-						had_lineage_contact[deme_a.id] = true
 						continue
 				j += 1
 			i += 1
+
+	var pact_keys := state.active_pacts.keys()
+	for pk_var in pact_keys:
+		var pk := str(pk_var)
+		if not state.active_pacts.has(pk):
+			continue
+		var pact_val := int(state.active_pacts[pk])
+		if pact_val < 3:
+			continue
+		var sep := "__" if pk.contains("__") else "|"
+		var parts := pk.split(sep)
+		if parts.size() != 2:
+			continue
+		var id_1 := parts[0]
+		var id_2 := parts[1]
+		if not state.demes.has(id_1) or not state.demes.has(id_2):
+			continue
+		var d1: EvoTypes.Deme = state.demes[id_1]
+		var d2: EvoTypes.Deme = state.demes[id_2]
+		if not state.cells.has(d1.hex_id) or not state.cells.has(d2.hex_id):
+			continue
+		var c1: EvoTypes.HexCell = state.cells[d1.hex_id]
+		var c2: EvoTypes.HexCell = state.cells[d2.hex_id]
+		if c1.biome == "ocean" or c1.altitude > 0.85 or c2.biome == "ocean" or c2.altitude > 0.85:
+			continue
+		var dist := HexMath.hex_distance(c1.q, c1.r, c2.q, c2.r)
+		if dist != 1:
+			continue
+		var has_threat_or_fort := d1.defense_tier >= 1 or d2.defense_tier >= 1
+		if not has_threat_or_fort:
+			for c_chk in [c1, c2]:
+				for nid in HexMath.get_neighbor_ids(c_chk.q, c_chk.r, state.cells):
+					var ncell: EvoTypes.HexCell = state.cells[nid]
+					for oid in ncell.deme_ids:
+						if state.demes.has(oid):
+							var od: EvoTypes.Deme = state.demes[oid]
+							if od.id != d1.id and od.id != d2.id and od.lineage_id != d1.lineage_id and od.lineage_id != d2.lineage_id and not EvoTypes.is_pact_active(state, d1.id, od.id):
+								has_threat_or_fort = true
+								break
+		if pact_val < 4 and not has_threat_or_fort:
+			continue
+		var p1_coop := (
+			EvoEcologyInteraction.get_archetype_prob(d1, state.decisions_catalog, "cooperate")
+			+ EvoEcologyInteraction.get_archetype_prob(d1, state.decisions_catalog, "exchange")
+		)
+		var p2_coop := (
+			EvoEcologyInteraction.get_archetype_prob(d2, state.decisions_catalog, "cooperate")
+			+ EvoEcologyInteraction.get_archetype_prob(d2, state.decisions_catalog, "exchange")
+		)
+		if p1_coop < 0.30 or p2_coop < 0.30:
+			continue
+		if float(d1.population + d2.population) > maxf(c1.carrying_capacity_max, c2.carrying_capacity_max) * 1.25:
+			continue
+		var d1_hosts := (
+			d1.defense_tier > d2.defense_tier
+			or (d1.defense_tier == d2.defense_tier and d1.population >= d2.population)
+		)
+		var host_deme := d1 if d1_hosts else d2
+		var joiner_deme := d2 if d1_hosts else d1
+		var host_cell := c1 if d1_hosts else c2
+		_merge_deme_into(
+			state,
+			host_deme,
+			joiner_deme,
+			host_cell,
+			newly_created_demes,
+			had_lineage_contact,
+			true,
+			lang
+		)
 
 	var conn_cache: Dictionary = {}
 	for did in state.demes.keys():
@@ -867,7 +940,7 @@ static func run_demography_and_migration_phase(
 		var pair_ab := "%s|%s" % [fl.from_deme_id, fl.to_deme_id]
 		var pair_ba := "%s|%s" % [fl.to_deme_id, fl.from_deme_id]
 		var hex_ab := ("%s|%s" % [fl.from_hex_id, fl.to_hex_id]) if fl.from_hex_id <= fl.to_hex_id else ("%s|%s" % [fl.to_hex_id, fl.from_hex_id])
-		if fl.flow_type in ["dispute", "war", "raid", "betrayal"]:
+		if fl.flow_type in ["dispute", "war", "raid", "betrayal", "siege"]:
 			dispute_flow_pairs[pair_ab] = true
 			dispute_flow_pairs[pair_ba] = true
 			social_flow_pairs[pair_ab] = true
@@ -875,7 +948,7 @@ static func run_demography_and_migration_phase(
 			if fl.from_hex_id != fl.to_hex_id:
 				dispute_flow_pairs[hex_ab] = true
 				social_flow_pairs[hex_ab] = true
-		elif fl.flow_type in ["exchange", "cooperate", "pact"]:
+		elif fl.flow_type in ["exchange", "cooperate", "pact", "tribute", "merge"]:
 			social_flow_pairs[pair_ab] = true
 			social_flow_pairs[pair_ba] = true
 			friendly_flow_pairs[pair_ab] = true
@@ -1000,3 +1073,151 @@ static func run_demography_and_migration_phase(
 			if conn_age <= 8:
 				filtered_disused.append(conn)
 	state.disused_connections = filtered_disused
+
+
+static func _merge_deme_into(
+	state: EvoTypes.WorldState,
+	deme_a: EvoTypes.Deme,
+	deme_b: EvoTypes.Deme,
+	cell_a: EvoTypes.HexCell,
+	newly_created_demes: Dictionary,
+	had_lineage_contact: Dictionary,
+	is_synoecism: bool,
+	lang: String
+) -> void:
+	var old_name_a := deme_a.name
+	var old_name_b := deme_b.name
+	var from_hex_id := deme_b.hex_id
+	var total_pop := deme_a.population + deme_b.population
+	var a_new := newly_created_demes.has(deme_a.id)
+	var b_new := newly_created_demes.has(deme_b.id)
+	var w_a := (
+		1.0
+		if (b_new and not a_new)
+		else (0.0 if (a_new and not b_new) else float(deme_a.population) / float(maxi(1, total_pop)))
+	)
+	var w_b := 1.0 - w_a
+
+	deme_a.innovation_counter = minf(
+		2.0,
+		snappedf(deme_a.innovation_counter * w_a + deme_b.innovation_counter * w_b, 0.0001)
+	)
+
+	var all_keys: Dictionary = {}
+	for k in deme_a.baldwin_counters.keys():
+		all_keys[k] = true
+	for k in deme_b.baldwin_counters.keys():
+		all_keys[k] = true
+	var merged_counters: Dictionary = {}
+	for k in all_keys.keys():
+		var ca: int = int(deme_a.baldwin_counters[k]) if deme_a.baldwin_counters.has(k) else 0
+		var cb: int = int(deme_b.baldwin_counters[k]) if deme_b.baldwin_counters.has(k) else 0
+		merged_counters[k] = int(roundf(float(ca) * w_a + float(cb) * w_b))
+	deme_a.baldwin_counters = merged_counters
+
+	deme_a.population = total_pop
+	deme_a.energy_reserves = minf(280.0, snappedf(deme_a.energy_reserves + deme_b.energy_reserves, 0.01))
+	for tid in deme_b.biological_trait_ids:
+		if EvoEcologyInteraction._can_acquire_trait(deme_a, tid, state.traits_catalog):
+			deme_a.biological_trait_ids.append(tid)
+	for tid in deme_b.cultural_trait_ids:
+		if EvoEcologyInteraction._can_acquire_trait(deme_a, tid, state.traits_catalog):
+			deme_a.cultural_trait_ids.append(tid)
+
+	if state.lineage_tree.has(deme_a.lineage_id):
+		var lin_node: EvoTypes.LineageNode = state.lineage_tree[deme_a.lineage_id]
+		for tid in deme_a.biological_trait_ids:
+			if not lin_node.biological_trait_ids.has(tid):
+				lin_node.biological_trait_ids.append(tid)
+		for tid in deme_a.cultural_trait_ids:
+			if not lin_node.cultural_trait_ids.has(tid):
+				lin_node.cultural_trait_ids.append(tid)
+
+	var combined_tier := maxi(deme_a.defense_tier, deme_b.defense_tier)
+	if is_synoecism and deme_a.population >= 90 and combined_tier < 3:
+		combined_tier = mini(3, maxi(2, combined_tier + 1))
+	deme_a.defense_tier = combined_tier
+
+	if is_synoecism:
+		deme_a.merged_count += 1 + deme_b.merged_count
+		if deme_b.color != "" and deme_b.color != deme_a.color:
+			deme_a.secondary_color = deme_b.color
+		elif deme_a.secondary_color == "":
+			deme_a.secondary_color = deme_b.secondary_color if deme_b.secondary_color != "" else deme_b.color
+		cell_a.carrying_capacity = minf(cell_a.carrying_capacity_max * 1.35, cell_a.carrying_capacity + 35.0)
+		var merge_params := {
+			"deme_a": old_name_a,
+			"deme_b": old_name_b,
+			"hex": cell_a.id,
+			"pop": str(deme_a.population)
+		}
+		var entry := EvoTypes.ChronicleEntry.new()
+		entry.id = "chronicle-merge-%d-%s-%s" % [state.generation, deme_a.id, deme_b.id]
+		entry.generation = state.generation
+		entry.event_type = "merge"
+		entry.title = EvoI18n.t(lang, "chronicle_merge_title", merge_params)
+		entry.causal_explanation = EvoI18n.t(lang, "chronicle_merge_desc", merge_params)
+		entry.hex_id = cell_a.id
+		entry.deme_id = deme_a.id
+		entry.lineage_id = deme_a.lineage_id
+		state.chronicle.append(entry)
+
+	var kept_flows: Array[EvoTypes.HexEdgeFlow] = []
+	for fl in state.active_flows:
+		if fl.to_deme_id == deme_b.id:
+			fl.to_deme_id = deme_a.id
+		if fl.from_deme_id == deme_b.id:
+			fl.from_deme_id = deme_a.id
+		if fl.from_deme_id == fl.to_deme_id and fl.from_hex_id == fl.to_hex_id and not (fl.flow_type in ["migration", "merge"]):
+			continue
+		kept_flows.append(fl)
+	state.active_flows = kept_flows
+
+	if not state.active_pacts.is_empty():
+		var pacts_to_erase: Array[String] = []
+		var pacts_to_set: Dictionary = {}
+		for pk_var in state.active_pacts.keys():
+			var pk := str(pk_var)
+			if not pk.contains(deme_b.id):
+				continue
+			var sep := "__" if pk.contains("__") else "|"
+			var parts := pk.split(sep)
+			if parts.size() == 2 and (parts[0] == deme_b.id or parts[1] == deme_b.id):
+				pacts_to_erase.append(pk)
+				var partner_id := parts[1] if parts[0] == deme_b.id else parts[0]
+				if partner_id != deme_a.id and not b_new:
+					var new_pk := EvoTypes.make_pair_key(deme_a.id, partner_id)
+					var existing_val: int = int(state.active_pacts[new_pk]) if state.active_pacts.has(new_pk) else 0
+					var b_val: int = int(state.active_pacts[pk])
+					pacts_to_set[new_pk] = maxi(existing_val, b_val)
+		for pk in pacts_to_erase:
+			state.active_pacts.erase(pk)
+		for new_pk in pacts_to_set.keys():
+			state.active_pacts[new_pk] = pacts_to_set[new_pk]
+
+	if not b_new and not state.disused_connections.is_empty():
+		var kept_disused: Array[Dictionary] = []
+		for dc in state.disused_connections:
+			if str(dc.get("from_deme_id", "")) == deme_b.id:
+				dc["from_deme_id"] = deme_a.id
+			if str(dc.get("to_deme_id", "")) == deme_b.id:
+				dc["to_deme_id"] = deme_a.id
+			if str(dc.get("from_deme_id", "")) == str(dc.get("to_deme_id", "")):
+				continue
+			kept_disused.append(dc)
+		state.disused_connections = kept_disused
+
+	var merge_flow := EvoTypes.HexEdgeFlow.new()
+	merge_flow.from_hex_id = from_hex_id
+	merge_flow.to_hex_id = cell_a.id
+	merge_flow.flow_type = "merge"
+	merge_flow.intensity = 0.85 if is_synoecism else 0.65
+	merge_flow.from_deme_id = deme_b.id
+	merge_flow.to_deme_id = deme_a.id
+	state.active_flows.append(merge_flow)
+
+	if state.cells.has(from_hex_id):
+		(state.cells[from_hex_id] as EvoTypes.HexCell).deme_ids.erase(deme_b.id)
+	cell_a.deme_ids.erase(deme_b.id)
+	state.demes.erase(deme_b.id)
+	had_lineage_contact[deme_a.id] = true

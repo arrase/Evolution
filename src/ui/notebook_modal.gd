@@ -7,8 +7,12 @@ signal modal_closed()
 const FILTER_KEYS: Array[String] = [
 	"all",
 	"war",
+	"siege",
 	"raid",
+	"tribute",
 	"pact",
+	"merge",
+	"fortify",
 	"betrayal",
 	"baldwin_trait",
 	"cultural_innovation",
@@ -176,7 +180,7 @@ func _update_filter_buttons() -> void:
 	for f_key in FILTER_KEYS:
 		if _filter_buttons.has(f_key):
 			var btn: Button = _filter_buttons[f_key]
-			if f_key in ["war", "raid", "pact", "betrayal"]:
+			if f_key in ["war", "raid", "pact", "betrayal", "fortify", "merge", "tribute", "siege"]:
 				btn.text = EvoI18n.t(_lang, "filter_" + f_key)
 			else:
 				btn.text = EvoUiStyle.get_event_type_label(f_key, _lang)

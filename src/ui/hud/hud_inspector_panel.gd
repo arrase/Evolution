@@ -389,7 +389,7 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	_add_sheet_kv(
 		m_vbox,
 		EvoUiStyle.tr_text(hud._lang, "👥 Población:", "👥 Population:"),
-		pop_fmt % [d.population, EvoUiStyle.get_village_tier_label(d.population, hud._lang)]
+		pop_fmt % [d.population, EvoUiStyle.get_village_tier_label(d.population, hud._lang, d.merged_count)]
 	)
 
 	_add_milestone_bar(
@@ -408,6 +408,17 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		EvoUiStyle.tr_text(hud._lang, "⚡ Balance Turno:", "⚡ Turn Balance:"),
 		"%+.1f · %s %s" % [d.last_energy_delta, heart_icon, v_label]
 	)
+	_add_sheet_kv(
+		m_vbox,
+		"🏰 " + EvoI18n.t(hud._lang, "inspector_defense_label") + ":",
+		EvoI18n.t(hud._lang, "inspector_defense_%d" % clampi(d.defense_tier, 0, 3))
+	)
+	if d.merged_count > 0:
+		_add_sheet_kv(
+			m_vbox,
+			"🏛️ " + EvoUiStyle.tr_text(hud._lang, "Unificación:", "Unification:"),
+			EvoI18n.t(hud._lang, "inspector_merged_city", {"count": str(d.merged_count + 1)})
+		)
 	_add_sheet_kv(
 		m_vbox,
 		"🤝 " + EvoI18n.t(hud._lang, "inspector_pacts") + ":",
@@ -468,7 +479,7 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		rl.text = r_line
 		rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		rl.add_theme_font_size_override("font_size", 11)
-		rl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
+		rl.add_theme_color_override("font_color", EvoUiStyle.COLOR_RED_DANGER if r_line.begins_with("🩸") else EvoUiStyle.COLOR_INK)
 		rel_vbox.add_child(rl)
 
 	# Naturalist's Note (`last_justification`)
@@ -571,16 +582,24 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 
 	var mentioned_deme_ids: Dictionary = {}
 	var pact_list: Array[String] = []
+	var vendetta_list: Array[String] = []
 	for other_id in world_state.demes.keys():
 		if other_id == d.id:
 			continue
 		var od_pact: EvoTypes.Deme = world_state.demes[other_id]
-		if od_pact.population > 0 and EvoTypes.is_pact_active(world_state, d.id, other_id):
+		if od_pact.population <= 0:
+			continue
+		if EvoTypes.is_pact_active(world_state, d.id, other_id):
 			pact_list.append(_format_short_deme_label(od_pact))
+			mentioned_deme_ids[other_id] = true
+		elif EvoTypes.is_vendetta_active(world_state, d.id, other_id):
+			vendetta_list.append(_format_short_deme_label(od_pact))
 			mentioned_deme_ids[other_id] = true
 
 	var war_list: Array[String] = []
+	var siege_list: Array[String] = []
 	var raid_list: Array[String] = []
+	var tribute_list: Array[String] = []
 	var betrayal_list: Array[String] = []
 	var coop_full: Array[String] = []
 	var coop_short: Array[String] = []
@@ -612,9 +631,15 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 			"war":
 				if not war_list.has(short_lbl):
 					war_list.append(short_lbl)
+			"siege":
+				if not siege_list.has(short_lbl):
+					siege_list.append(short_lbl)
 			"raid":
 				if not raid_list.has(short_lbl):
 					raid_list.append(short_lbl)
+			"tribute":
+				if not tribute_list.has(short_lbl):
+					tribute_list.append(short_lbl)
 			"betrayal":
 				if not betrayal_list.has(short_lbl):
 					betrayal_list.append(short_lbl)
@@ -639,10 +664,16 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 
 	if not pact_list.is_empty():
 		lines.append("🤝 " + EvoI18n.t(lang, "inspector_pact_with", {"partner": ", ".join(pact_list)}))
+	if not vendetta_list.is_empty():
+		lines.append("🩸 " + EvoI18n.t(lang, "inspector_vendetta_with", {"partner": ", ".join(vendetta_list)}))
+	if not siege_list.is_empty():
+		lines.append("🏰 %s: %s" % [EvoI18n.t(lang, "event_siege"), ", ".join(siege_list)])
 	if not war_list.is_empty():
 		lines.append("⚔️ %s: %s" % [EvoI18n.t(lang, "event_war"), ", ".join(war_list)])
 	if not raid_list.is_empty():
 		lines.append("🔥 %s: %s" % [EvoI18n.t(lang, "event_raid"), ", ".join(raid_list)])
+	if not tribute_list.is_empty():
+		lines.append("🪙 %s: %s" % [EvoI18n.t(lang, "event_tribute"), ", ".join(tribute_list)])
 	if not betrayal_list.is_empty():
 		lines.append("🗡️ %s: %s" % [EvoI18n.t(lang, "event_betrayal"), ", ".join(betrayal_list)])
 

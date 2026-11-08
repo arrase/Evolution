@@ -24,6 +24,20 @@ static func draw_village_or_ui_sprite(sprite_name: String) -> Image:
 			return _draw_tier4_windmill()
 		"tier4_tower":
 			return _draw_tier4_tower()
+		"tier5_metropolis":
+			return _draw_tier5_metropolis()
+		"prop_unity_monument", "act_merge":
+			return _draw_prop_unity_monument()
+		"prop_defense_palisade":
+			return _draw_prop_defense_palisade()
+		"prop_defense_wall":
+			return _draw_prop_defense_wall()
+		"prop_defense_fortress", "act_fortify":
+			return _draw_prop_defense_fortress()
+		"prop_tribute_chest", "act_tribute":
+			return _draw_prop_tribute_chest()
+		"prop_siege_engine", "act_siege":
+			return _draw_prop_siege_engine()
 		"act_forage":
 			return _draw_act_forage()
 		"act_overexploit":
@@ -72,6 +86,14 @@ static func draw_village_or_ui_sprite(sprite_name: String) -> Image:
 			return _draw_icon_pact()
 		"icon_betrayal":
 			return _draw_icon_betrayal()
+		"icon_defense":
+			return _draw_icon_defense()
+		"icon_merge":
+			return _draw_icon_merge()
+		"icon_tribute":
+			return _draw_icon_tribute()
+		"icon_siege":
+			return _draw_icon_siege()
 		"villager_idle":
 			return draw_villager(0, Color("#e07a5f"))
 		"villager_walk1":
@@ -255,6 +277,179 @@ static func _draw_tier4_tower() -> Image:
 		_rect(img, bx, 8, 2, 4, Color("#cbd5e1"))
 	_rect(img, 14, 16, 4, 5, Color("#fde047"))
 	_rect(img, 14, 26, 4, 6, Color("#451a03"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_tier5_metropolis() -> Image:
+	var img := _new_canvas(52, 52)
+	_ellipse(img, 26, 46, 22, 4, C_SHADOW)
+	# Stepped marble terrace
+	_rect(img, 4, 41, 44, 5, Color("#94a3b8"))
+	_rect(img, 6, 37, 40, 4, Color("#cbd5e1"))
+	# Central gilded bronze dome
+	_circle(img, 26, 20, 10, Color("#f59e0b"))
+	_circle(img, 25, 19, 8, Color("#fbbf24"))
+	_ellipse(img, 24, 16, 4, 3, Color("#fef08a"))
+	_rect(img, 25, 6, 2, 5, Color("#fbbf24"))
+	_circle(img, 26, 6, 2, Color("#fef08a"))
+	# Central palace body & white colonnade pillars
+	_rect(img, 15, 20, 22, 17, Color("#e2e8f0"))
+	_rect(img, 14, 19, 24, 2, Color("#fbbf24"))
+	for px_i in [16, 20, 31, 35]:
+		_rect(img, px_i, 21, 2, 16, Color("#f8fafc"))
+	# Twin flanking stone towers
+	_rect(img, 6, 14, 10, 23, Color("#cbd5e1"))
+	_rect(img, 11, 14, 5, 23, Color("#94a3b8"))
+	_rect(img, 37, 14, 10, 23, Color("#cbd5e1"))
+	_rect(img, 42, 14, 5, 23, Color("#94a3b8"))
+	# Royal blue spires & gold finials
+	for cx in [11, 42]:
+		for y in range(6, 15):
+			var hw := 1 + int(float(y - 6) * 0.55)
+			_rect(img, cx - hw, y, hw * 2 + 1, 1, Color("#1e3a8a") if y % 2 == 0 else Color("#2563eb"))
+		_rect(img, cx, 3, 2, 3, Color("#fbbf24"))
+		_rect(img, cx - 1, 18, 3, 5, Color("#fde047"))
+	# Arched double portal
+	_circle(img, 26, 29, 4, Color("#451a03"))
+	_rect(img, 22, 29, 8, 8, Color("#451a03"))
+	_line(img, 26, 26, 26, 36, Color("#fbbf24"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_prop_unity_monument() -> Image:
+	var img := _new_canvas(28, 32)
+	_ellipse(img, 14, 28, 10, 3, C_SHADOW)
+	# Stepped stone plinth
+	_rect(img, 4, 25, 20, 4, Color("#94a3b8"))
+	_rect(img, 5, 23, 18, 2, Color("#cbd5e1"))
+	# Twin marble pillars
+	_rect(img, 6, 10, 5, 15, Color("#f8fafc"))
+	_rect(img, 9, 10, 2, 15, Color("#cbd5e1"))
+	_rect(img, 18, 10, 5, 15, Color("#f8fafc"))
+	_rect(img, 21, 10, 2, 15, Color("#cbd5e1"))
+	# Overarching stone lintel
+	_rect(img, 5, 7, 19, 5, Color("#cbd5e1"))
+	_rect(img, 6, 8, 17, 3, Color("#e2e8f0"))
+	# Central golden keystone & jade inlay
+	_rect(img, 12, 6, 5, 6, Color("#fbbf24"))
+	_rect(img, 13, 7, 3, 4, Color("#10b981"))
+	_px(img, 14, 8, Color("#fde047"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_prop_defense_palisade() -> Image:
+	var img := _new_canvas(32, 28)
+	_ellipse(img, 16, 24, 13, 3, C_SHADOW)
+	# 7 pointed vertical timber logs
+	var log_xs := [4, 8, 12, 16, 20, 24, 27]
+	for lx in log_xs:
+		_rect(img, lx, 9, 3, 15, Color("#78350f"))
+		_rect(img, lx, 9, 2, 15, Color("#92400e"))
+		_rect(img, lx, 7, 3, 2, Color("#fde68a"))
+		_px(img, lx + 1, 6, Color("#fde68a"))
+	# Horizontal binding beams
+	_rect(img, 4, 12, 26, 2, Color("#451a03"))
+	_rect(img, 4, 19, 26, 2, Color("#451a03"))
+	# Central arched timber gate
+	_circle(img, 16, 16, 4, Color("#271508"))
+	_rect(img, 12, 16, 8, 8, Color("#271508"))
+	_line(img, 16, 13, 16, 23, Color("#78350f"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_prop_defense_wall() -> Image:
+	var img := _new_canvas(36, 32)
+	_ellipse(img, 18, 28, 15, 3, C_SHADOW)
+	# Ashlar stone curtain wall
+	_rect(img, 4, 11, 28, 17, Color("#64748b"))
+	_rect(img, 5, 12, 26, 15, Color("#94a3b8"))
+	for y in [15, 19, 23]:
+		_line(img, 5, y, 30, y, Color("#475569"))
+	# 5 top crenellated merlons
+	for mx in [4, 10, 16, 22, 28]:
+		_rect(img, mx, 7, 4, 5, Color("#cbd5e1"))
+	# Central arched gateway with iron portcullis grid
+	_circle(img, 18, 19, 5, Color("#1e293b"))
+	_rect(img, 13, 19, 10, 9, Color("#1e293b"))
+	for gx in [15, 18, 21]:
+		_line(img, gx, 15, gx, 27, Color("#475569"))
+	for gy in [18, 22, 25]:
+		_line(img, 14, gy, 22, gy, Color("#475569"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_prop_defense_fortress() -> Image:
+	var img := _new_canvas(40, 40)
+	_ellipse(img, 20, 36, 17, 3, C_SHADOW)
+	# Reinforced gatehouse
+	_rect(img, 14, 14, 12, 21, Color("#64748b"))
+	_rect(img, 15, 15, 10, 19, Color("#94a3b8"))
+	# Twin cylindrical corner stone towers
+	_rect(img, 4, 10, 10, 25, Color("#94a3b8"))
+	_rect(img, 5, 10, 5, 25, Color("#cbd5e1"))
+	_rect(img, 26, 10, 10, 25, Color("#94a3b8"))
+	_rect(img, 27, 10, 5, 25, Color("#cbd5e1"))
+	# Crimson/gold conical roofs on towers
+	for cx in [9, 31]:
+		for y in range(4, 11):
+			var hw := 1 + int(float(y - 4) * 0.75)
+			_rect(img, cx - hw, y, hw * 2 + 1, 1, Color("#991b1b") if y % 2 == 0 else Color("#dc2626"))
+		_px(img, cx, 3, Color("#fbbf24"))
+	# Gatehouse portal & golden shield emblem at (20, 19)
+	_circle(img, 20, 26, 4, Color("#1e293b"))
+	_rect(img, 16, 26, 8, 9, Color("#1e293b"))
+	_circle(img, 20, 19, 3, Color("#fbbf24"))
+	_px(img, 20, 19, Color("#fef08a"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_prop_tribute_chest() -> Image:
+	var img := _new_canvas(24, 24)
+	_ellipse(img, 12, 20, 9, 2, C_SHADOW)
+	# Overflowing reserve sacks/coins around chest
+	_circle(img, 5, 18, 3, Color("#d97706"))
+	_circle(img, 19, 18, 2, Color("#f59e0b"))
+	# Ornate wooden chest
+	_rect(img, 6, 11, 12, 9, Color("#78350f"))
+	_rect(img, 7, 12, 10, 7, Color("#92400e"))
+	# Overflowing gold/amber coins at top
+	_ellipse(img, 12, 11, 5, 2, Color("#fbbf24"))
+	_rect(img, 8, 9, 8, 2, Color("#fde047"))
+	# Golden bands and lock
+	_rect(img, 6, 13, 12, 2, Color("#fbbf24"))
+	_rect(img, 8, 11, 2, 9, Color("#fbbf24"))
+	_rect(img, 14, 11, 2, 9, Color("#fbbf24"))
+	_rect(img, 11, 13, 2, 3, Color("#fef08a"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_prop_siege_engine() -> Image:
+	var img := _new_canvas(28, 28)
+	_ellipse(img, 14, 24, 11, 3, C_SHADOW)
+	# Timber catapult frame
+	_rect(img, 5, 18, 18, 4, Color("#78350f"))
+	_rect(img, 6, 19, 16, 2, Color("#92400e"))
+	_line(img, 9, 19, 14, 10, Color("#78350f"))
+	_line(img, 10, 19, 15, 10, Color("#92400e"))
+	_line(img, 19, 19, 14, 10, Color("#78350f"))
+	# Torsion arm & flaming stone payload
+	_line(img, 15, 15, 6, 6, Color("#92400e"))
+	_line(img, 16, 15, 7, 6, Color("#b45309"))
+	_circle(img, 6, 6, 3, Color("#f97316"))
+	_circle(img, 6, 6, 2, Color("#fbbf24"))
+	_px(img, 6, 4, Color("#ef4444"))
+	# Iron wheels
+	_circle(img, 8, 22, 3, Color("#475569"))
+	_px(img, 8, 22, Color("#cbd5e1"))
+	_circle(img, 20, 22, 3, Color("#475569"))
+	_px(img, 20, 22, Color("#cbd5e1"))
 	_apply_soft_outline(img)
 	return img
 
@@ -680,6 +875,70 @@ static func _draw_icon_betrayal() -> Image:
 	_line(img, 11, 3, 6, 11, Color("#ef4444"))
 	_line(img, 9, 2, 13, 6, Color("#fbbf24"))
 	_px(img, 13, 2, Color("#f43f5e"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_icon_defense() -> Image:
+	var img := _new_canvas(16, 16)
+	# Crenellated silver/gold fortress shield
+	_rect(img, 3, 4, 10, 7, Color("#64748b"))
+	_rect(img, 4, 5, 8, 6, Color("#cbd5e1"))
+	_rect(img, 5, 11, 6, 2, Color("#94a3b8"))
+	_rect(img, 7, 13, 2, 1, Color("#64748b"))
+	# Top merlons
+	for mx in [3, 7, 11]:
+		_rect(img, mx, 2, 2, 2, Color("#e2e8f0"))
+	# Gold trim & central emblem
+	_rect(img, 6, 6, 4, 4, Color("#fbbf24"))
+	_rect(img, 7, 7, 2, 2, Color("#fef08a"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_icon_merge() -> Image:
+	var img := _new_canvas(16, 16)
+	# Twin banners/pillars uniting under a golden crown arch
+	_rect(img, 3, 7, 3, 6, Color("#10b981"))
+	_rect(img, 10, 7, 3, 6, Color("#38bdf8"))
+	_rect(img, 2, 4, 12, 3, Color("#fbbf24"))
+	_rect(img, 6, 3, 4, 4, Color("#fde047"))
+	_line(img, 4, 12, 8, 8, Color("#fbbf24"))
+	_line(img, 11, 12, 8, 8, Color("#fbbf24"))
+	_circle(img, 8, 8, 2, Color("#fef08a"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_icon_tribute() -> Image:
+	var img := _new_canvas(16, 16)
+	# Golden chest with an offering arrow
+	_rect(img, 3, 8, 9, 6, Color("#92400e"))
+	_rect(img, 4, 6, 7, 2, Color("#fbbf24"))
+	_rect(img, 3, 10, 9, 1, Color("#fbbf24"))
+	_rect(img, 7, 9, 2, 3, Color("#fef08a"))
+	# Offering arrow pointing up-right
+	_line(img, 9, 6, 13, 2, Color("#fde047"))
+	_line(img, 10, 6, 13, 3, Color("#f59e0b"))
+	_rect(img, 11, 2, 3, 2, Color("#fde047"))
+	_apply_soft_outline(img)
+	return img
+
+
+static func _draw_icon_siege() -> Image:
+	var img := _new_canvas(16, 16)
+	# Crenellated tower with orange/red siege flames
+	_rect(img, 5, 5, 6, 9, Color("#64748b"))
+	_rect(img, 6, 6, 4, 7, Color("#94a3b8"))
+	for mx in [4, 7, 10]:
+		_rect(img, mx, 3, 2, 2, Color("#cbd5e1"))
+	# Siege flames around tower
+	_circle(img, 4, 11, 2, Color("#ef4444"))
+	_px(img, 4, 11, Color("#fbbf24"))
+	_circle(img, 12, 10, 2, Color("#f97316"))
+	_px(img, 12, 10, Color("#fde047"))
+	_circle(img, 8, 12, 2, Color("#ef4444"))
+	_px(img, 8, 12, Color("#fde047"))
 	_apply_soft_outline(img)
 	return img
 

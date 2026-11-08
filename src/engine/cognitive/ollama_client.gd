@@ -406,7 +406,8 @@ static func build_compact_system_one_state(deme: EvoTypes.Deme, state: EvoTypes.
 	return {
 		"briefing": EvoHeuristicScorer.build_compact_system_one_state(deme, state, top_prior, geo_summary),
 		"strategy_traits_prior": top_prior,
-		"geopolitics": geo_summary
+		"geopolitics": geo_summary,
+		"memory": str(geo_summary.get("memory", "quiet"))
 	}
 
 
@@ -429,6 +430,7 @@ static func build_live_job(sig: String, rep: EvoTypes.Deme, state: EvoTypes.Worl
 		"briefing": EvoHeuristicScorer.build_compact_system_one_state(rep, state, top_prior, geo_summary),
 		"strategy_traits_prior": top_prior,
 		"geopolitics": geo_summary,
+		"memory": str(geo_summary.get("memory", "quiet")),
 		"criteria": EvoHeuristicScorer.build_compact_decision_criteria(eligible_decisions),
 		"eligible_ids": eligible_ids
 	}
@@ -511,9 +513,10 @@ static func sync_and_enqueue_batch(
 	if not buckets.is_empty():
 		_mutex.lock()
 		var can_enq := enqueue_missing and _can_enqueue_locked()
-		for pending_sig in _pending_jobs_by_sig.keys():
-			if not buckets.has(pending_sig):
-				_pending_jobs_by_sig.erase(pending_sig)
+		if not _worker_running:
+			for pending_sig in _pending_jobs_by_sig.keys():
+				if not buckets.has(pending_sig):
+					_pending_jobs_by_sig.erase(pending_sig)
 		for sig in buckets.keys():
 			if _live_signature_cache.has(sig):
 				live_results[sig] = (_live_signature_cache[sig] as Dictionary).duplicate(true)
@@ -523,7 +526,7 @@ static func sync_and_enqueue_batch(
 		_mutex.unlock()
 
 	var new_jobs: Array[Dictionary] = []
-	var max_new := maxi(0, 8 - _pending_jobs_by_sig.size())
+	var max_new := mini(3, maxi(0, 8 - _pending_jobs_by_sig.size()))
 	for i in range(mini(max_new, missing_sigs.size())):
 		var sig := missing_sigs[i]
 		var rep_deme: EvoTypes.Deme = buckets[sig]["representative"]
@@ -551,11 +554,11 @@ static func prefetch_for_reps(reps_by_sig: Dictionary, state: EvoTypes.WorldStat
 		for pending_sig in _pending_jobs_by_sig.keys():
 			if not reps_by_sig.has(pending_sig):
 				_pending_jobs_by_sig.erase(pending_sig)
-	if can_enq and _pending_jobs_by_sig.size() < 4:
+	if can_enq and _pending_jobs_by_sig.size() < 8:
 		for sig in reps_by_sig.keys():
 			if not _live_signature_cache.has(sig) and not _pending_jobs_by_sig.has(sig):
 				missing_sigs.append(str(sig))
-				if _pending_jobs_by_sig.size() + missing_sigs.size() >= 4:
+				if _pending_jobs_by_sig.size() + missing_sigs.size() >= 8 or missing_sigs.size() >= 2:
 					break
 	_mutex.unlock()
 
@@ -695,7 +698,8 @@ static func _evaluate_job_batch_with_ollama(
 			"state": {
 				"briefing": str(item["briefing"]),
 				"strategy_traits_prior": item.get("strategy_traits_prior", {}),
-				"geopolitics": item.get("geopolitics", {})
+				"geopolitics": item.get("geopolitics", {}),
+				"memory": str(item.get("memory", "quiet"))
 			},
 			"questions": {
 				"decision": {

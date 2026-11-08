@@ -104,11 +104,11 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 				effective_type = "pact"
 
 		match effective_type:
-			"war":
+			"war", "siege":
 				var b_pos: Vector2 = r._cell_top_center(cell_a) if is_same_hex else (p_a + p_b) * 0.5
 				var show_badge := register_road_badge(r, b_pos, badge_positions, true)
 				roads.append({
-					"kind": "war",
+					"kind": effective_type,
 					"hex_a": cell_a.id,
 					"hex_b": cell_b.id,
 					"world_a": endpoints["world_a"],
@@ -151,6 +151,52 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 					"show_traffic": true,
 					"badge_pos": b_pos,
 					"color": flow_color
+				})
+			"tribute":
+				var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, curve_f)
+				var show_badge := register_road_badge(r, b_pos, badge_positions, true)
+				var show_traffic := claim_road_traffic(cell_a.id, cell_b.id, hex_traffic_counts, true)
+				roads.append({
+					"kind": "tribute",
+					"hex_a": cell_a.id,
+					"hex_b": cell_b.id,
+					"world_a": endpoints["world_a"],
+					"z_a": endpoints["z_a"],
+					"trim_a": trim_a,
+					"world_b": endpoints["world_b"],
+					"z_b": endpoints["z_b"],
+					"trim_b": trim_b,
+					"p_a": p_a,
+					"p_b": p_b,
+					"is_same_hex": is_same_hex,
+					"curve_factor": curve_f,
+					"show_badge": show_badge,
+					"show_traffic": show_traffic,
+					"badge_pos": b_pos,
+					"color": Color("#f59e0b")
+				})
+			"merge":
+				var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, curve_f)
+				var show_badge := register_road_badge(r, b_pos, badge_positions, true)
+				var show_traffic := claim_road_traffic(cell_a.id, cell_b.id, hex_traffic_counts, true)
+				roads.append({
+					"kind": "merge",
+					"hex_a": cell_a.id,
+					"hex_b": cell_b.id,
+					"world_a": endpoints["world_a"],
+					"z_a": endpoints["z_a"],
+					"trim_a": trim_a,
+					"world_b": endpoints["world_b"],
+					"z_b": endpoints["z_b"],
+					"trim_b": trim_b,
+					"p_a": p_a,
+					"p_b": p_b,
+					"is_same_hex": is_same_hex,
+					"curve_factor": curve_f,
+					"show_badge": show_badge,
+					"show_traffic": show_traffic,
+					"badge_pos": b_pos,
+					"color": Color("#fbbf24")
 				})
 			"betrayal":
 				var b_pos: Vector2 = r._cell_top_center(cell_a) if is_same_hex else (p_a + p_b) * 0.5
@@ -223,7 +269,7 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 					"show_badge": show_badge,
 					"badge_pos": b_pos
 				})
-			"exchange", "cooperate", "merge":
+			"exchange", "cooperate", "trade":
 				var kind := "bridge" if (not is_same_hex and should_use_bridge(r, cell_a, cell_b)) else "collab"
 				var b_pos := bridge_arch_point(p_a, p_b, 0.5) if kind == "bridge" else sample_road_curve(p_a, p_b, 0.5, 1.0, curve_f)
 				var show_badge := register_road_badge(r, b_pos, badge_positions, is_prio)
@@ -719,7 +765,7 @@ static func project_road_entry(r: Node2D, road: Dictionary, force_reproject: boo
 	var dist := diff.length()
 	var perp := Vector2(-diff.y, diff.x).normalized() if dist > 0.01 else Vector2.UP
 	road["ctrl"] = (p_a + p_b) * 0.5 + perp * (minf(dist * curve_f, 12.0) * curve_sign)
-	if force_reproject and road.get("kind", "") in ["dispute", "war", "raid", "betrayal", "pact"]:
+	if force_reproject and road.get("kind", "") in ["dispute", "war", "siege", "raid", "betrayal", "pact", "tribute", "merge"]:
 		if bool(road.get("is_same_hex", false)) and road.has("badge_world"):
 			road["badge_pos"] = r._project(road["badge_world"] as Vector2, float(road["badge_z"]))
 		else:
@@ -740,7 +786,11 @@ static func draw_network_roads(r: Node2D) -> void:
 		match road["kind"]:
 			"pact":
 				draw_pact_highway(r, road)
-			"war":
+			"merge":
+				draw_merge_avenue(r, road)
+			"tribute":
+				draw_tribute_route(r, road)
+			"war", "siege":
 				draw_war_corridor(r, road)
 			"raid":
 				draw_raid_trail(r, road)
@@ -779,7 +829,17 @@ static func draw_animated_roads(r: Node2D) -> void:
 					var pos_2 := sample_road_curve(p_a, p_b, lerpf(0.82, 0.18, raw_t2), 1.0, curve_f) - perp * 3.2 + Vector2(0, -6.0)
 					EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "caravan_cart", pos_1, 1.55)
 					EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "caravan_cart", pos_2, 1.55)
-			"war":
+			"merge":
+				if bool(road.get("show_traffic", true)):
+					var raw_m := fposmod(anim_time * 0.36 + float(int(p_a.x + p_b.y) % 7) * 0.13, 1.0)
+					var wagon_pos := sample_road_curve(p_a, p_b, lerpf(0.18, 0.82, raw_m), 1.0, curve_f) + Vector2(0, -6.0)
+					EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "settler_wagon", wagon_pos, 1.55)
+			"tribute":
+				if bool(road.get("show_traffic", true)):
+					var raw_tr := fposmod(anim_time * 0.36 + float(int(p_a.x + p_b.y) % 7) * 0.13, 1.0)
+					var cart_pos := sample_road_curve(p_a, p_b, lerpf(0.18, 0.82, raw_tr), 1.0, curve_f) + Vector2(0, -6.0)
+					EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "caravan_cart", cart_pos, 1.55)
+			"war", "siege":
 				draw_war_animated_invasion(r, road)
 			"raid":
 				draw_raid_animated_plunder(r, road)
@@ -1318,6 +1378,55 @@ static func draw_pact_highway(r: Node2D, road: Dictionary) -> void:
 		EvoWorldOverlayRenderer.draw_centered_sprite(ci, "icon_pact", mid + Vector2(0, 6.5), 1.35)
 
 
+static func draw_merge_avenue(r: Node2D, road: Dictionary) -> void:
+	var ci: Node2D = r._network_layer
+	var p_a: Vector2 = road["p_a"]
+	var p_b: Vector2 = road["p_b"]
+	var curve_f: float = float(road.get("curve_factor", 0.045))
+	var show_badge: bool = bool(road.get("show_badge", true))
+
+	var segments := 26
+	var pts := PackedVector2Array()
+	for i in range(segments + 1):
+		pts.append(sample_road_curve(p_a, p_b, float(i) / float(segments), 1.0, curve_f))
+
+	ci.draw_polyline(pts, Color(0.98, 0.75, 0.14, 0.38), 22.0)
+	ci.draw_polyline(pts, Color("#10b981"), 16.5)
+	ci.draw_polyline(pts, Color("#fbbf24"), 12.5)
+	ci.draw_polyline(pts, Color("#fef3c7"), 8.5)
+
+	var mid_curve := sample_road_curve(p_a, p_b, 0.5, 1.0, curve_f)
+	if show_badge:
+		var mid := mid_curve + Vector2(0, -15.0)
+		ci.draw_circle(mid, 12.5, Color("#fbbf24"))
+		ci.draw_circle(mid, 10.5, Color("#064e3b"))
+		EvoWorldOverlayRenderer.draw_centered_sprite(ci, "icon_merge", mid + Vector2(0, 6.5), 1.35)
+
+
+static func draw_tribute_route(r: Node2D, road: Dictionary) -> void:
+	var ci: Node2D = r._network_layer
+	var p_a: Vector2 = road["p_a"]
+	var p_b: Vector2 = road["p_b"]
+	var curve_f: float = float(road.get("curve_factor", 0.045))
+	var show_badge: bool = bool(road.get("show_badge", true))
+
+	var segments := 24
+	var pts := PackedVector2Array()
+	for i in range(segments + 1):
+		pts.append(sample_road_curve(p_a, p_b, float(i) / float(segments), 1.0, curve_f))
+
+	ci.draw_polyline(pts, Color("#78350f"), 15.0)
+	ci.draw_polyline(pts, Color("#d97706"), 11.2)
+	ci.draw_polyline(pts, Color("#fbbf24"), 7.5)
+
+	var mid_curve := sample_road_curve(p_a, p_b, 0.5, 1.0, curve_f)
+	if show_badge:
+		var mid := mid_curve + Vector2(0, -15.0)
+		ci.draw_circle(mid, 12.0, Color("#78350f"))
+		ci.draw_circle(mid, 10.0, Color("#f59e0b"))
+		EvoWorldOverlayRenderer.draw_centered_sprite(ci, "icon_tribute", mid + Vector2(0, 6.5), 1.35)
+
+
 static func draw_war_corridor(r: Node2D, road: Dictionary) -> void:
 	var ci: Node2D = r._network_layer
 	var p_a: Vector2 = road["p_a"]
@@ -1395,9 +1504,10 @@ static func draw_war_animated_invasion(r: Node2D, road: Dictionary) -> void:
 
 	if bool(road.get("show_badge", true)):
 		var badge_pos := mid + Vector2(0, -18.0)
+		var is_siege_road := str(road.get("kind", "")) == "siege"
 		anim_layer.draw_circle(badge_pos, 14.5 * (0.92 + 0.16 * pulse), Color(0.94, 0.20, 0.20, 0.42))
 		anim_layer.draw_circle(badge_pos, 10.5, Color("#7f1d1d"))
-		EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "icon_war", badge_pos + Vector2(0, 6.5), 1.35)
+		EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "icon_siege" if is_siege_road else "icon_war", badge_pos + Vector2(0, 6.5), 1.35)
 
 
 static func draw_raid_trail(r: Node2D, road: Dictionary) -> void:

@@ -370,6 +370,14 @@ static func get_event_type_color(event_type: String) -> Color:
 			return Color("10b981")
 		"betrayal":
 			return Color("be123c")
+		"fortify", "defense":
+			return Color("#3b82f6")
+		"merge":
+			return Color("#eab308")
+		"tribute":
+			return Color("#f59e0b")
+		"siege":
+			return Color("#dc2626")
 		"baldwin_trait":
 			return Color("#0d9488")
 		"cultural_innovation":
@@ -405,6 +413,14 @@ static func get_event_type_label(event_type: String, lang: String = "es") -> Str
 			return EvoI18n.t(lang, "event_pact")
 		"betrayal":
 			return EvoI18n.t(lang, "event_betrayal")
+		"fortify", "defense":
+			return EvoI18n.t(lang, "event_fortify")
+		"merge":
+			return EvoI18n.t(lang, "event_merge")
+		"tribute":
+			return EvoI18n.t(lang, "event_tribute")
+		"siege":
+			return EvoI18n.t(lang, "event_siege")
 		"baldwin_trait":
 			return tr_text(lang, "Efecto Baldwin", "Baldwin Effect")
 		"cultural_innovation":
@@ -566,12 +582,14 @@ static func get_vital_status_color(status: String) -> Color:
 	return COLOR_SEPIA
 
 
-static func get_village_tier_label(population: int, lang: String = "es") -> String:
-	if population >= 400:
-		return tr_text(lang, "IV · Poblado", "IV · Settlement")
+static func get_village_tier_label(population: int, lang: String = "es", merged_count: int = 0) -> String:
+	if merged_count >= 1 and population >= 200:
+		return tr_text(lang, "V · Metrópolis", "V · Metropolis")
 	if population >= 150:
+		return tr_text(lang, "IV · Poblado", "IV · Settlement")
+	if population >= 85:
 		return tr_text(lang, "III · Aldea", "III · Village")
-	if population >= 50:
+	if population >= 35:
 		return tr_text(lang, "II · Caserío", "II · Hamlet")
 	return tr_text(lang, "I · Campamento", "I · Camp")
 
@@ -632,7 +650,12 @@ static func get_pixel_icon(icon_key: String) -> ImageTexture:
 		"icon_war": "icon_war",
 		"icon_raid": "icon_raid",
 		"icon_pact": "icon_pact",
-		"icon_betrayal": "icon_betrayal"
+		"icon_betrayal": "icon_betrayal",
+		"icon_defense": "icon_defense",
+		"icon_fortify": "icon_defense",
+		"icon_merge": "icon_merge",
+		"icon_tribute": "icon_tribute",
+		"icon_siege": "icon_siege"
 	}
 	if sprite_map.has(icon_key):
 		var tex_from_gen := EvoPixelArtGen.get_texture(str(sprite_map[icon_key]))

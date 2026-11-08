@@ -216,8 +216,18 @@ static func draw_village_billboard(r: Node2D, village: Dictionary, pos: Vector2)
 	shield_fill.a = 0.95 * alpha
 	ci.draw_rect(shield_rect, shield_fill, true)
 	var shield_border := strat_color.lightened(0.12)
+	var shield_border_w := 1.4
+	if deme.defense_tier == 1:
+		shield_border = Color("#b45309")
+		shield_border_w = 1.8
+	elif deme.defense_tier == 2:
+		shield_border = Color("#cbd5e1")
+		shield_border_w = 2.0
+	elif deme.defense_tier >= 3:
+		shield_border = Color("#fbbf24")
+		shield_border_w = 2.5
 	shield_border.a = alpha
-	ci.draw_rect(shield_rect, shield_border, false, 1.4)
+	ci.draw_rect(shield_rect, shield_border, false, shield_border_w)
 	ci.draw_string(
 		font,
 		Vector2(shield_rect.position.x, shield_rect.position.y + 20.0),

@@ -30,8 +30,8 @@ flowchart TD
 
     subgraph World ["src/world/ — 2.5D Isometric Renderer & Procedural Sprites"]
         Renderer["EvoWorldRenderer + EvoCameraController\n2.5D Projection, Depth Sorting & Dirty-State Cache"]
-        SubRender["PropFloraRenderer + RoadNetworkRenderer + WorldOverlayRenderer\nFlora Anti-Overlap, 9 Road/Geopolitical Archetypes, Billboards & Particles"]
-        Sprites["EvoPixelArtGen + PixelCanvas + TerrainSprites + VillageUiSprites\n88 Procedural Pixel-Art Textures & Lineage Tunic Recoloring"]
+        SubRender["PropFloraRenderer + RoadNetworkRenderer + WorldOverlayRenderer\n3-Tier Walls, Unified Plazas, 11 Road/Geopolitical Archetypes & Billboards"]
+        Sprites["EvoPixelArtGen + PixelCanvas + TerrainSprites + VillageUiSprites\n99 Procedural Pixel-Art Textures & Lineage Tunic Recoloring"]
     end
 
     subgraph UI ["src/ui/ — Cozy Field-Journal HUD & Modals"]
@@ -69,19 +69,19 @@ flowchart TD
 │   ├── engine/
 │   │   ├── turn_engine.gd      # EvoTurnEngine: advance_generation() pipeline & God-mode brush actions
 │   │   ├── env_phase.gd        # EvoEnvPhase: seasonal & glacial cycles, coastal flooding, K/R regen
-│   │   ├── decision_model.gd   # EvoDecisionModel: signature bucketing, cache lookup, prefetch orchestration
+│   │   ├── decision_model.gd   # EvoDecisionModel: signature bucketing, 75/25 blending, 8-sig prefetch orchestration
 │   │   ├── biophys_phase.gd    # EvoBiophysPhase: coordinates ecology & demography sub-phases
 │   │   ├── milestone_phase.gd  # EvoMilestonePhase: Speciation, Baldwin, Innovation & Macro-Outcomes
 │   │   ├── biophys/
-│   │   │   ├── ecology_interaction.gd   # EvoEcologyInteraction: Hawk-Dove, extraction, symbiosis, K degrade
-│   │   │   └── demography_migration.gd  # EvoDemographyMigration: metabolism, r/K growth, fission, merging
+│   │   │   ├── ecology_interaction.gd   # EvoEcologyInteraction: Hawk-Dove, trade, pacts, vendettas, tribute, raids, walls
+│   │   │   └── demography_migration.gd  # EvoDemographyMigration: metabolism & upkeep, r/K growth, wars/sieges, synoecism
 │   │   └── cognitive/
-│   │       ├── heuristic_scorer.gd      # EvoHeuristicScorer: 10-part signatures, state briefings, trait synthesis
+│   │       ├── heuristic_scorer.gd      # EvoHeuristicScorer: coarsened 10-part signatures, 6-gen memory, neighbor tags
 │   │       └── ollama_client.gd         # EvoOllamaClient: WorkerThreadPool HTTP batching & model pull
 │   ├── ui/
 │   │   ├── main_hud.gd         # EvoMainHud: top-level UI controller & Ollama startup check
 │   │   ├── ui_style.gd         # EvoUiStyle: parchment/wood theme tokens, StyleBoxes & helpers
-│   │   ├── notebook_modal.gd   # EvoNotebookModal: filterable Evolutionary Chronicle & hex jump
+│   │   ├── notebook_modal.gd   # EvoNotebookModal: 18-filter Evolutionary Chronicle & hex jump
 │   │   ├── tree_modal.gd       # EvoTreeModal: Bézier phylogenetic tree & map lineage highlighter
 │   │   ├── lab_modal.gd        # EvoLabModal: 4-tab Strategy, Trait & Decision Forge with live balance meter
 │   │   └── hud/
@@ -92,17 +92,17 @@ flowchart TD
 │   └── world/
 │       ├── world_renderer.gd   # EvoWorldRenderer: 2.5D hex column extrusion, dirty-state cache, lenses
 │       ├── camera_controller.gd# EvoCameraController: orbit yaw, tilt pitch, cursor-pivoted zoom & pan
-│       ├── pixel_art_gen.gd    # EvoPixelArtGen: 88-sprite procedural registry & dynamic villager recoloring
+│       ├── pixel_art_gen.gd    # EvoPixelArtGen: 99-sprite procedural registry & dynamic villager recoloring
 │       ├── render/
-│       │   ├── prop_flora_renderer.gd   # EvoPropFloraRenderer: plazas, 4 village tiers, geopolitical props, flora anti-overlap
-│       │   ├── road_network_renderer.gd # EvoRoadNetworkRenderer: 9 road & geopolitical flow archetypes, bridges & decay
-│       │   └── world_overlay_renderer.gd# EvoWorldOverlayRenderer: hex strategy rings, billboards, geopolitical pills & particles
+│       │   ├── prop_flora_renderer.gd   # EvoPropFloraRenderer: plazas, 5 village tiers, 3-tier walls, twin pennants
+│       │   ├── road_network_renderer.gd # EvoRoadNetworkRenderer: 11 road & geopolitical flow archetypes, bridges & decay
+│       │   └── world_overlay_renderer.gd# EvoWorldOverlayRenderer: hex strategy rings, fortified billboards & side pills
 │       └── sprites/
 │           ├── pixel_canvas.gd          # EvoPixelCanvas: RGBA8 raster primitives & soft 1px outlining
 │           ├── terrain_sprites.gd       # EvoTerrainSprites: 7 hex biome tiles (224×192) & 17 flora sprites
-│           └── village_ui_sprites.gd    # EvoVillageUiSprites: 37 village/action/geopolitical sprites & 27 UI icons
+│           └── village_ui_sprites.gd    # EvoVillageUiSprites: 44 village/action/geopolitical sprites & 31 UI icons
 └── tests/
-    ├── test_runner.gd          # Headless unit, biophysical, integration & UI test suite (15 suites)
+    ├── test_runner.gd          # Headless unit, biophysical, integration & UI test suite (16 suites)
     └── test_visual_capture.gd  # Automated screenshot generator for gh-pages/assets/img/
 ```
 
@@ -110,8 +110,8 @@ flowchart TD
 
 ## Core Data Models, Strategy Inheritance & User Catalog Persistence
 
-### 1. Evolutionary Strategy & Geopolitical Primitives (`EvoTypes`)
-The 1v1 strategy duel and geopolitical systems are modeled directly in `src/core/types.gd`:
+### 1. Evolutionary Strategy, Fortification, Synoecism & Geopolitical Primitives (`EvoTypes`)
+The 1v1 strategy duel, multi-tier defense system, vendetta memory, and city unification (synoecism) are modeled directly in `src/core/types.gd`:
 
 * **`EvoTypes.StrategyDef`**:
   * `id: String` — Unique identifier (e.g., `"strat-cooperation"`, `"strat-war"`, or `"strat-custom-*"`).
@@ -122,21 +122,29 @@ The 1v1 strategy duel and geopolitical systems are modeled directly in `src/core
 * **`EvoTypes.WorldState`**:
   * `strategies_catalog: Dictionary` (`String -> StrategyDef`) — Holds the 5 base strategies from `EvoCatalog.create_base_strategies_catalog` merged with user-created strategies from `~/.config/Evolution/user_catalog.json`.
   * `strategy_a_id: String` (default `"strat-cooperation"`) & `strategy_b_id: String` (default `"strat-war"`) — The two competing strategies assigned to Founder A and Founder B in the active 1v1 matchup.
-  * `active_pacts: Dictionary` (`String -> int`) — Maps canonical pair keys (`EvoTypes.make_pair_key(deme_a_id, deme_b_id)` = `"idA__idB"`) to consecutive cooperative turns (`>= 2` indicates a formal active pact via `EvoTypes.is_pact_active`).
+  * `active_pacts: Dictionary` (`String -> int`) — Maps canonical pair keys (`EvoTypes.make_pair_key(deme_a_id, deme_b_id)` = `"idA__idB"`) to diplomatic state:
+    * **`>= 2` (`EvoTypes.is_pact_active == true`)**: Formal active Alliance Pact (eligible for mutual caloric bonus, distress aid, shared defense, allied wall co-financing, and at `>= 3` / `>= 4` City Unification / Synoecism).
+    * **`1`**: Cooperative progress toward a pact, or a 1-turn temporary truce established via **Tribute Appeasement (`tribute`)**.
+    * **`< 0` (`EvoTypes.is_vendetta_active == true`)**: Active multi-turn **Vendetta / Grudge** (`-4` turns after betrayal, `-3` after conquest, `-2` after raid or repelled war; `EvoTypes.get_vendetta_turns` returns `abs(turns)`). Increments by `+1` each turn toward `0` and blocks pact formation while active.
   * `recent_extinction_hexes: Array[String]` — Tracks hex coordinates where demes collapsed during the current generation.
 * **`EvoTypes.Deme` & `EvoTypes.LineageNode`**:
   * Both `Deme` and `LineageNode` carry `strategy_id: String` (serialized in JSON as both `"strategyId"` and `"strategy_id"` for full schema compatibility).
+  * `Deme.defense_tier: int` (`0..3`) — Multi-tier fortification level (`0`: Unfortified, `1`: Palisade & Watchtower `+45%`, `2`: Stone Wall & Fort `+95%`, `3`: Castle / Citadel `+155%` & raid-immune).
+  * `Deme.merged_count: int` & `Deme.secondary_color: String` — Tracks how many allied clans have united into this settlement via **Synoecism (`merge`)** and stores the united partner's strategy emblem color for twin-pennant plaza rendering.
+  * `Deme.get_village_tier()` returns architectural tier `1..5` (`5` = Unified Metropolis when `merged_count >= 1` and (`population >= 220` or `defense_tier >= 3`), `4` = Citadel when `population >= 400` or `defense_tier >= 3`, `3` = Village when `population >= 150` or `defense_tier == 2`, `2` = Hamlet when `population >= 50` or `defense_tier == 1`, `1` = Camp otherwise).
   * `Deme.get_vital_status()` returns the unified 5-state classification (`"thriving"`, `"stable"`, `"declining"`, `"starving"`, `"extinct"`).
   * `LineageNode` also stores `biological_trait_ids: Array[String]` and `cultural_trait_ids: Array[String]` alongside `acquired_trait_ids`.
 
 ### 2. End-to-End `strategy_id` Inheritance Lifecycle
-To guarantee that every village on the map always retains its founding strategy identity regardless of how far it migrates, conquers, or diverges phylogenetically:
+To guarantee that every village on the map always retains its founding strategy identity regardless of how far it migrates, conquers, unites, or diverges phylogenetically:
 
 1. **Preset Initialization & Generation 0 Matchup (`EvoCatalog.apply_strategy_to_deme`)**:
    Sets `deme.strategy_id = strategy.id`, `deme.color = strategy.color`, `deme.biological_trait_ids`, and (if `deme_has_cultural_capacity` is satisfied) `deme.cultural_trait_ids`, and mirrors `strategy_id`, `color`, and traits onto `state.lineage_tree[deme.lineage_id]`.
 2. **Colonist Migration & Warband Conquest (`EvoDemographyMigration.run_demography_and_migration_phase`)**:
    When a parent deme undergoes population fission (`-m<gen>`) or conquers a rival hex (`-w<gen>`), the newly founded settlement explicitly inherits `daughter.strategy_id = deme.strategy_id`, `daughter.lineage_id = deme.lineage_id`, and `daughter.color = deme.color`.
-3. **Allopatric Speciation (`EvoMilestonePhase.run_milestone_phase`)**:
+3. **City Unification / Synoecism (`EvoDemographyMigration._merge_deme_into`)**:
+   When two allied settlements unite, the host metropolis preserves its primary `deme.strategy_id` and `deme.color` while recording the partner's color in `deme.secondary_color` and incrementing `deme.merged_count`.
+4. **Allopatric Speciation (`EvoMilestonePhase.run_milestone_phase`)**:
    When an isolated colony (`isolation_turns >= 10`) speciates into a new child `LineageNode` (`new_node`), the new lineage node inherits **`new_node.strategy_id = deme.strategy_id`** while receiving a fresh species color from `SPECIATION_PALETTE`, and the speciated deme keeps its `deme.strategy_id`.
 
 ### 3. Persistent User Configuration & User Catalog (`EvoUserSettings`)
@@ -162,36 +170,39 @@ $$\mathbf{p}_{\text{screen}} = \begin{bmatrix} \cos\psi & -\sin\psi \\ \sin\psi 
 * **12-Tuple Dirty-State Column Cache (`_column_state_cache`)**: Each hex column caches `[yaw, pitch, eff_biome, top_z, active_lens, k_band, r_band, is_selected, is_brushed, inspect_brush, coast_dirs, diff_biome_dirs]`. Camera panning and zooming transform the parent `_world_layer` directly on the GPU without rebuilding column geometry.
 
 ### 2. Procedural Pixel-Art Generator (`EvoPixelArtGen`)
-At startup, `EvoPixelArtGen.ensure_all_assets()` procedurally rasterizes and caches **88 crisp pixel-art sprites** using `EvoPixelCanvas`:
+At startup, `EvoPixelArtGen.ensure_all_assets()` procedurally rasterizes and caches **99 crisp pixel-art sprites** using `EvoPixelCanvas`:
 
 * **7 Hex Biome Tiles (`224×192` px)**: Hand-dithered textures for `tropical_forest`, `savanna`, `arid_steppe`, `tundra`, `high_mountain`, `coastal_shallows`, and `ocean`.
 * **17 Flora & Ecological Degradation Props**: Healthy swaying trees/bushes (`tree_tropical`, `tree_savanna`, `tree_tundra`, `bush_berry`, `wildflowers`, `coastal_reeds`) that automatically transition to `tree_stump`, `soil_crack`, and `dry_scrub` when hex ecological health $K / K_{\max}$ drops below $85\%$ and $60\%$.
-* **37 Village, Action, Geopolitical & Road Sprites**:
-  * **4 Settlement Tiers**: `tier1_tent` + flickering `tier1_campfire`, `tier2_cottage` + `tier2_barn`, `tier3_townhall` + `tier3_house`, and `tier4_citadel` + `tier4_tower` + `tier4_windmill`.
+* **44 Village, Fortification, Action, Geopolitical & Road Sprites**:
+  * **5 Settlement Tiers**: `tier1_tent` + flickering `tier1_campfire`, `tier2_cottage` + `tier2_barn`, `tier3_townhall` + `tier3_house`, `tier4_citadel` + `tier4_tower` + `tier4_windmill`, and **`tier5_metropolis`** + **`prop_unity_monument`** for unified metropolises.
+  * **Multi-Tier Fortification & Siege Props**: **`prop_defense_palisade`** (Lv.1 timber watchtower & stakes), **`prop_defense_wall`** (Lv.2 crenellated stone wall), **`prop_defense_fortress`** (Lv.3 twin-turret castle keep), **`prop_tribute_chest`** (gold-trimmed tribute coffer), and **`prop_siege_engine`** (timber catapult/ram).
   * **Dominant Decision & Geopolitical Action Structures (`act_*` & `prop_*`)**: Each village constructs visible $32 \times 32$ structures reflecting its current `last_dominant_decision_id` (`act_forage`, `act_overexploit`, `act_migrate`, `act_cooperate`, `act_exchange`, `act_dispute`, `act_innovate`, `act_cultivate`) and active geopolitical events (`act_war`, `act_raid`, `act_pact`, `act_betrayal`, `prop_war_banner`, `prop_raid_loot`, `prop_pact_totem`, `prop_betrayal_ruin`, `effect_battle_sparks`).
   * **Lineage-Colored Villagers**: `get_villager_texture(pose, tunic_color)` dynamically recolors villager tunics (`villager_idle`, `villager_walk1`, `villager_walk2`) to match each lineage's phylogenetic color.
-* **27 UI & Geopolitical Icons**: Includes hotbar tools, milestone emblems, and geopolitical icons (`icon_war`, `icon_raid`, `icon_pact`, `icon_betrayal`, `icon_coop_link`, `icon_conflict_swords`, `icon_broken_link`).
+* **31 UI & Geopolitical Icons**: Includes hotbar tools, milestone emblems, and geopolitical icons (`icon_war`, `icon_raid`, `icon_pact`, `icon_betrayal`, **`icon_defense`**, **`icon_merge`**, **`icon_tribute`**, **`icon_siege`**, `icon_coop_link`, `icon_conflict_swords`, `icon_broken_link`).
 
 ### 3. Organic Road & Geopolitical Flow Lifecycle (`EvoRoadNetworkRenderer`)
-Inter-village relationships are rendered on `_network_layer` and `_anim_layer` across **9 visual road and geopolitical archetypes**:
+Inter-village relationships are rendered on `_network_layer` and `_anim_layer` across **11 visual road and geopolitical archetypes**:
 
 | Road / Flow Archetype | Trigger Source | Visual Representation & Animated Traffic |
 | :--- | :--- | :--- |
 | **Alliance Pact Highway (`pact`)** | Formal active pact (`active_pacts >= 2`) or `"pact"` flow | Emerald-trimmed stone highway (`#10b981`) with `prop_pact_totem` pillars, glowing `road_lantern` posts, `icon_pact` badge, and twin bi-directional `caravan_cart` + allied travelers. |
-| **War of Conquest Corridor (`war`)** | Active `"war"` flow (territorial invasion or repelled assault) | Scorched crimson invasion corridor (`#ef4444`) with `prop_war_banner` standards, `barricade_spikes`, `effect_battle_sparks`, pulsing `icon_war` badge, and 3 marching warriors charging toward the target hex. |
+| **City Unification Avenue (`merge`)** | Active `"merge"` flow (adjacent or cohabiting Synoecism) | Golden-bordered stone avenue (`#fbbf24`) with `prop_unity_monument` obelisk, `road_lantern` posts, `icon_merge` badge, and celebratory unification caravan traffic. |
+| **Tribute Caravan Route (`tribute`)** | Active `"tribute"` flow (18% reserve appeasement) | Amber-gold tribute road (`#f59e0b`) with `prop_tribute_chest` coffers, `icon_tribute` badge, and an animated `caravan_cart` + escort delivering tribute to the raider. |
+| **Fortified Siege Corridor (`siege`)** | Active `"siege"` flow (repelled invasion against `defense_tier >= 1`) | Scorched crimson siege corridor (`#dc2626`) with `prop_siege_engine` catapults, `barricade_spikes`, `effect_battle_sparks`, pulsing `icon_siege` badge, and assaulting warriors. |
+| **War of Conquest Corridor (`war`)** | Active `"war"` flow (territorial invasion or unfortified repelled assault) | Scorched crimson invasion corridor (`#ef4444`) with `prop_war_banner` standards, `barricade_spikes`, `effect_battle_sparks`, pulsing `icon_war` badge, and 3 marching warriors charging toward the target hex. |
 | **Plunder Raid Trail (`raid`)** | Active `"raid"` flow (cross-border caloric plunder) | Jagged orange raid trail (`#f97316`) with `prop_raid_loot` chests at the victim plaza, `effect_battle_sparks`, `icon_raid` badge, and 2 fast-moving raiders + loot cart returning to the attacker. |
 | **Betrayal Severed Road (`betrayal`)** | Active `"betrayal"` flow (broken formal pact & ambush) | Shattered crimson-purple road (`#dc2626` / `#a855f7`) split by `prop_betrayal_ruin` and `soil_crack`, `effect_battle_sparks`, `icon_betrayal` badge, and a fleeing plunder cart. |
-| **Collaboration Route (`collab`)** | Active `"exchange"`, `"cooperate"`, or `"merge"` flow on flat terrain | 26-segment quadratic Bézier cobblestone road with border stones, glowing `road_lantern`, green `icon_coop_link` badge, and an animated `caravan_cart` + 2 walking travelers. |
+| **Collaboration Route (`collab`)** | Active `"exchange"` or `"cooperate"` flow on flat terrain | 26-segment quadratic Bézier cobblestone road with border stones, glowing `road_lantern`, green `icon_coop_link` badge, and an animated `caravan_cart` + 2 walking travelers. |
 | **Wooden Arch Bridge (`bridge`)** | Friendly route crossing `coastal_shallows`, submerged hexes, or cliff $\Delta\text{alt} \ge 0.20$ | 20-step arched timber deck over 3 support pilings with water ripples, handrails, and caravan traffic. |
 | **Dispute Barricade Front (`dispute`)** | Active `"dispute"` flow or Hawk/Overexploit rivalry between adjacent lineages | Interrupted dirt road stubs meeting at a scorched-earth crater (`#dc2626`), `barricade_spikes`, 4 orbiting battle sparks, and a pulsing `icon_conflict_swords` badge. |
-| **Severed / Disused Road (`broken`)** | Friendly connection in `state.disused_connections` severed within the last `1–2` turns | Faded rubble segments (`alpha = 0.90` at age 1, `0.52` at age 2) split by a `soil_crack`, moss patches, `road_block_sign`, and `icon_broken_link` badge (pruned from state after age 8). |
-| **Migration Expedition (`expedition`)** | Active `"migration"` flow (population fission or coastal evacuation) | Curved sky-blue stepping-stone trail (`#0369a1` / `#bae6fd`) with an animated `settler_wagon`. |
+| **Severed / Disused Road (`broken`) & Migration (`expedition`)** | Friendly link in `state.disused_connections` (age `1–2`) or `"migration"` flow | Faded rubble segments split by `soil_crack`, `road_block_sign`, and `icon_broken_link` badge; or curved sky-blue stepping-stone trail (`#0369a1`) with `settler_wagon`. |
 
 ---
 
 ## Automated Verification & Testing Suite (`tests/test_runner.gd`)
 
-The repository includes a comprehensive headless test runner (`res://tests/test_runner.gd`) that executes **15 test suites** verifying every mathematical formula, turn phase, geopolitical interaction, and UI component:
+The repository includes a comprehensive headless test runner (`res://tests/test_runner.gd`) that executes **16 test suites** verifying every mathematical formula, turn phase, geopolitical interaction, fortification/synoecism mechanic, and UI component:
 
 ```bash
 # Run the full automated test suite headlessly
@@ -208,18 +219,19 @@ done
 | **1** | `_test_thermodynamics` | Verifies `BASE_BUDGET = 0.60`, `evaluate_thermodynamics`, required cost $0.5 \cdot (A^+ - 0.60)$, auto-balancing into `metabolic_cost` / `ecological_impact`, and `free_sandbox_mode` bypass. |
 | **2** | `_test_catalog_and_presets` | Verifies cell counts (`91`, `91`, `61`), balanced 1v1 starting demes (`2` per preset), base catalog sizes (`5` strategies, `11` traits, `7` decisions), `deme_has_cultural_capacity`, and `inject_trait_into_deme` mutual exclusion (`r` vs `K`). |
 | **3** | `_test_strategies_duel_and_persistence` | Verifies the 5 base strategies, `compute_strategy_vector`, `apply_strategy_to_deme`, `strategy_id` inheritance across migration and speciation, `EvoLabModal` Strategy Builder UI, and `user_catalog.json` persistence. |
-| **4** | `_test_decision_model_and_normalization` | Verifies `normalize_decision_probabilities` ($\sum P(d) = 1.0$), environmental & geopolitical weight modulation, and cached Ollama System 1 model evaluation. |
-| **5** | `_test_hawk_dove_and_symbiosis` | Verifies Hawk-Hawk $-15\%$ population loss (floor `10`) and `"dispute"` flow generation, plus Symbiosis $+20\%$ bonus and horizontal cultural transmission of `cul-fire-processing`. |
+| **4** | `_test_decision_model_and_normalization` | Verifies `normalize_decision_probabilities` ($\sum P(d) = 1.0$), $75\%/25\%$ environmental & geopolitical weight blending, and cached Ollama System 1 model evaluation. |
+| **5** | `_test_hawk_dove_and_symbiosis` | Verifies Hawk-Hawk $-15\%$ population loss (floor `10`) and `"dispute"` flow generation, plus Symbiosis ($1.20\times$ intra-hex, up to $1.35\times$ inter-hex complementary trade) and horizontal cultural transmission of `cul-fire-processing`. |
 | **6** | `_test_tragedy_of_the_commons` | Runs `preset-finite-island` and verifies overexploitation degrades hex $K$ below $0.60 \cdot K_{\max}$ and logs `"tragedy_of_commons"`. |
 | **7** | `_test_baldwin_innovation_and_speciation` | Verifies Baldwin assimilation at `counter >= 8` (with decision-proportional vector synthesis), Cultural Innovation at `innovation_counter >= 1.0`, and Allopatric Speciation at `isolation_turns >= 10`. |
 | **8** | `_test_kin_merge_fission_and_macro_outcome` | Verifies compatible same-lineage kin merging (Jaccard $< 0.25$), population fission migration (`-m<gen>`), and macro-outcome detection (`total_extinction`, `single_survivor`, `ecological_equilibrium`). |
 | **9** | `_test_interventions` | Verifies `apply_set_biome` (`⚡10`), `apply_adjust_altitude` (`⚡15`), `apply_adjust_carrying_capacity` (`⚡10`), and `apply_adjust_sea_level` (`⚡25`). |
-| **10** | `_test_serialization_roundtrip` | Verifies `WorldState.to_dict()` $\to$ `JSON.stringify` $\to$ `WorldState.from_dict()` preserves generation, cells, demes, `strategies_catalog`, `strategy_a_id`, `strategy_b_id`, `active_pacts`, and `user_catalog.json` persistence. |
+| **10** | `_test_serialization_roundtrip` | Verifies `WorldState.to_dict()` $\to$ `JSON.stringify` $\to$ `WorldState.from_dict()` preserves generation, cells, demes (`defense_tier`, `merged_count`, `secondary_color`), `strategies_catalog`, `strategy_a_id`, `strategy_b_id`, `active_pacts`, and `user_catalog.json` persistence. |
 | **11** | `_test_25_generations_all_presets` | Advances all 3 presets for 25 generations and asserts $\sum P(d) = 1.0$ for every surviving deme. |
-| **12** | `_test_main_scene_and_ui_integration` | Instantiates `res://scenes/main.tscn`, verifies all 88 procedural sprites, dual System 1 model routing (`d3:4b` / `tev1:4b`), settings persistence (`num_ctx = 16384`), missing models modal, preset/language/lens switching, modals, road aging (`disused_connections`), and inspector village cycling. |
+| **12** | `_test_main_scene_and_ui_integration` | Instantiates `res://scenes/main.tscn`, verifies all 99 procedural sprites, dual System 1 model routing (`d3:4b` / `tev1:4b`), settings persistence (`num_ctx = 16384`), missing models modal, preset/language/lens switching, modals, road aging (`disused_connections`), and inspector village cycling. |
 | **13** | `_test_nonblocking_async_decision_and_smooth_panning` | Asserts `check_ollama_status(true)` completes in $< 15\text{ ms}$ on the main thread and verifies late-game 16-deme async evaluation and camera panning. |
 | **14** | `_test_emergent_geopolitics_and_visual_artifacts` | Verifies Alliance Pacts (`>= 2` turns, $+15\%$ bonus, distress aid, shared defense), Opportunistic Betrayals, Plunder Raids, Territorial Wars of Conquest (`-w<gen>`), geopolitical sprites/roads/overlays, Inspector Pacts readout, and Notebook geopolitical filters. |
-| **15** | `_test_bugfix_regressions` | Verifies conserved loot energy transfers in raids/betrayals, unified vital status (`declining`), `altitude <= 0.85` passability & 3-hop peer connectivity, root-lineage hegemony check, and `_cache_epoch` thread safety. |
+| **15** | `_test_social_memory_defense_tribute_and_synoecism` | Verifies 6-generation cognitive memory digest, rich neighbor relational tags (`vendetta`, `ally`, `rival:martial`), Multi-Tier Defense upgrades (`defense_tier: 1..3`) & Castle raid immunity, Tribute Appeasement (`18%` reserves, zero casualties, truce), Fortified Sieges (`siege` flow & wall repair), Complementary Inter-Biome/Cross-Cultural Trade (`1.35x`), and City Unification / Synoecism (`merge`, Tier 5 Metropolis, LLM request reduction). |
+| **16** | `_test_bugfix_regressions` | Verifies conserved loot energy transfers in raids/betrayals, unified vital status (`declining`), `altitude <= 0.85` passability & 3-hop peer connectivity, root-lineage hegemony check, and `_cache_epoch` thread safety. |
 
 ---
 
