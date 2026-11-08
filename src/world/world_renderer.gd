@@ -11,72 +11,7 @@ signal hex_dragged(hex_id: String)
 signal deme_clicked(deme_id: String, hex_id: String)
 
 const MAX_COLUMN_HEIGHT_PX: float = 96.0
-
-const BIOME_PALETTE: Dictionary = {
-	"tropical_forest": {
-		"top": Color("#2a8c4a"),
-		"edge": Color("#196132"),
-		"tuft": Color("#3eb864"),
-		"cliff_top": Color("#7c5333"),
-		"cliff_bot": Color("#4d301b"),
-		"overhang": Color("#258545")
-	},
-	"savanna": {
-		"top": Color("#c99e32"),
-		"edge": Color("#946c1c"),
-		"tuft": Color("#e8be4e"),
-		"cliff_top": Color("#9c6234"),
-		"cliff_bot": Color("#633a1c"),
-		"overhang": Color("#cfa136")
-	},
-	"arid_steppe": {
-		"top": Color("#d4873f"),
-		"edge": Color("#9e5822"),
-		"tuft": Color("#eda05c"),
-		"cliff_top": Color("#a85832"),
-		"cliff_bot": Color("#6e3419"),
-		"overhang": Color("#cc7735")
-	},
-	"tundra": {
-		"top": Color("#b8ced9"),
-		"edge": Color("#7592a3"),
-		"tuft": Color("#eaf4f8"),
-		"cliff_top": Color("#64748b"),
-		"cliff_bot": Color("#3f4c5c"),
-		"overhang": Color("#e2eff5")
-	},
-	"high_mountain": {
-		"top": Color("#787572"),
-		"edge": Color("#4f4c49"),
-		"tuft": Color("#cbd5e1"),
-		"cliff_top": Color("#5c5855"),
-		"cliff_bot": Color("#363331"),
-		"overhang": Color("#99928b")
-	},
-	"coastal_shallows": {
-		"top": Color("#32a89d"),
-		"edge": Color("#d9be7e"),
-		"tuft": Color("#ebd294"),
-		"cliff_top": Color("#a88e58"),
-		"cliff_bot": Color("#705c35"),
-		"overhang": Color("#d9be7e")
-	},
-	"ocean": {
-		"top": Color("#1d5f8a"),
-		"edge": Color("#144566"),
-		"tuft": Color("#7dd3fc"),
-		"cliff_top": Color("#144566"),
-		"cliff_bot": Color("#0d2f47"),
-		"overhang": Color("#216899")
-	}
-}
-
-const C_ROCK_CRACK := Color("#23150c")
-const C_CLIFF_OUTLINE := Color("#23150c")
-const C_SAND := Color("#ebd294")
-const C_SURF := Color(0.95, 0.99, 1.0, 0.85)
-const C_RIPPLE := Color(0.90, 0.98, 1.0, 0.60)
-const C_SELECTION := Color("#fde047")
+const BIOME_PALETTE := EvoHexColumnRenderer.BIOME_PALETTE
 
 var world_state: EvoTypes.WorldState
 var camera: CameraController
@@ -100,8 +35,12 @@ var _overlay_layer := Node2D.new()
 
 var _anim_time: float = 0.0
 var _fx_accum: float = 0.0
+var _walker_accum: float = 0.0
 var _last_vp_size: Vector2 = Vector2.ZERO
 var _dirty: bool = true
+var _overlay_dirty: bool = true
+var _last_camera_zoom: float = -1.0
+var _last_active_lens: String = "biome"
 var _built_yaw: float = NAN
 var _built_pitch: float = NAN
 var _ground := Transform2D.IDENTITY
@@ -140,6 +79,9 @@ var _last_world_transform: Transform2D = Transform2D.IDENTITY
 var _moving_prop_pool: Array[Prop] = []
 var _moving_prop_count: int = 0
 var _villager_tex_sets: Dictionary = {}
+var _fx_active: Array[Dictionary] = []
+var _fx_last_gen: int = -1
+var replay_seconds: float = 2.0
 
 
 func _init() -> void:
@@ -177,11 +119,19 @@ func _ready() -> void:
 	PixelArtGen.ensure_all_assets()
 
 
+func _get_camera_zoom() -> float:
+	return camera.zoom_level if camera != null else 1.0
+
+
 func _process(delta: float) -> void:
 	if world_state == null or camera == null:
 		return
 	_anim_time += delta
 	EvoWorldOverlayRenderer.update_particles(self, delta)
+
+	if active_lens != _last_active_lens:
+		_last_active_lens = active_lens
+		_overlay_dirty = true
 
 	if _dirty:
 		_rebuild()
@@ -190,12 +140,19 @@ func _process(delta: float) -> void:
 
 	var vp_size := get_viewport_rect().size if is_inside_tree() else Vector2(1600.0, 960.0)
 	var vp_changed := vp_size != _last_vp_size
+	if vp_changed:
+		_overlay_dirty = true
 	_last_vp_size = vp_size
 	_backdrop_rect.size = vp_size
 	if world_state.season != _last_season:
 		_update_ocean_shader_season()
 	_world_layer.position = vp_size * 0.5 + camera.pan_offset
-	_world_layer.scale = Vector2(camera.zoom_level, camera.zoom_level)
+	var zoom_val := camera.zoom_level
+	_world_layer.scale = Vector2(zoom_val, zoom_val)
+	var zoom_changed := absf(zoom_val - _last_camera_zoom) > 0.005
+	if zoom_changed:
+		_last_camera_zoom = zoom_val
+		_overlay_dirty = true
 
 	var inv_xform := _world_layer.transform.affine_inverse()
 	var tl := inv_xform * Vector2.ZERO
@@ -204,17 +161,9 @@ func _process(delta: float) -> void:
 
 	if is_inside_tree() and _world_layer.transform != _last_world_transform:
 		_last_world_transform = _world_layer.transform
+		_overlay_dirty = true
 		if _last_network_cull_rect.size == Vector2.ZERO or not _last_network_cull_rect.encloses(_visible_world_rect):
 			_network_layer.queue_redraw()
-		var mouse_pos := get_viewport().get_mouse_position()
-		var hit_hex := _pick_hex_at(mouse_pos)
-		if hit_hex != hovered_hex_id:
-			hovered_hex_id = hit_hex
-			_update_brush()
-		var hit_deme := _pick_deme_at(mouse_pos)
-		var new_hov_deme := str(hit_deme.get("deme_id", ""))
-		if new_hov_deme != hovered_deme_id:
-			hovered_deme_id = new_hov_deme
 
 	_fx_accum += delta
 	var step_fx := false
@@ -222,17 +171,31 @@ func _process(delta: float) -> void:
 		_fx_accum = fposmod(_fx_accum, 0.083)
 		step_fx = true
 
-	_bob_ocean_columns()
+	_walker_accum += delta
+	var step_walker := false
+	if _walker_accum >= 0.05:
+		_walker_accum = fposmod(_walker_accum, 0.05)
+		step_walker = true
+
+	if step_fx or step_walker or zoom_changed:
+		_bob_ocean_columns()
+		_anim_layer.queue_redraw()
+		if not _fx_active.is_empty() or active_lens == "health":
+			_overlay_dirty = true
+
 	if step_fx or vp_changed:
 		for hex_id in _animated_fx_ids:
 			if _visible_world_rect.has_point(_hex_centers[hex_id]):
 				_water_fx[hex_id].queue_redraw()
-	_anim_layer.queue_redraw()
-	_overlay_layer.queue_redraw()
+
+	if _overlay_dirty:
+		_overlay_layer.queue_redraw()
 
 
 func set_world_state(p_state: EvoTypes.WorldState) -> void:
 	world_state = p_state
+	_fx_last_gen = p_state.generation if p_state != null else -1
+	_fx_active.clear()
 	_create_columns()
 	_rebuild()
 
@@ -240,16 +203,41 @@ func set_world_state(p_state: EvoTypes.WorldState) -> void:
 func set_camera(p_camera: CameraController) -> void:
 	camera = p_camera
 	_dirty = true
+	_overlay_dirty = true
 
 
 func refresh() -> void:
 	_dirty = true
+	_overlay_dirty = true
 
 
-func set_selected_hex(p_hex_id: String) -> void:
-	if selected_hex_id != p_hex_id:
-		selected_hex_id = p_hex_id
-		_overlay_layer.queue_redraw()
+func refresh_overlay(state: EvoTypes.WorldState = null) -> void:
+	if state != null:
+		world_state = state
+	_brush_hexes = _compute_brush_hexes()
+	for village in _villages:
+		var deme: EvoTypes.Deme = village["deme"]
+		var is_dimmed: bool = highlighted_lineage_id != "" and deme.lineage_id != highlighted_lineage_id
+		village["is_dimmed"] = is_dimmed
+		var base_mod: Color = Color(1.0, 0.72, 0.68, 1.0) if deme.get_vital_status() == "starving" else Color.WHITE
+		if is_dimmed:
+			base_mod.a = 0.42
+		village["modulate"] = base_mod
+	_overlay_dirty = true
+	_overlay_layer.queue_redraw()
+
+
+func update_hover(screen_pos: Vector2) -> void:
+	var hit_hex := _pick_hex_at(screen_pos)
+	if hit_hex != hovered_hex_id:
+		hovered_hex_id = hit_hex
+		_update_brush()
+		_overlay_dirty = true
+	var hit_deme := _pick_deme_at(screen_pos)
+	var new_hov_deme := str(hit_deme.get("deme_id", ""))
+	if new_hov_deme != hovered_deme_id:
+		hovered_deme_id = new_hov_deme
+		_overlay_dirty = true
 
 
 func _update_ocean_shader_season() -> void:
@@ -272,23 +260,19 @@ func refresh_village_decisions() -> void:
 	if any_arch_changed:
 		_static_props = EvoPropFloraRenderer.collect_static_props(self)
 		_network_layer.queue_redraw()
+		_overlay_dirty = true
 		_overlay_layer.queue_redraw()
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
+		if camera != null and camera.is_dragging():
+			return
 		var mm := event as InputEventMouseMotion
-		var hit_hex := _pick_hex_at(mm.position)
-		if hit_hex != hovered_hex_id:
-			hovered_hex_id = hit_hex
-			_update_brush()
-		var hit_deme := _pick_deme_at(mm.position)
-		var new_hov_deme := str(hit_deme.get("deme_id", ""))
-		if new_hov_deme != hovered_deme_id:
-			hovered_deme_id = new_hov_deme
-		if _is_left_down and active_tool != "inspect" and hit_hex != "" and hit_hex != _last_dragged_hex_id:
-			_last_dragged_hex_id = hit_hex
-			hex_dragged.emit(hit_hex)
+		update_hover(mm.position)
+		if _is_left_down and active_tool != "inspect" and hovered_hex_id != "" and hovered_hex_id != _last_dragged_hex_id:
+			_last_dragged_hex_id = hovered_hex_id
+			hex_dragged.emit(hovered_hex_id)
 
 	elif event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
@@ -349,6 +333,7 @@ func _create_columns() -> void:
 
 func _rebuild() -> void:
 	_dirty = false
+	_overlay_dirty = true
 	_built_yaw = camera.yaw_deg
 	_built_pitch = camera.pitch_deg
 	_ground = camera.ground_transform()
@@ -360,10 +345,16 @@ func _rebuild() -> void:
 	_villages = EvoPropFloraRenderer.collect_villages(self)
 	_roads = EvoRoadNetworkRenderer.collect_roads(self)
 	_static_props = EvoPropFloraRenderer.collect_static_props(self)
+	if world_state != null and world_state.generation != _fx_last_gen:
+		_fx_last_gen = world_state.generation
+		EvoEventFxRenderer.enqueue_turn(self, world_state.turn_events, replay_seconds)
 	_network_layer.queue_redraw()
+	_anim_layer.queue_redraw()
+	_overlay_layer.queue_redraw()
 
 
 func _reproject() -> void:
+	_overlay_dirty = true
 	_built_yaw = camera.yaw_deg
 	_built_pitch = camera.pitch_deg
 	_ground = camera.ground_transform()
@@ -371,14 +362,15 @@ func _reproject() -> void:
 	_layout_columns()
 	for village in _villages:
 		var v_pos := _project(village["world_xy"], village["top_z"])
-		var sf: float = village["sf"]
 		village["pos"] = v_pos
-		village["hit_rect"] = Rect2(v_pos - Vector2(74, 76) * sf, Vector2(148, 116) * sf)
+		village["hit_rect"] = Rect2(v_pos - Vector2(104, 92), Vector2(208, 168))
 	EvoRoadNetworkRenderer.reproject_roads(self)
 	for prop in _static_props:
 		prop.project(_ground, _lift)
 	_static_props.sort_custom(func(a: Prop, b: Prop) -> bool: return a.y < b.y)
 	_network_layer.queue_redraw()
+	_anim_layer.queue_redraw()
+	_overlay_layer.queue_redraw()
 
 
 func _rebuild_cell_topology() -> void:
@@ -445,6 +437,12 @@ func _layout_columns() -> void:
 				_terrain_layer.move_child(column, i)
 
 	_terrain_layer.modulate = Color(0.94, 0.96, 0.99, 1.0) if (active_lens == "biome" and world_state.season == "dry_cold") else Color.WHITE
+	if active_lens == "biome":
+		_anim_layer.modulate = Color.WHITE
+		_network_layer.modulate = Color.WHITE
+	else:
+		_anim_layer.modulate = Color(1.0, 1.0, 1.0, 0.42)
+		_network_layer.modulate = Color(1.0, 1.0, 1.0, 0.35)
 
 	for i in range(_sorted_hex_ids.size()):
 		var hex_id := _sorted_hex_ids[i]
@@ -456,7 +454,7 @@ func _layout_columns() -> void:
 		var top_z := _get_cell_top_z(cell)
 		var k_ratio: float = clampf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
 		var k_band: int = 0 if k_ratio < 0.60 else (1 if k_ratio < 0.85 else 2)
-		var r_band: int = int(roundf(clampf(cell.current_resources / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0) * 50.0)) if active_lens == "food" else 0
+		var lens_band := _compute_lens_band(cell)
 
 		var col_key: Array = [
 			_built_yaw,
@@ -465,7 +463,7 @@ func _layout_columns() -> void:
 			top_z,
 			active_lens,
 			k_band,
-			r_band,
+			lens_band,
 			_coast_dirs[hex_id],
 			_diff_biome_dirs[hex_id],
 			cell.land_use,
@@ -479,6 +477,25 @@ func _layout_columns() -> void:
 			_water_fx[hex_id].queue_redraw()
 
 
+func _compute_lens_band(cell: EvoTypes.HexCell) -> int:
+	if active_lens == "food":
+		return int(roundf(clampf(cell.current_resources / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0) * 50.0))
+	if active_lens == "health":
+		if not cell.deme_ids.is_empty() and world_state.demes.has(cell.deme_ids[0]):
+			var d: EvoTypes.Deme = world_state.demes[cell.deme_ids[0]]
+			return (1000 if d.infection_turns > 0 else 0) + (500 if d.immunity_turns > 0 else 0) + int(roundf(d.salubrity * 100.0))
+		return -1
+	if active_lens == "diplomacy" or active_lens == "territory":
+		if not cell.deme_ids.is_empty() and world_state.demes.has(cell.deme_ids[0]):
+			var d: EvoTypes.Deme = world_state.demes[cell.deme_ids[0]]
+			return d.strategy_id.hash() ^ (1 if EvoTypes._is_side_b_deme(world_state, d) else 2)
+		if (cell.land_use == "crops" or cell.land_use == "pasture") and cell.owner_deme_id != "" and world_state.demes.has(cell.owner_deme_id):
+			var owner: EvoTypes.Deme = world_state.demes[cell.owner_deme_id]
+			return owner.strategy_id.hash() ^ (3 if EvoTypes._is_side_b_deme(world_state, owner) else 4)
+		return 0
+	return 0
+
+
 func _compute_brush_hexes() -> Array[String]:
 	if hovered_hex_id == "":
 		return []
@@ -487,6 +504,7 @@ func _compute_brush_hexes() -> Array[String]:
 
 func _update_brush() -> void:
 	_brush_hexes = _compute_brush_hexes()
+	_overlay_dirty = true
 	_overlay_layer.queue_redraw()
 
 
@@ -549,223 +567,15 @@ func _cell_seed(q: int, r: int, salt: int = 0) -> int:
 # ============================================================================
 
 func _draw_hex_column(column: Node2D, hex_id: String) -> void:
-	var cell: EvoTypes.HexCell = world_state.cells[hex_id]
-	var is_ocean := _is_water(cell)
-	var eff_biome: String = "ocean" if is_ocean else cell.biome
-	var pal: Dictionary = BIOME_PALETTE.get(eff_biome, BIOME_PALETTE["savanna"])
-	var top_pts: PackedVector2Array = _hex_polys[hex_id]
-
-	if not is_ocean and cell.altitude - world_state.sea_level > 0.015:
-		var bot_pts := _project_hex(HexMath.axial_to_world(cell.q, cell.r), 0.0)
-		_draw_cliff_walls(column, cell, pal, top_pts, bot_pts)
-
-	var tint_col := _get_top_tint(cell, is_ocean)
-	var v_colors := PackedColorArray([tint_col, tint_col, tint_col, tint_col, tint_col, tint_col])
-	column.draw_polygon(top_pts, v_colors, _hex_uvs, PixelArtGen.get_texture("hex_tile_" + eff_biome))
-
-	if not is_ocean:
-		if cell.land_use == "crops" or cell.land_use == "pasture" or cell.has_ruins:
-			_draw_rural_and_ruins_top_overlay(column, cell, top_pts)
-		_draw_hex_borders(column, cell, pal, tint_col, top_pts)
-		if active_lens == "health":
-			var k_ratio: float = cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max)
-			if k_ratio < 0.60:
-				_draw_dashed_hex_border(column, top_pts, Color("#ef4444"), 2.6)
-			elif k_ratio < 0.85:
-				_draw_dashed_hex_border(column, top_pts, Color("#f59e0b"), 2.0)
-
-
-func _draw_rural_and_ruins_top_overlay(column: Node2D, cell: EvoTypes.HexCell, top_pts: PackedVector2Array) -> void:
-	var center: Vector2 = _hex_centers[cell.id]
-	var inner_pts := PackedVector2Array()
-	for pt in top_pts:
-		inner_pts.append(center.lerp(pt, 0.76))
-	if cell.land_use == "crops":
-		column.draw_colored_polygon(inner_pts, Color(0.78, 0.60, 0.24, 0.28))
-		var furrows := PackedVector2Array()
-		for row in range(-4, 5):
-			var t := float(row) / 5.5
-			var y_off := t * 72.0
-			var half_w := (1.0 - absf(t) * 0.55) * 96.0
-			furrows.append(center + Vector2(-half_w, y_off - half_w * 0.14))
-			furrows.append(center + Vector2(half_w, y_off + half_w * 0.14))
-		column.draw_multiline(furrows, Color(0.38, 0.24, 0.10, 0.48), 2.2)
-		var border := inner_pts.duplicate()
-		border.append(inner_pts[0])
-		column.draw_polyline(border, Color("#23150c") * Color(1, 1, 1, 0.45), 1.6)
-	elif cell.land_use == "pasture":
-		column.draw_colored_polygon(inner_pts, Color(0.32, 0.68, 0.34, 0.24))
-		var fence := inner_pts.duplicate()
-		fence.append(inner_pts[0])
-		column.draw_polyline(fence, Color(0.55, 0.36, 0.18, 0.72), 2.2)
-		for pt in inner_pts:
-			column.draw_circle(pt, 2.8, Color("#23150c"))
-	if cell.has_ruins:
-		column.draw_circle(center + Vector2(-18.0, 8.0), 34.0, Color(0.18, 0.14, 0.12, 0.32))
-		column.draw_circle(center + Vector2(22.0, -10.0), 26.0, Color(0.24, 0.20, 0.18, 0.28))
-
-
-func _draw_cliff_walls(
-	column: Node2D,
-	cell: EvoTypes.HexCell,
-	pal: Dictionary,
-	top_pts: PackedVector2Array,
-	bot_pts: PackedVector2Array
-) -> void:
-	var tier: int = clampi(int(ceilf(cell.altitude * 10.0)), 1, 10)
-	var strata_count: int = mini(tier + 1, 6)
-	var cliff_top_col: Color = pal["cliff_top"]
-	var cliff_bot_col: Color = pal["cliff_bot"]
-	var center_y: float = _hex_centers[cell.id].y
-	var strata := PackedVector2Array()
-	var cracks := PackedVector2Array()
-	var vines := PackedVector2Array()
-	var outlines := PackedVector2Array()
-
-	for i in range(6):
-		var next_i: int = (i + 1) % 6
-		var p0 := top_pts[i]
-		var p1 := top_pts[next_i]
-		if (p0.y + p1.y) * 0.5 - center_y <= 0.5:
-			continue
-		var b1 := bot_pts[next_i]
-		var b0 := bot_pts[i]
-
-		var shade := 1.0 - float(i % 3) * 0.13
-		var wall_col := cliff_top_col.lerp(cliff_bot_col, 0.45) * Color(shade, shade, shade, 1.0)
-		column.draw_colored_polygon(PackedVector2Array([p0, p1, b1, b0]), wall_col)
-		column.draw_colored_polygon(PackedVector2Array([p0, p1, p1.lerp(b1, 0.18), p0.lerp(b0, 0.18)]), cliff_top_col.darkened(0.18 * shade))
-
-		for s_idx in range(1, strata_count + 1):
-			var t: float = float(s_idx) / float(strata_count + 1)
-			strata.append(p0.lerp(b0, t))
-			strata.append(p1.lerp(b1, t))
-
-		for c_idx in range(3):
-			var u := 0.22 + float(c_idx) * 0.28 + float(_cell_seed(cell.q, cell.r, i * 10 + c_idx) % 9 - 4) * 0.015
-			var c_top := p0.lerp(p1, u)
-			var c_bot := b0.lerp(b1, u)
-			var t_start := 0.15 + float((c_idx + i) % 2) * 0.18
-			cracks.append(c_top.lerp(c_bot, t_start))
-			cracks.append(c_top.lerp(c_bot, minf(0.92, t_start + 0.45)))
-
-		for v_idx in range(1, 5):
-			var vu := float(v_idx) / 5.0
-			var v_top := p0.lerp(p1, vu)
-			var hang_len := 0.16 + float(_cell_seed(cell.q, cell.r, i * 31 + v_idx) % 22) * 0.012
-			vines.append(v_top)
-			vines.append(v_top.lerp(b0.lerp(b1, vu), hang_len))
-
-		outlines.append_array(PackedVector2Array([p0, p1, p1, b1, b1, b0, b0, p0]))
-
-	if outlines.is_empty():
-		return
-	column.draw_multiline(strata, cliff_bot_col.darkened(0.22), 1.5)
-	column.draw_multiline(cracks, C_ROCK_CRACK, 1.3)
-	column.draw_multiline(vines, (pal["overhang"] as Color).darkened(0.08), 2.2)
-	column.draw_multiline(outlines, C_CLIFF_OUTLINE, 1.2)
+	EvoHexColumnRenderer.draw_hex_column(self, column, hex_id)
 
 
 func _get_top_tint(cell: EvoTypes.HexCell, is_ocean: bool) -> Color:
-	var tint_col := Color.WHITE
-	if is_ocean:
-		return tint_col
-	if active_lens == "food":
-		var ratio_r: float = clampf(cell.current_resources / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
-		if ratio_r < 0.35:
-			return Color("#8c583a").lerp(Color("#eab308"), ratio_r / 0.35)
-		return Color("#eab308").lerp(Color("#65f06c"), (ratio_r - 0.35) / 0.65)
-	if active_lens == "health":
-		var ratio_k: float = clampf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
-		if ratio_k < 0.60:
-			return Color("#f87171")
-		if ratio_k < 0.85:
-			return Color("#fbbf24")
-		return Color("#6ee7b7")
-	var k_ratio: float = clampf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
-	if k_ratio < 0.60:
-		tint_col = tint_col.lerp(Color("#9c6b4e"), 0.42)
-	elif k_ratio < 0.85:
-		tint_col = tint_col.lerp(Color("#c29b61"), 0.22)
-	if cell.land_use == "crops":
-		tint_col = tint_col.lerp(Color("#e8c468"), 0.24)
-	elif cell.land_use == "pasture":
-		tint_col = tint_col.lerp(Color("#76c975"), 0.22)
-	if cell.has_ruins:
-		tint_col = tint_col.lerp(Color("#5c4a3e"), 0.28)
-	return tint_col
-
-
-func _draw_hex_borders(column: Node2D, cell: EvoTypes.HexCell, pal: Dictionary, tint_col: Color, top_pts: PackedVector2Array) -> void:
-	var coast_dirs: PackedInt32Array = _coast_dirs[cell.id]
-	var diff_dirs: PackedInt32Array = _diff_biome_dirs[cell.id]
-	var sand_lines := PackedVector2Array()
-	var edge_lines := PackedVector2Array()
-	var tufts := PackedVector2Array()
-	for dir_idx in range(6):
-		var c0 := top_pts[dir_idx]
-		var c1 := top_pts[(dir_idx + 1) % 6]
-		if coast_dirs.has(dir_idx):
-			sand_lines.append(c0)
-			sand_lines.append(c1)
-			continue
-		edge_lines.append(c0)
-		edge_lines.append(c1)
-		var tuft_steps := 5 if diff_dirs.has(dir_idx) else 3
-		for ts in range(1, tuft_steps + 1):
-			var jitter := Vector2(
-				float(_cell_seed(cell.q, cell.r, dir_idx * 17 + ts) % 5 - 2),
-				float(_cell_seed(cell.q, cell.r, dir_idx * 23 + ts) % 5 - 2)
-			) * 0.6
-			var pt := c0.lerp(c1, float(ts) / float(tuft_steps + 1)) + jitter
-			tufts.append(pt - Vector2(2.0, 0.0))
-			tufts.append(pt + Vector2(2.0, 0.0))
-
-	if not sand_lines.is_empty():
-		column.draw_multiline(sand_lines, C_SAND, 3.2)
-	if not edge_lines.is_empty():
-		column.draw_multiline(edge_lines, (pal["edge"] as Color).darkened(0.18), 1.2)
-	if not tufts.is_empty():
-		column.draw_multiline(tufts, pal["tuft"] * tint_col, 3.8)
-
-
-func _draw_dashed_hex_border(column: Node2D, pts: PackedVector2Array, col: Color, width: float) -> void:
-	var dashes := PackedVector2Array()
-	for i in range(6):
-		var a := pts[i]
-		var b := pts[(i + 1) % 6]
-		dashes.append_array(PackedVector2Array([a.lerp(b, 0.14), a.lerp(b, 0.44), a.lerp(b, 0.58), a.lerp(b, 0.88)]))
-	column.draw_multiline(dashes, col, width)
+	return EvoHexColumnRenderer.get_top_tint(self, cell, is_ocean)
 
 
 func _draw_water_fx(fx: Node2D, hex_id: String) -> void:
-	var cell: EvoTypes.HexCell = world_state.cells[hex_id]
-	var center: Vector2 = _hex_centers[hex_id]
-	if _is_water(cell) or cell.biome == "coastal_shallows":
-		var phase := _anim_time * 2.4 + float(cell.q) * 1.1 + float(cell.r) * 0.8
-		var wave_offset := Vector2(sin(phase) * 7.5, cos(phase) * 3.8)
-		fx.draw_line(center + wave_offset + Vector2(-24, -10), center + wave_offset + Vector2(24, -10), C_RIPPLE, 2.0)
-		fx.draw_line(center - wave_offset + Vector2(-18, 12), center - wave_offset + Vector2(20, 12), C_RIPPLE, 1.6)
-
-	var top_pts: PackedVector2Array = _hex_polys[hex_id]
-	for dir_idx in _coast_dirs[hex_id]:
-		var surf_pulse := 0.5 + 0.5 * sin(_anim_time * 3.2 + float(dir_idx + cell.q))
-		var inset_inner := 0.05 + surf_pulse * 0.03
-		var inset_outer := -0.05 - surf_pulse * 0.03
-		var c0 := top_pts[dir_idx]
-		var c1 := top_pts[(dir_idx + 1) % 6]
-		fx.draw_line(
-			c0.lerp(center, inset_inner),
-			c1.lerp(center, inset_inner),
-			C_SURF,
-			2.4 + surf_pulse
-		)
-		fx.draw_line(
-			c0.lerp(center, inset_outer),
-			c1.lerp(center, inset_outer),
-			C_RIPPLE,
-			1.6 + surf_pulse * 0.6
-		)
+	EvoHexColumnRenderer.draw_water_fx(self, fx, hex_id)
 
 
 # ============================================================================
@@ -789,31 +599,26 @@ func _draw_animated() -> void:
 				var v_pos: Vector2 = village["pos"]
 				if not _visible_world_rect.has_point(v_pos):
 					continue
-				var sf: float = village["sf"]
 				var beam_col := Color(deme.color)
 				beam_col.a = 0.28 + 0.10 * sin(_anim_time * 4.0)
-				var beam_w := 44.0 * sf
-				_anim_layer.draw_rect(Rect2(v_pos.x - beam_w * 0.5, v_pos.y - 180.0 * sf, beam_w, 180.0 * sf), beam_col, true)
+				var beam_w := 44.0
+				_anim_layer.draw_rect(Rect2(v_pos.x - beam_w * 0.5, v_pos.y - 180.0, beam_w, 180.0), beam_col, true)
 
 	EvoPropFloraRenderer.draw_props(self)
 
 
 func _draw_overlay() -> void:
+	_overlay_dirty = false
 	EvoWorldOverlayRenderer.draw_overlay(self)
-
-
-func _get_villager_textures_for_color(tunic_col: Color) -> Array[ImageTexture]:
-	return EvoPropFloraRenderer.get_villager_textures_for_color(self, tunic_col)
 
 
 func _get_village_building_layout(
 	tier: int,
-	sf: float,
-	has_culture: bool,
-	cultural_count: int,
-	archetype: String
+	has_culture: bool = false,
+	cultural_count: int = 0,
+	archetype: String = "forage"
 ) -> Array[Dictionary]:
-	return EvoPropFloraRenderer.get_village_building_layout(tier, sf, has_culture, cultural_count, archetype)
+	return EvoPropFloraRenderer.get_village_building_layout(tier, has_culture, cultural_count, archetype)
 
 
 func _get_deme_dominant_archetype(deme: EvoTypes.Deme) -> String:
@@ -837,12 +642,12 @@ func _pick_deme_at(screen_pos: Vector2) -> Dictionary:
 
 
 func _pick_hex_at(screen_pos: Vector2) -> String:
-	var local_pos := _world_layer.transform.affine_inverse() * screen_pos
-	var max_r_sq := HexMath.HEX_SIZE * HexMath.HEX_SIZE * 1.35
+	var world_pos := _world_layer.transform.affine_inverse() * screen_pos
 	for i in range(_sorted_hex_ids.size() - 1, -1, -1):
 		var hex_id := _sorted_hex_ids[i]
-		if local_pos.distance_squared_to(_hex_centers.get(hex_id, local_pos)) > max_r_sq:
+		var pos: Vector2 = _hex_centers.get(hex_id, world_pos)
+		if absf(world_pos.x - pos.x) > 210.0 or absf(world_pos.y - pos.y) > 242.0:
 			continue
-		if Geometry2D.is_point_in_polygon(local_pos, _hex_polys[hex_id]):
+		if Geometry2D.is_point_in_polygon(world_pos, _hex_polys[hex_id]):
 			return hex_id
 	return ""

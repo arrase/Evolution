@@ -58,9 +58,9 @@ static func create_preset_world(
 	var is_en := lang == "en"
 
 	if preset_id == "preset-darwin-archipelago":
-		_build_darwin_archipelago(state, lang, is_en)
+		_build_darwin_archipelago(state, is_en)
 	elif preset_id == "preset-finite-island":
-		_build_finite_island(state, lang, is_en)
+		_build_finite_island(state, is_en)
 	else:
 		_build_rift_savanna(state, lang, is_en)
 
@@ -72,7 +72,7 @@ static func create_preset_world(
 	return state
 
 
-static func _build_darwin_archipelago(state: EvoTypes.WorldState, lang: String, is_en: bool) -> void:
+static func _build_darwin_archipelago(state: EvoTypes.WorldState, is_en: bool) -> void:
 	state.map_radius = 7
 	state.sea_level = 0.12
 	state.glacial_sea_level_cycle = true
@@ -119,7 +119,7 @@ static func _build_darwin_archipelago(state: EvoTypes.WorldState, lang: String, 
 	founder.energy_reserves = 165.0
 	founder.last_energy_delta = 12.0
 	founder.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(founder.id)
-	EvoCatalog.apply_strategy_to_deme(state, founder, state.strategy_a_id, lang)
+	EvoCatalog.apply_strategy_to_deme(state, founder, state.strategy_a_id)
 	state.demes[founder.id] = founder
 	(state.cells["-1,0"] as EvoTypes.HexCell).deme_ids.append(founder.id)
 
@@ -142,12 +142,12 @@ static func _build_darwin_archipelago(state: EvoTypes.WorldState, lang: String, 
 	rival.energy_reserves = 165.0
 	rival.last_energy_delta = 10.0
 	rival.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(rival.id)
-	EvoCatalog.apply_strategy_to_deme(state, rival, state.strategy_b_id, lang)
+	EvoCatalog.apply_strategy_to_deme(state, rival, state.strategy_b_id)
 	state.demes[rival.id] = rival
 	(state.cells["1,0"] as EvoTypes.HexCell).deme_ids.append(rival.id)
 
 
-static func _build_finite_island(state: EvoTypes.WorldState, lang: String, is_en: bool) -> void:
+static func _build_finite_island(state: EvoTypes.WorldState, is_en: bool) -> void:
 	state.map_radius = 7
 	state.sea_level = 0.20
 	state.glacial_sea_level_cycle = false
@@ -204,7 +204,7 @@ static func _build_finite_island(state: EvoTypes.WorldState, lang: String, is_en
 		deme.energy_reserves = 140.0
 		deme.last_energy_delta = 8.0
 		deme.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(deme.id)
-		EvoCatalog.apply_strategy_to_deme(state, deme, str(cfg["strategy_id"]), lang)
+		EvoCatalog.apply_strategy_to_deme(state, deme, str(cfg["strategy_id"]))
 		state.demes[deme.id] = deme
 		(state.cells[hex_id] as EvoTypes.HexCell).deme_ids.append(deme.id)
 
@@ -248,7 +248,7 @@ static func _build_rift_savanna(state: EvoTypes.WorldState, lang: String, is_en:
 	west_deme.energy_reserves = 180.0
 	west_deme.last_energy_delta = 12.0
 	west_deme.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(west_deme.id)
-	EvoCatalog.apply_strategy_to_deme(state, west_deme, state.strategy_a_id, lang)
+	EvoCatalog.apply_strategy_to_deme(state, west_deme, state.strategy_a_id)
 	state.demes[west_deme.id] = west_deme
 	(state.cells["-2,1"] as EvoTypes.HexCell).deme_ids.append(west_deme.id)
 
@@ -271,6 +271,6 @@ static func _build_rift_savanna(state: EvoTypes.WorldState, lang: String, is_en:
 	east_deme.energy_reserves = 180.0
 	east_deme.last_energy_delta = 8.0
 	east_deme.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(east_deme.id)
-	EvoCatalog.apply_strategy_to_deme(state, east_deme, state.strategy_b_id, lang)
+	EvoCatalog.apply_strategy_to_deme(state, east_deme, state.strategy_b_id)
 	state.demes[east_deme.id] = east_deme
 	(state.cells["2,-1"] as EvoTypes.HexCell).deme_ids.append(east_deme.id)

@@ -59,9 +59,11 @@ const STRINGS: Dictionary = {
 		"tool.chronicle": "Crónica",
 		"tool.phylo_tree": "Linajes",
 		"tool.catalog_lab": "Laboratorio",
-		"lens.biome": "Bioma",
-		"lens.food": "Alimento (R)",
-		"lens.health": "Salud (K/Kmax)",
+		"lens.biome": "🌿 Bioma",
+		"lens.food": "🌾 Alimento",
+		"lens.health": "✚ Salud",
+		"lens.diplomacy": "🤝 Diplom.",
+		"lens.territory": "🚩 Territ.",
 		"panel.populations": "Aldeas Activas",
 		"panel.no_populations": "Todas las poblaciones se han extinguido.",
 		"panel.population": "Población",
@@ -137,7 +139,7 @@ const STRINGS: Dictionary = {
 		"decision.dec-exchange-symbiosis.name": "Intercambio / Simbiosis",
 		"decision.dec-exchange-symbiosis.desc": "Intercambio recíproco de recursos y transmisión cultural horizontal con demes cohabitantes o vecinos, generando excedentes energéticos.",
 		"decision.dec-territorial-dispute.name": "Disputa Territorial",
-		"decision.dec-territorial-dispute.desc": "Estrategia Halcón agonística de monopolización de recursos frente a demes rivales en hexágonos compartidos, con alto riesgo metabólico y demográfico.",
+		"decision.dec-territorial-dispute.desc": "Doctrina Halcón de incursión inter-hexagonal, saqueo de cultivos, exigencia de tributo y conquista territorial contra demes rivales vecinos o cercanos.",
 		"decision.dec-explore-innovate.name": "Exploración / Innovación",
 		"decision.dec-explore-innovate.desc": "Experimentación cognitiva de alto coste y prototipado de herramientas que sacrifica rendimiento inmediato para acumular innovación cultural.",
 		"chronicle.type.baldwin_trait": "Asimilación de Baldwin",
@@ -159,6 +161,9 @@ const STRINGS: Dictionary = {
 		"chronicle.type.tribute": "Pago de Tributo",
 		"chronicle.type.siege": "Asedio a Fortaleza",
 		"chronicle.type.epidemic": "Epidemia Urbana",
+		"chronicle.type.epidemic_spread": "Contagio Epidémico",
+		"chronicle.type.epidemic_recovered": "Inmunidad Post-Epidemia",
+		"chronicle.type.famine": "Hambruna Severa",
 		"filter_war": "Guerra",
 		"filter_raid": "Saqueo",
 		"filter_pact": "Pactos",
@@ -212,6 +217,12 @@ const STRINGS: Dictionary = {
 		"chronicle_siege_desc": "Las fortificaciones de {defender} en ({hex}) resistieron el asedio de {attacker}, causando {casualties} bajas a los asaltantes.",
 		"chronicle_epidemic_title": "Epidemia Urbana en ({hex})",
 		"chronicle_epidemic_desc": "El hacinamiento y baja salubridad en ({hex}) desataron una epidemia en {deme}, causando {casualties} bajas.",
+		"chronicle_epidemic_spread_title": "Contagio Epidémico en ({hex})",
+		"chronicle_epidemic_spread_desc": "El contacto con {source} propagó la epidemia a {deme} en ({hex}), causando {casualties} bajas.",
+		"chronicle_epidemic_recovered_title": "Fin de Epidemia en ({hex})",
+		"chronicle_epidemic_recovered_desc": "{deme} superó el brote epidémico en ({hex}) y adquirió inmunidad temporal.",
+		"chronicle_famine_title": "Hambruna en ({hex})",
+		"chronicle_famine_desc": "El déficit calórico severo provocó una hambruna en {deme} ({hex}), con una pérdida de {casualties} habitantes.",
 		"chronicle_walled_union_title": "Unión Amurallada en ({hex})",
 		"chronicle_walled_union_desc": "{deme_a} y {deme_b} unificaron sus murallas perimetrales en una ciudad multi-hexágono ({hex}).",
 		"strategy.strat-cooperation.name": "Alianza Cooperativa",
@@ -237,100 +248,7 @@ const STRINGS: Dictionary = {
 		"hud_matchup_reset": "🔄",
 		"hud_matchup_reset_tip": "Reiniciar duelo en Generación 0 con las estrategias seleccionadas",
 		"insp_strategy": "Estrategia",
-		"legend_strategies": "Duelo de Estrategias",
-		"strategies": {
-			"strat-cooperation": {
-				"name": "Alianza Cooperativa",
-				"desc": "Fomenta la cohesión social, la conservación comunal del hábitat y el almacenamiento."
-			},
-			"strat-expansion": {
-				"name": "Pioneros Expansionistas",
-				"desc": "Reproducción rápida, alta movilidad y tolerancia térmica para colonizar nuevos territorios."
-			},
-			"strat-trade": {
-				"name": "Liga Mercantil",
-				"desc": "Impulsa el trueque inter-tribal, la simbiosis comercial y la difusión cultural."
-			},
-			"strat-war": {
-				"name": "Horda Conquistadora",
-				"desc": "Expansión marcial agresiva y extracción intensiva para dominar territorios rivales."
-			},
-			"strat-innovation": {
-				"name": "Tecnócratas Innovadores",
-				"desc": "Alta encefalización, procesado térmico y herramientas especializadas de extracción."
-			}
-		},
-		"ui": {
-			"lab_tab_strat": "🛡️ Estrategias",
-			"lab_new_strat": "+ Nueva Estrategia",
-			"lab_save_strat": "💾 Guardar Estrategia",
-			"lab_strat_icon": "Emblema",
-			"lab_strat_color": "Color",
-			"lab_strat_traits": "Rasgos de la Estrategia",
-			"lab_strat_vector": "Huella Biofísica Combinada",
-			"lab_use_strat_a": "Usar como Estrategia A",
-			"lab_use_strat_b": "Usar como Estrategia B",
-			"hud_matchup_vs": "⚔️",
-			"hud_matchup_reset": "🔄",
-			"hud_matchup_reset_tip": "Reiniciar duelo en Generación 0 con las estrategias seleccionadas",
-			"insp_strategy": "Estrategia",
-			"legend_strategies": "Duelo de Estrategias",
-			"filter_war": "Guerra",
-			"filter_raid": "Saqueo",
-			"filter_pact": "Pactos",
-			"filter_betrayal": "Traición",
-			"filter_fortify": "Defensa",
-			"filter_merge": "Unión",
-			"filter_tribute": "Tributo",
-			"filter_siege": "Asedio",
-			"event_war": "Guerra de Conquista",
-			"event_raid": "Incursión de Saqueo",
-			"event_pact": "Pacto Formal",
-			"event_betrayal": "Traición de Pacto",
-			"event_fortify": "Fortificación Defensiva",
-			"event_merge": "Unión de Poblaciones",
-			"event_tribute": "Pago de Tributo",
-			"event_siege": "Asedio a Fortaleza",
-			"inspector_pacts": "Pactos y Alianzas",
-			"inspector_no_pacts": "Sin pactos activos",
-			"inspector_pact_with": "Pacto activo con {partner}",
-			"inspector_defense_label": "Defensa",
-			"inspector_defense_0": "Sin fortificar",
-			"inspector_defense_1": "Nv.1 Empalizada (+45%)",
-			"inspector_defense_2": "Nv.2 Muralla (+95%)",
-			"inspector_defense_3": "Nv.3 Castillo (+155%)",
-			"inspector_merged_city": "Ciudad Unificada ({count} pueblos)",
-			"inspector_vendetta_with": "Rencor / Vendetta contra {partner}",
-			"legend_flow_war": "Guerra / Invasión",
-			"legend_flow_raid": "Saqueo / Incursión",
-			"legend_flow_pact": "Pacto / Alianza",
-			"legend_flow_betrayal": "Traición",
-			"legend_flow_tribute": "Tributo / Tregua",
-			"legend_flow_merge": "Unión en Ciudad",
-			"legend_flow_siege": "Asedio Activo",
-			"chronicle_war_victory_title": "Conquista Militar en ({hex})",
-			"chronicle_war_victory_desc": "{attacker} derrotó a {defender} en el hexágono ({hex}), causando {casualties} bajas y capturando {loot} reservas energéticas.",
-			"chronicle_war_repelled_title": "Invasión Repelida en ({hex})",
-			"chronicle_war_repelled_desc": "{defender} repelió la ofensiva de {attacker} en ({hex}), infligiendo {casualties} bajas a los atacantes.",
-			"chronicle_raid_title": "Incursión de Saqueo en ({hex})",
-			"chronicle_raid_desc": "{raider} saqueó a {victim} en ({hex}), arrebatando {loot} unidades de reservas calóricas.",
-			"chronicle_pact_title": "Pacto de Alianza en ({hex})",
-			"chronicle_pact_desc": "{deme_a} y {deme_b} consolidaron un pacto formal de cooperación e intercambio mutuo en ({hex}).",
-			"chronicle_betrayal_title": "Traición de Pacto en ({hex})",
-			"chronicle_betrayal_desc": "{betrayer} rompió su alianza y atacó por sorpresa a {victim} en ({hex}), saqueando {loot} reservas energéticas.",
-			"chronicle_fortify_title": "Fortificación Erigida en ({hex})",
-			"chronicle_fortify_desc": "{deme} invirtió excedentes para erigir {tier_name} en ({hex}), reforzando su defensa territorial.",
-			"chronicle_merge_title": "Unión de Pueblos en ({hex})",
-			"chronicle_merge_desc": "{deme_a} y {deme_b} unieron sus poblaciones y defensas en una sola ciudad en ({hex}) (pob. {pop}).",
-			"chronicle_tribute_title": "Tributo de Paz en ({hex})",
-			"chronicle_tribute_desc": "{victim} entregó {loot} reservas como tributo a {raider} en ({hex}), evitando bajas y sellando una tregua.",
-			"chronicle_siege_title": "Asedio Repelido en ({hex})",
-			"chronicle_siege_desc": "Las fortificaciones de {defender} en ({hex}) resistieron el asedio de {attacker}, causando {casualties} bajas a los asaltantes.",
-			"chronicle_epidemic_title": "Epidemia Urbana en ({hex})",
-			"chronicle_epidemic_desc": "El hacinamiento y baja salubridad en ({hex}) desataron una epidemia en {deme}, causando {casualties} bajas.",
-			"chronicle_walled_union_title": "Unión Amurallada en ({hex})",
-			"chronicle_walled_union_desc": "{deme_a} y {deme_b} unificaron sus murallas perimetrales en una ciudad multi-hexágono ({hex})."
-		}
+		"legend_strategies": "Duelo de Estrategias"
 	},
 	"en": {
 		"app.title": "Evolution — Population Evolutionary Simulator",
@@ -389,9 +307,11 @@ const STRINGS: Dictionary = {
 		"tool.chronicle": "Chronicle",
 		"tool.phylo_tree": "Lineages",
 		"tool.catalog_lab": "Catalog Lab",
-		"lens.biome": "Biome",
-		"lens.food": "Food (R)",
-		"lens.health": "Health (K/Kmax)",
+		"lens.biome": "🌿 Biome",
+		"lens.food": "🌾 Food",
+		"lens.health": "✚ Health",
+		"lens.diplomacy": "🤝 Diplom.",
+		"lens.territory": "🚩 Territ.",
 		"panel.populations": "Active Villages",
 		"panel.no_populations": "All populations are extinct.",
 		"panel.population": "Population",
@@ -467,7 +387,7 @@ const STRINGS: Dictionary = {
 		"decision.dec-exchange-symbiosis.name": "Exchange / Symbiosis",
 		"decision.dec-exchange-symbiosis.desc": "Reciprocal resource exchange and horizontal cultural transmission with cohabiting or neighboring demes, generating non-zero-sum energetic surpluses.",
 		"decision.dec-territorial-dispute.name": "Territorial Dispute",
-		"decision.dec-territorial-dispute.desc": "Agonistic Hawk-strategy resource monopolization against rival demes in shared hexes, seizing competitor biomass shares at high metabolic and demographic risk.",
+		"decision.dec-territorial-dispute.desc": "Agonistic Hawk-doctrine of inter-hex raiding, crop pillaging, tribute extraction, and territorial conquest against neighboring or nearby rival demes.",
 		"decision.dec-explore-innovate.name": "Exploration / Innovation",
 		"decision.dec-explore-innovate.desc": "High-cost cognitive experimentation and tool prototyping that sacrifices immediate foraging yield to accumulate cultural innovation.",
 		"chronicle.type.baldwin_trait": "Baldwin Assimilation",
@@ -489,6 +409,9 @@ const STRINGS: Dictionary = {
 		"chronicle.type.tribute": "Tribute Payment",
 		"chronicle.type.siege": "Fortress Siege",
 		"chronicle.type.epidemic": "Urban Epidemic",
+		"chronicle.type.epidemic_spread": "Epidemic Contagion",
+		"chronicle.type.epidemic_recovered": "Epidemic Recovery",
+		"chronicle.type.famine": "Severe Famine",
 		"filter_war": "War",
 		"filter_raid": "Raid",
 		"filter_pact": "Pacts",
@@ -542,6 +465,12 @@ const STRINGS: Dictionary = {
 		"chronicle_siege_desc": "The fortifications of {defender} at ({hex}) withstood the siege by {attacker}, inflicting {casualties} casualties on the assailants.",
 		"chronicle_epidemic_title": "Urban Epidemic at ({hex})",
 		"chronicle_epidemic_desc": "Crowding and poor sanitation at ({hex}) triggered an epidemic in {deme}, causing {casualties} casualties.",
+		"chronicle_epidemic_spread_title": "Epidemic Contagion at ({hex})",
+		"chronicle_epidemic_spread_desc": "Contact with {source} spread the epidemic to {deme} at ({hex}), causing {casualties} casualties.",
+		"chronicle_epidemic_recovered_title": "Epidemic Subsided at ({hex})",
+		"chronicle_epidemic_recovered_desc": "{deme} overcame the epidemic outbreak at ({hex}) and acquired temporary immunity.",
+		"chronicle_famine_title": "Famine at ({hex})",
+		"chronicle_famine_desc": "Severe caloric deficit triggered famine in {deme} ({hex}), causing a loss of {casualties} inhabitants.",
 		"chronicle_walled_union_title": "Walled Union at ({hex})",
 		"chronicle_walled_union_desc": "{deme_a} and {deme_b} joined their perimeter walls into a multi-hex city ({hex}).",
 		"strategy.strat-cooperation.name": "Cooperative Alliance",
@@ -567,144 +496,31 @@ const STRINGS: Dictionary = {
 		"hud_matchup_reset": "🔄",
 		"hud_matchup_reset_tip": "Reset duel at Generation 0 with the selected strategies",
 		"insp_strategy": "Strategy",
-		"legend_strategies": "Strategy Duel",
-		"strategies": {
-			"strat-cooperation": {
-				"name": "Cooperative Alliance",
-				"desc": "Fosters social cohesion, communal habitat conservation, and resource buffering."
-			},
-			"strat-expansion": {
-				"name": "Expansionist Pioneers",
-				"desc": "Fast reproduction, high mobility, and thermal tolerance to colonize new territories."
-			},
-			"strat-trade": {
-				"name": "Merchant League",
-				"desc": "Drives inter-village barter, commercial symbiosis, and cultural diffusion."
-			},
-			"strat-war": {
-				"name": "Conquering Horde",
-				"desc": "Aggressive martial expansion and intensive extraction to dominate rival territories."
-			},
-			"strat-innovation": {
-				"name": "Innovator Technocrats",
-				"desc": "High encephalization, thermal processing, and specialized extraction tools."
-			}
-		},
-		"ui": {
-			"lab_tab_strat": "🛡️ Strategies",
-			"lab_new_strat": "+ New Strategy",
-			"lab_save_strat": "💾 Save Strategy",
-			"lab_strat_icon": "Emblem",
-			"lab_strat_color": "Color",
-			"lab_strat_traits": "Strategy Traits",
-			"lab_strat_vector": "Combined Biophysical Footprint",
-			"lab_use_strat_a": "Set as Strategy A",
-			"lab_use_strat_b": "Set as Strategy B",
-			"hud_matchup_vs": "⚔️",
-			"hud_matchup_reset": "🔄",
-			"hud_matchup_reset_tip": "Reset duel at Generation 0 with the selected strategies",
-			"insp_strategy": "Strategy",
-			"legend_strategies": "Strategy Duel",
-			"filter_war": "War",
-			"filter_raid": "Raid",
-			"filter_pact": "Pacts",
-			"filter_betrayal": "Betrayal",
-			"filter_fortify": "Defense",
-			"filter_merge": "Union",
-			"filter_tribute": "Tribute",
-			"filter_siege": "Siege",
-			"event_war": "War of Conquest",
-			"event_raid": "Plunder Raid",
-			"event_pact": "Formal Pact",
-			"event_betrayal": "Pact Betrayal",
-			"event_fortify": "Defensive Fortification",
-			"event_merge": "Settlement Unification",
-			"event_tribute": "Tribute Payment",
-			"event_siege": "Fortress Siege",
-			"inspector_pacts": "Pacts & Alliances",
-			"inspector_no_pacts": "No active pacts",
-			"inspector_pact_with": "Active pact with {partner}",
-			"inspector_defense_label": "Defense",
-			"inspector_defense_0": "Unfortified",
-			"inspector_defense_1": "Lv.1 Palisade (+45%)",
-			"inspector_defense_2": "Lv.2 Stone Wall (+95%)",
-			"inspector_defense_3": "Lv.3 Castle (+155%)",
-			"inspector_merged_city": "Unified City ({count} peoples)",
-			"inspector_vendetta_with": "Grudge / Vendetta against {partner}",
-			"legend_flow_war": "War / Invasion",
-			"legend_flow_raid": "Raid / Plunder",
-			"legend_flow_pact": "Pact / Alliance",
-			"legend_flow_betrayal": "Betrayal",
-			"legend_flow_tribute": "Tribute / Truce",
-			"legend_flow_merge": "City Unification",
-			"legend_flow_siege": "Active Siege",
-			"chronicle_war_victory_title": "Military Conquest at ({hex})",
-			"chronicle_war_victory_desc": "{attacker} defeated {defender} at hex ({hex}), inflicting {casualties} casualties and seizing {loot} energy reserves.",
-			"chronicle_war_repelled_title": "Invasion Repelled at ({hex})",
-			"chronicle_war_repelled_desc": "{defender} repelled the assault by {attacker} at ({hex}), inflicting {casualties} casualties on the attackers.",
-			"chronicle_raid_title": "Plunder Raid at ({hex})",
-			"chronicle_raid_desc": "{raider} raided {victim} at ({hex}), plundering {loot} caloric reserve units.",
-			"chronicle_pact_title": "Alliance Pact at ({hex})",
-			"chronicle_pact_desc": "{deme_a} and {deme_b} forged a formal pact of mutual cooperation and exchange at ({hex}).",
-			"chronicle_betrayal_title": "Pact Betrayal at ({hex})",
-			"chronicle_betrayal_desc": "{betrayer} broke their alliance and ambushed {victim} at ({hex}), plundering {loot} energy reserves.",
-			"chronicle_fortify_title": "Fortification Built at ({hex})",
-			"chronicle_fortify_desc": "{deme} invested surplus resources to build {tier_name} at ({hex}), reinforcing its territorial defense.",
-			"chronicle_merge_title": "Unification of Peoples at ({hex})",
-			"chronicle_merge_desc": "{deme_a} and {deme_b} united their populations and defenses into a single city at ({hex}) (pop. {pop}).",
-			"chronicle_tribute_title": "Peace Tribute at ({hex})",
-			"chronicle_tribute_desc": "{victim} paid {loot} reserves as tribute to {raider} at ({hex}), avoiding casualties and sealing a truce.",
-			"chronicle_siege_title": "Siege Repelled at ({hex})",
-			"chronicle_siege_desc": "The fortifications of {defender} at ({hex}) withstood the siege by {attacker}, inflicting {casualties} casualties on the assailants.",
-			"chronicle_epidemic_title": "Urban Epidemic at ({hex})",
-			"chronicle_epidemic_desc": "Crowding and poor sanitation at ({hex}) triggered an epidemic in {deme}, causing {casualties} casualties.",
-			"chronicle_walled_union_title": "Walled Union at ({hex})",
-			"chronicle_walled_union_desc": "{deme_a} and {deme_b} joined their perimeter walls into a multi-hex city ({hex})."
-		}
+		"legend_strategies": "Strategy Duel"
 	}
 }
-
-const TRANSLATIONS: Dictionary = STRINGS
 
 
 static func resolve_lang(lang: String) -> String:
 	return "en" if lang == "en" else "es"
 
 
-static func t(lang: String, key: String = "es", params: Dictionary = {}) -> String:
-	var actual_lang := lang
-	var actual_key := key
-	if lang not in ["es", "en"] and key in ["es", "en"]:
-		actual_lang = key
-		actual_key = lang
-	var res := actual_key
-	var table: Dictionary = STRINGS[resolve_lang(actual_lang)]
-	if table.has(actual_key) and table[actual_key] is String:
-		res = str(table[actual_key])
-	elif (table["ui"] as Dictionary).has(actual_key):
-		res = str((table["ui"] as Dictionary)[actual_key])
-	else:
-		var es_table: Dictionary = STRINGS["es"]
-		if es_table.has(actual_key) and es_table[actual_key] is String:
-			res = str(es_table[actual_key])
-		elif (es_table["ui"] as Dictionary).has(actual_key):
-			res = str((es_table["ui"] as Dictionary)[actual_key])
+static func t(lang: String, key: String, params: Dictionary = {}) -> String:
+	var table: Dictionary = STRINGS[resolve_lang(lang)]
+	var res := key
+	if table.has(key):
+		res = str(table[key])
+	elif STRINGS["es"].has(key):
+		res = str(STRINGS["es"][key])
 	return res.format(params) if not params.is_empty() else res
 
 
-static func ui(key: String, lang: String = "es", params: Dictionary = {}) -> String:
-	return t(lang, key, params)
-
-
 static func strategy_text(strategy_id: String, field: String, fallback: String = "", lang: String = "es") -> String:
-	var l := resolve_lang(lang)
-	var strategies: Dictionary = STRINGS[l]["strategies"]
-	if strategies.has(strategy_id):
-		var entry: Dictionary = strategies[strategy_id]
-		if entry.has(field):
-			return str(entry[field])
-		if field == "description" and entry.has("desc"):
-			return str(entry["desc"])
+	var key_suffix := "desc" if field == "description" else field
+	var key := "strategy.%s.%s" % [strategy_id, key_suffix]
+	var table: Dictionary = STRINGS[resolve_lang(lang)]
+	if table.has(key):
+		return str(table[key])
 	return fallback
 
 
@@ -718,24 +534,6 @@ static func strategy_description(lang: String, strat_def: EvoTypes.StrategyDef) 
 	if strat_def is Object and strat_def.get("origin") != null and str(strat_def.get("origin")) not in ["base", "catalog"]:
 		return str(strat_def.description)
 	return strategy_text(strat_def.id, "desc", strat_def.description, lang)
-
-
-static func trait_text(trait_id: String, field: String, fallback: String = "", lang: String = "es") -> String:
-	var f := "desc" if field == "description" else field
-	var key := "trait." + trait_id + "." + f
-	var table: Dictionary = STRINGS[resolve_lang(lang)]
-	if table.has(key):
-		return str(table[key])
-	return fallback
-
-
-static func decision_text(decision_id: String, field: String, fallback: String = "", lang: String = "es") -> String:
-	var f := "desc" if field == "description" else field
-	var key := "decision." + decision_id + "." + f
-	var table: Dictionary = STRINGS[resolve_lang(lang)]
-	if table.has(key):
-		return str(table[key])
-	return fallback
 
 
 static func localize_world_state(state: EvoTypes.WorldState, lang: String = "es") -> void:
@@ -769,7 +567,6 @@ static func localize_world_state(state: EvoTypes.WorldState, lang: String = "es"
 		"deme-rift-west": "Western Forest Hominids" if is_en else "Homínidos del Bosque Occidental",
 		"deme-rift-east": "Eastern Savanna Hominids" if is_en else "Homínidos de la Sabana Oriental",
 		"deme-darwin-founder": "Western Island Founders" if is_en else "Fundadores Insulares del Oeste",
-		"deme-darwin-west": "Western Island Founders" if is_en else "Fundadores Insulares del Oeste",
 		"deme-darwin-rival": "Eastern Island Rivals" if is_en else "Rivales Insulares del Este",
 		"deme-island-1": "Northern Quarry Clan" if is_en else "Clan de la Cantera Norte",
 		"deme-island-2": "Southern Timber Clan" if is_en else "Clan Maderero del Sur"
@@ -847,29 +644,5 @@ static func decision_description(lang: String, dec_def: EvoTypes.DecisionDef) ->
 	return dec_def.description
 
 
-static func archetype_name(lang: String, archetype: String) -> String:
-	return t(lang, "archetype." + archetype)
-
-
-static func status_name(lang: String, status: String) -> String:
-	return t(lang, "status." + status)
-
-
-static func village_tier_name(lang: String, tier: int) -> String:
-	return t(lang, "tier." + str(clampi(tier, 1, 4)))
-
-
 static func preset_title(lang: String, preset_id: String) -> String:
 	return t(lang, "preset." + preset_id + ".name")
-
-
-static func preset_description(lang: String, preset_id: String) -> String:
-	return t(lang, "preset." + preset_id + ".desc")
-
-
-static func preset_hypothesis(lang: String, preset_id: String) -> String:
-	return t(lang, "preset." + preset_id + ".hyp")
-
-
-static func chronicle_type_name(lang: String, event_type: String) -> String:
-	return t(lang, "chronicle.type." + event_type)

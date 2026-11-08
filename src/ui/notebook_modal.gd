@@ -2,7 +2,6 @@ class_name EvoNotebookModal
 extends Control
 
 signal jump_to_hex_requested(hex_id: String, deme_id: String)
-signal modal_closed()
 
 const FILTER_KEYS: Array[String] = [
 	"all",
@@ -162,7 +161,6 @@ func set_filter(filter_key: String) -> void:
 
 func close_modal() -> void:
 	visible = false
-	modal_closed.emit()
 
 
 func _update_labels() -> void:

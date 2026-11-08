@@ -1,8 +1,9 @@
 class_name EvoPixelArtGen
 extends EvoPixelCanvas
 
+const ASSET_SCHEMA_VERSION: String = "v4_readability"
+
 static var _texture_cache: Dictionary = {}
-static var _image_cache: Dictionary = {}
 static var _villager_colored_cache: Dictionary = {}
 static var _initialized: bool = false
 
@@ -142,7 +143,13 @@ const UI_SPRITES: Array[String] = [
 	"icon_coop_link",
 	"icon_conflict_swords",
 	"icon_broken_link",
-	"thought_bubble"
+	"icon_epidemic",
+	"icon_famine",
+	"icon_immune",
+	"icon_vendetta",
+	"icon_casualties",
+	"icon_loot",
+	"icon_migrants"
 ]
 
 const ALIAS_MAP: Dictionary = {
@@ -152,18 +159,10 @@ const ALIAS_MAP: Dictionary = {
 	"acacia_tree": "tree_savanna_2",
 	"pine_tree": "tree_tundra",
 	"bush_cluster": "bush_arid",
-	"herb_patch": "bush_berry",
-	"mineral_node": "rock_boulder",
-	"rock_boulder": "mossy_rock",
-	"Steppe_grass": "grass_tuft",
-	"grass_tuft": "tall_grass",
 	"marsh_reeds": "coastal_reeds",
 	"mountain_peak": "rock_mountain",
 	"tier1_tent": "hut_thatch",
 	"tier1_campfire": "campfire",
-	"tier1_campfire_2": "campfire",
-	"campfire_lit": "campfire",
-	"hearth_fire": "campfire",
 	"tier2_cottage": "house_clay",
 	"tier2_barn": "granary",
 	"tier3_townhall": "temple_totem",
@@ -205,14 +204,23 @@ static func ensure_all_assets(force_rebuild: bool = false) -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://assets/sprites/villages"))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://assets/sprites/ui"))
 
+	var schema_path := ProjectSettings.globalize_path("res://assets/sprites/schema_version.txt")
+	var current_schema := FileAccess.get_file_as_string(schema_path).strip_edges() if FileAccess.file_exists(schema_path) else ""
+	var should_rebuild := force_rebuild or current_schema != ASSET_SCHEMA_VERSION
+
 	for s_name in HEX_TILE_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/terrain/%s.png" % s_name, force_rebuild)
+		_generate_and_register(s_name, "res://assets/sprites/terrain/%s.png" % s_name, should_rebuild)
 	for s_name in TERRAIN_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/terrain/%s.png" % s_name, force_rebuild)
+		_generate_and_register(s_name, "res://assets/sprites/terrain/%s.png" % s_name, should_rebuild)
 	for s_name in VILLAGE_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/villages/%s.png" % s_name, force_rebuild)
+		_generate_and_register(s_name, "res://assets/sprites/villages/%s.png" % s_name, should_rebuild)
 	for s_name in UI_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/ui/%s.png" % s_name, force_rebuild)
+		_generate_and_register(s_name, "res://assets/sprites/ui/%s.png" % s_name, should_rebuild)
+
+	if should_rebuild:
+		var f := FileAccess.open(schema_path, FileAccess.WRITE)
+		if f != null:
+			f.store_string(ASSET_SCHEMA_VERSION)
 
 
 static func get_texture(sprite_name: String) -> ImageTexture:
@@ -222,31 +230,13 @@ static func get_texture(sprite_name: String) -> ImageTexture:
 		return _texture_cache[sprite_name]
 	var canonical := _resolve_alias(sprite_name)
 	if _texture_cache.has(canonical):
-		_image_cache[sprite_name] = _image_cache[canonical]
 		_texture_cache[sprite_name] = _texture_cache[canonical]
 		return _texture_cache[canonical]
 	var img := _build_sprite_image(canonical)
-	if canonical.begins_with("villager_"):
-		_image_cache[canonical] = img
-		var mip_img := img.duplicate() as Image
-		mip_img.generate_mipmaps()
-		_texture_cache[canonical] = ImageTexture.create_from_image(mip_img)
-	else:
-		img.generate_mipmaps()
-		_image_cache[canonical] = img
-		_texture_cache[canonical] = ImageTexture.create_from_image(img)
-	_image_cache[sprite_name] = _image_cache[canonical]
+	img.generate_mipmaps()
+	_texture_cache[canonical] = ImageTexture.create_from_image(img)
 	_texture_cache[sprite_name] = _texture_cache[canonical]
 	return _texture_cache[canonical]
-
-
-static func get_image(sprite_name: String) -> Image:
-	if not _initialized:
-		ensure_all_assets()
-	if _image_cache.has(sprite_name):
-		return _image_cache[sprite_name]
-	get_texture(sprite_name)
-	return _image_cache[sprite_name]
 
 
 static func get_villager_texture(pose: String, tunic_color: Color) -> ImageTexture:
@@ -286,7 +276,6 @@ static func _generate_and_register(sprite_name: String, file_path: String, force
 			_generate_and_register(canonical, canon_rel, force_rebuild)
 		if force_rebuild or not FileAccess.file_exists(abs_path):
 			DirAccess.copy_absolute(ProjectSettings.globalize_path(canon_rel), abs_path)
-		_image_cache[sprite_name] = _image_cache[canonical]
 		_texture_cache[sprite_name] = _texture_cache[canonical]
 		return
 
@@ -301,15 +290,8 @@ static func _generate_and_register(sprite_name: String, file_path: String, force
 		img = _build_sprite_image(sprite_name)
 		img.save_png(abs_path)
 
-	if sprite_name.begins_with("villager_"):
-		_image_cache[sprite_name] = img
-		var mip_img := img.duplicate() as Image
-		mip_img.generate_mipmaps()
-		_texture_cache[sprite_name] = ImageTexture.create_from_image(mip_img)
-	else:
-		img.generate_mipmaps()
-		_image_cache[sprite_name] = img
-		_texture_cache[sprite_name] = ImageTexture.create_from_image(img)
+	img.generate_mipmaps()
+	_texture_cache[sprite_name] = ImageTexture.create_from_image(img)
 
 
 static func _build_sprite_image(sprite_name: String) -> Image:

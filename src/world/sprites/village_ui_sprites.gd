@@ -4,37 +4,37 @@ extends EvoPixelCanvas
 
 static func draw_village_or_ui_sprite(sprite_name: String) -> Image:
 	match sprite_name:
-		"tier1_tent", "hut_thatch":
+		"hut_thatch":
 			return _draw_hut_thatch()
-		"tier1_campfire", "campfire":
+		"campfire":
 			return _draw_campfire(0)
 		"tier1_campfire_2":
 			return _draw_campfire(1)
-		"tier2_cottage", "house_clay":
+		"house_clay":
 			return _draw_house_clay()
-		"tier2_barn", "granary":
+		"granary":
 			return _draw_granary()
-		"tier3_townhall", "temple_totem":
+		"temple_totem":
 			return _draw_temple_totem()
-		"tier3_house", "house_stone":
+		"house_stone":
 			return _draw_house_stone()
-		"tier4_citadel", "citadel_keep", "prop_defense_fortress", "act_fortify":
+		"citadel_keep":
 			return _draw_citadel_keep()
-		"tier4_windmill", "windmill":
+		"windmill":
 			return _draw_windmill()
-		"tier4_tower", "watchtower":
+		"watchtower":
 			return _draw_watchtower()
-		"tier5_metropolis", "cathedral":
+		"cathedral":
 			return _draw_cathedral()
-		"prop_unity_monument", "act_merge":
+		"prop_unity_monument":
 			return _draw_prop_unity_monument()
-		"prop_defense_palisade", "palisade_wall":
+		"palisade_wall":
 			return _draw_palisade_wall()
-		"prop_defense_wall", "stone_wall":
+		"stone_wall":
 			return _draw_stone_wall()
-		"prop_tribute_chest", "act_tribute":
+		"prop_tribute_chest":
 			return _draw_prop_tribute_chest()
-		"prop_siege_engine", "siege_totem", "act_siege":
+		"siege_totem":
 			return _draw_prop_siege_engine()
 		"crop_field", "act_forage":
 			return _draw_crop_field()
@@ -42,7 +42,7 @@ static func draw_village_or_ui_sprite(sprite_name: String) -> Image:
 			return _draw_pasture_pen()
 		"act_overexploit":
 			return _draw_act_overexploit()
-		"covered_wagon", "settler_wagon", "caravan_cart", "act_migrate":
+		"covered_wagon", "act_migrate":
 			return _draw_covered_wagon()
 		"totem_coop", "act_cooperate":
 			return _draw_totem_pole(Color("#10b981"), Color("#fbbf24"))
@@ -52,8 +52,10 @@ static func draw_village_or_ui_sprite(sprite_name: String) -> Image:
 			return _draw_totem_pole(Color("#ef4444"), Color("#f97316"))
 		"totem_innov", "cultural_totem", "act_innovate", "act_custom":
 			return _draw_totem_pole(Color("#2a9d8f"), Color("#e9c46a"))
-		"ruins", "ruins_stone", "prop_betrayal_ruin", "act_betrayal":
+		"ruins_stone":
 			return _draw_ruins_stone()
+		"prop_betrayal_ruin", "act_betrayal":
+			return _draw_prop_betrayal_ruin()
 		"barricade_spikes":
 			return _draw_barricade_spikes()
 		"road_block_sign":
@@ -68,22 +70,6 @@ static func draw_village_or_ui_sprite(sprite_name: String) -> Image:
 			return _draw_prop_pact_totem()
 		"effect_battle_sparks":
 			return _draw_effect_battle_sparks()
-		"icon_war":
-			return _draw_icon_war()
-		"icon_raid":
-			return _draw_icon_raid()
-		"icon_pact":
-			return _draw_icon_pact()
-		"icon_betrayal":
-			return _draw_icon_betrayal()
-		"icon_defense":
-			return _draw_icon_defense()
-		"icon_merge":
-			return _draw_icon_merge()
-		"icon_tribute":
-			return _draw_icon_tribute()
-		"icon_siege":
-			return _draw_icon_siege()
 		"villager_idle":
 			return draw_villager(0, Color("#e07a5f"))
 		"villager_walk1":
@@ -91,7 +77,7 @@ static func draw_village_or_ui_sprite(sprite_name: String) -> Image:
 		"villager_walk2":
 			return draw_villager(2, Color("#e07a5f"))
 		_:
-			return _draw_ui_icon(sprite_name)
+			return EvoUiIconSprites.draw_ui_icon_sprite(sprite_name)
 
 
 # 1. Tier 1 Yurt / Hide Tent (land3.jpeg top-left)
@@ -728,6 +714,42 @@ static func _draw_ruins_stone() -> Image:
 	return img
 
 
+static func _draw_prop_betrayal_ruin() -> Image:
+	var img := _new_canvas(144, 144)
+	_drop_shadow(img, 72.0, 122.0, 54.0, 18.0, 0.42)
+
+	# Shattered left obsidian monolith
+	var left_shard := PackedVector2Array([
+		Vector2(28, 110), Vector2(32, 42), Vector2(54, 30),
+		Vector2(64, 68), Vector2(60, 118)
+	])
+	_poly_outlined(img, left_shard, Color("#475569"), Color("#1e293b"), C_OUTLINE, 2.5)
+
+	# Shattered right obsidian monolith
+	var right_shard := PackedVector2Array([
+		Vector2(82, 118), Vector2(78, 64), Vector2(92, 34),
+		Vector2(114, 48), Vector2(110, 110)
+	])
+	_poly_outlined(img, right_shard, Color("#334155"), Color("#0f172a"), C_OUTLINE, 2.5)
+
+	# Glowing violet/crimson fracture crack between shards
+	_aa_line(img, 70.0, 26.0, 66.0, 68.0, Color("#7e22ce"), 7.0)
+	_aa_line(img, 66.0, 68.0, 74.0, 118.0, Color("#7e22ce"), 7.0)
+	_aa_line(img, 70.0, 26.0, 66.0, 68.0, Color("#e11d48"), 3.6)
+	_aa_line(img, 66.0, 68.0, 74.0, 118.0, Color("#e11d48"), 3.6)
+	_aa_line(img, 70.0, 26.0, 66.0, 68.0, Color("#fda4af"), 1.6)
+
+	# Broken spear & torn alliance banner
+	_aa_line(img, 42.0, 116.0, 102.0, 44.0, C_OUTLINE, 6.0)
+	_aa_line(img, 42.0, 116.0, 102.0, 44.0, Color("#78350f"), 3.6)
+	var torn_banner := PackedVector2Array([
+		Vector2(76, 56), Vector2(106, 50), Vector2(100, 74),
+		Vector2(88, 68), Vector2(80, 84)
+	])
+	_poly_outlined(img, torn_banner, Color("#be123c"), Color("#581c87"), C_OUTLINE, 2.2)
+	return img
+
+
 static func _draw_barricade_spikes() -> Image:
 	var img := _new_canvas(128, 128)
 	_drop_shadow(img, 64.0, 106.0, 44.0, 14.0, 0.35)
@@ -861,151 +883,3 @@ static func draw_villager(step: int, tunic_color: Color) -> Image:
 	_aa_circle(img, 21.5, 13.5 + bob, 1.2, C_OUTLINE)
 	_aa_circle(img, 26.5, 13.5 + bob, 1.2, C_OUTLINE)
 	return img
-
-
-# 64x64 UI Icons
-static func _draw_icon_war() -> Image:
-	var img := _new_canvas(64, 64)
-	_aa_line(img, 10.0, 54.0, 54.0, 10.0, Color("#cbd5e1"), 5.0)
-	_aa_line(img, 54.0, 54.0, 10.0, 10.0, Color("#cbd5e1"), 5.0)
-	var shield := PackedVector2Array([
-		Vector2(20, 16), Vector2(44, 16), Vector2(44, 38), Vector2(32, 52), Vector2(20, 38)
-	])
-	_poly_outlined(img, shield, Color("#ef4444"), Color("#991b1b"), C_OUTLINE, 2.5)
-	_aa_circle(img, 32.0, 32.0, 5.0, Color("#fde047"))
-	return img
-
-
-static func _draw_icon_raid() -> Image:
-	var img := _new_canvas(64, 64)
-	_aa_ellipse_outlined(img, 28.0, 40.0, 16.0, 14.0, Color("#d97706"), C_OUTLINE, 2.4)
-	_aa_circle_outlined(img, 46.0, 24.0, 9.0, Color("#ef4444"), C_OUTLINE, 2.2)
-	_aa_circle(img, 46.0, 24.0, 4.5, Color("#fde047"))
-	return img
-
-
-static func _draw_icon_pact() -> Image:
-	var img := _new_canvas(64, 64)
-	_aa_circle_outlined(img, 32.0, 32.0, 22.0, Color("#fbbf24"), C_OUTLINE, 2.5)
-	_aa_circle_outlined(img, 32.0, 32.0, 15.0, Color("#10b981"), C_OUTLINE, 2.0)
-	_aa_circle(img, 32.0, 32.0, 6.0, Color("#fef08a"))
-	return img
-
-
-static func _draw_icon_betrayal() -> Image:
-	var img := _new_canvas(64, 64)
-	_aa_circle_outlined(img, 22.0, 36.0, 12.0, Color("#d97706"), C_OUTLINE, 2.4)
-	_aa_circle_outlined(img, 42.0, 36.0, 12.0, Color("#d97706"), C_OUTLINE, 2.4)
-	_aa_line(img, 48.0, 10.0, 18.0, 54.0, Color("#e11d48"), 5.5)
-	return img
-
-
-static func _draw_icon_defense() -> Image:
-	var img := _new_canvas(64, 64)
-	var shield := PackedVector2Array([
-		Vector2(14, 14), Vector2(50, 14), Vector2(48, 40), Vector2(32, 54), Vector2(16, 40)
-	])
-	_poly_outlined(img, shield, Color("#cbd5e1"), Color("#64748b"), C_OUTLINE, 2.5)
-	_aa_circle_outlined(img, 32.0, 32.0, 8.0, Color("#fbbf24"), C_OUTLINE, 2.0)
-	return img
-
-
-static func _draw_icon_merge() -> Image:
-	var img := _new_canvas(64, 64)
-	_aa_circle_outlined(img, 22.0, 36.0, 12.0, Color("#10b981"), C_OUTLINE, 2.4)
-	_aa_circle_outlined(img, 42.0, 36.0, 12.0, Color("#38bdf8"), C_OUTLINE, 2.4)
-	_aa_circle_outlined(img, 32.0, 22.0, 10.0, Color("#fbbf24"), C_OUTLINE, 2.4)
-	return img
-
-
-static func _draw_icon_tribute() -> Image:
-	var img := _new_canvas(64, 64)
-	var chest := PackedVector2Array([
-		Vector2(14, 28), Vector2(50, 28), Vector2(50, 50), Vector2(14, 50)
-	])
-	_poly_outlined(img, chest, Color("#d97706"), Color("#78350f"), C_OUTLINE, 2.4)
-	_aa_circle_outlined(img, 32.0, 24.0, 10.0, Color("#fde047"), C_OUTLINE, 2.2)
-	return img
-
-
-static func _draw_icon_siege() -> Image:
-	var img := _new_canvas(64, 64)
-	var tower := PackedVector2Array([
-		Vector2(20, 16), Vector2(44, 16), Vector2(46, 52), Vector2(18, 52)
-	])
-	_poly_outlined(img, tower, Color("#94a3b8"), Color("#475569"), C_OUTLINE, 2.4)
-	_aa_circle_outlined(img, 18.0, 44.0, 8.0, Color("#ef4444"), C_OUTLINE, 2.0)
-	_aa_circle_outlined(img, 46.0, 42.0, 8.0, Color("#f97316"), C_OUTLINE, 2.0)
-	return img
-
-
-static func _draw_ui_icon(icon_name: String) -> Image:
-	if icon_name == "thought_bubble":
-		return _draw_thought_bubble()
-
-	var img := _new_canvas(64, 64)
-	match icon_name:
-		"tool_inspect":
-			_aa_circle_outlined(img, 28.0, 28.0, 16.0, Color("#bae6fd"), C_OUTLINE, 2.5)
-			_aa_line(img, 40.0, 40.0, 54.0, 54.0, Color("#8c5230"), 6.0)
-		"tool_biome":
-			_aa_ellipse_outlined(img, 32.0, 42.0, 16.0, 12.0, Color("#d4a373"), C_OUTLINE, 2.4)
-			_aa_circle_outlined(img, 32.0, 22.0, 12.0, Color("#22c55e"), C_OUTLINE, 2.4)
-		"tool_altitude":
-			var mtn := PackedVector2Array([Vector2(12, 50), Vector2(32, 14), Vector2(52, 50)])
-			_poly_outlined(img, mtn, Color("#cbd5e1"), Color("#64748b"), C_OUTLINE, 2.5)
-		"tool_fertility":
-			_aa_circle_outlined(img, 32.0, 32.0, 18.0, Color("#fde047"), C_OUTLINE, 2.5)
-		"tool_sealevel":
-			_aa_ellipse_outlined(img, 32.0, 36.0, 20.0, 12.0, Color("#38bdf8"), C_OUTLINE, 2.5)
-		"season_wet":
-			_aa_circle_outlined(img, 32.0, 32.0, 16.0, Color("#fbbf24"), C_OUTLINE, 2.5)
-		"season_dry":
-			_aa_circle_outlined(img, 32.0, 32.0, 16.0, Color("#7dd3fc"), C_OUTLINE, 2.5)
-		"status_thriving":
-			_draw_heart(img, Color("#10b981"), Color("#6ee7b7"))
-		"status_stable":
-			_draw_heart(img, Color("#0ea5e9"), Color("#7dd3fc"))
-		"status_struggling":
-			_draw_heart(img, Color("#f59e0b"), Color("#fde047"))
-		"status_starving":
-			_draw_heart(img, Color("#ef4444"), Color("#fca5a5"))
-		"icon_forage":
-			_aa_circle_outlined(img, 32.0, 32.0, 16.0, Color("#22c55e"), C_OUTLINE, 2.4)
-		"icon_overexploit":
-			_aa_circle_outlined(img, 32.0, 32.0, 16.0, Color("#f97316"), C_OUTLINE, 2.4)
-		"icon_migrate":
-			_aa_circle_outlined(img, 32.0, 32.0, 16.0, Color("#38bdf8"), C_OUTLINE, 2.4)
-		"icon_cooperate":
-			_aa_circle_outlined(img, 32.0, 32.0, 16.0, Color("#ef4444"), C_OUTLINE, 2.4)
-		"icon_exchange":
-			_aa_circle_outlined(img, 32.0, 32.0, 16.0, Color("#10b981"), C_OUTLINE, 2.4)
-		"icon_dispute":
-			_aa_circle_outlined(img, 32.0, 32.0, 16.0, Color("#e11d48"), C_OUTLINE, 2.4)
-		"icon_innovate":
-			_aa_circle_outlined(img, 32.0, 32.0, 16.0, Color("#a855f7"), C_OUTLINE, 2.4)
-		"icon_coop_link":
-			_aa_circle_outlined(img, 32.0, 32.0, 20.0, Color("#10b981"), C_OUTLINE, 2.5)
-		"icon_conflict_swords":
-			_aa_circle_outlined(img, 32.0, 32.0, 20.0, Color("#ef4444"), C_OUTLINE, 2.5)
-		"icon_broken_link":
-			_aa_circle_outlined(img, 32.0, 32.0, 20.0, Color("#d97706"), C_OUTLINE, 2.5)
-		_:
-			_aa_circle_outlined(img, 32.0, 32.0, 16.0, Color("#eab308"), C_OUTLINE, 2.4)
-	return img
-
-
-static func _draw_thought_bubble() -> Image:
-	var img := _new_canvas(64, 64)
-	_aa_ellipse_outlined(img, 32.0, 28.0, 22.0, 16.0, Color("#fffbeb"), C_OUTLINE, 2.4)
-	_aa_circle_outlined(img, 20.0, 48.0, 5.0, Color("#fffbeb"), C_OUTLINE, 2.0)
-	_aa_circle_outlined(img, 14.0, 56.0, 3.0, Color("#fffbeb"), C_OUTLINE, 1.8)
-	return img
-
-
-static func _draw_heart(img: Image, main_col: Color, hi_col: Color) -> void:
-	var pts := PackedVector2Array([
-		Vector2(32, 52), Vector2(14, 32), Vector2(18, 18),
-		Vector2(32, 24), Vector2(46, 18), Vector2(50, 32)
-	])
-	_poly_outlined(img, pts, hi_col, main_col, C_OUTLINE, 2.4)

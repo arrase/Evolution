@@ -4,12 +4,10 @@ extends Control
 signal preset_selected(preset_id: String)
 signal matchup_changed(strategy_a_id: String, strategy_b_id: String)
 signal matchup_reset_requested()
-signal export_json_requested(file_path: String)
-signal import_json_requested(file_path: String)
 signal state_imported(new_state: EvoTypes.WorldState)
 signal play_pause_toggled(is_playing: bool)
 signal step_generation_requested()
-signal speed_changed(is_fast: bool)
+signal speed_changed(speed_index: int)
 signal language_changed(lang: String)
 signal settings_changed(auto_pause: bool, unlimited_pressure: bool, free_sandbox: bool)
 signal decision_models_changed()
@@ -28,14 +26,10 @@ const PRESET_LIST: Array[String] = EvoHudTopBar.PRESET_LIST
 const DEFAULT_EXPORT_PATH: String = "user://evolution_world_state.json"
 const HOTBAR_SLOTS_DEF: Array[Dictionary] = EvoHudHotbarDock.HOTBAR_SLOTS_DEF
 
-var top_bar: EvoHudTopBar
-var inspector_panel: EvoHudInspectorPanel
-var hotbar_dock: EvoHudHotbarDock
-
 var _world_state: EvoTypes.WorldState = null
 var _lang: String = "es"
 var _is_playing: bool = false
-var _is_fast: bool = false
+var _speed_index: int = 1
 var _suppress_strategy_signal: bool = false
 
 var _active_tool: String = "inspect"
@@ -46,13 +40,8 @@ var _active_lens: String = "biome"
 var _selected_hex_id: String = "0,0"
 var _selected_deme_id: String = ""
 var _highlighted_lineage_id: String = ""
-var _last_seen_chronicle_count: int = 0
 
-var _step_1_done: bool = false
-var _step_2_done: bool = false
-var _step_3_done: bool = false
-
-# Top-Left Valley Sign, Strategy Matchup Selector, Artifacts & Living Village Medallions
+# Top-Left Valley Sign, Strategy Matchup Selector & Artifacts
 var _preset_option: OptionButton
 var strategy_a_swatch: ColorRect
 var strategy_a_option: OptionButton
@@ -65,21 +54,15 @@ var _import_btn: Button
 var _notebook_btn: Button
 var _tree_btn: Button
 var _lab_btn: Button
-var _lens_cycle_btn: Button
 var _lens_strip_panel: PanelContainer
 var _lens_buttons: Dictionary = {} # lens_id -> Button
 var _legend_toggle_btn: Button
 var _legend_panel: PanelContainer
 var _legend_vbox: VBoxContainer
-var _villages_title_lbl: Label
-var _villages_list_vbox: VBoxContainer
-var _village_buttons_pool: Array[Button] = []
-var _empty_villages_lbl: Label
 var _last_hotbar_visual_key: String = ""
 
 # Top-Right Clock & Cognitive Engine Widget
 var _season_portrait: EvoHudTopBar.SeasonTidePortrait
-var _season_icon: TextureRect
 var _gen_label: Label
 var _season_label: Label
 var _sea_level_label: Label
@@ -110,8 +93,6 @@ var _cam_lbl: Label
 # Bottom-Center 10-Slot Inventory Hotbar
 var _hotbar_slot_buttons: Array[Button] = []
 var _tool_buttons: Dictionary = {} # tool_id -> Button
-var _equipped_tool_banner: PanelContainer
-var _equipped_tool_lbl: Label
 var _sub_options_panel: PanelContainer
 var _sub_options_flow: HFlowContainer
 var _radius_1_btn: Button
@@ -128,7 +109,6 @@ var _village_selector_opt: OptionButton
 var deme_selector_option: OptionButton
 var _village_next_btn: Button
 var _inspector_header_swatch: ColorRect
-var _inspector_header_title: Label
 var _inspector_header_hl_btn: Button
 var _inspector_model_badge_lbl: Label
 var _strategy_badge_panel: PanelContainer
@@ -141,15 +121,21 @@ var _deme_sheet_vbox: VBoxContainer
 var _traits_sheet_vbox: VBoxContainer
 var _hex_sheet_vbox: VBoxContainer
 
-# Banners, Toasts & First Steps
+# Top-Center A-vs-B Stats Strip & History Chart
+var _stats_strip_panel: PanelContainer
+var _stats_chart_panel: PanelContainer
+var _stats_chart_toggle_btn: Button
+var _stats_chart_metric: String = "population"
+
+# Banners & Live Chronicle Feed
 var _milestone_banner: PanelContainer
 var _banner_title_lbl: Label
 var _banner_summary_lbl: Label
-var _toast_vbox: VBoxContainer
-var _first_steps_panel: PanelContainer
-var _step1_lbl: Label
-var _step2_lbl: Label
-var _step3_lbl: Label
+var _last_shown_macro_outcome: String = ""
+var _event_feed_panel: PanelContainer
+var _event_feed_vbox: VBoxContainer
+var _event_feed_filter: String = "all"
+var _event_feed_collapsed: bool = false
 var _missing_models_modal: Control
 var _missing_models_title_lbl: Label
 var _missing_models_desc_lbl: Label
@@ -179,8 +165,7 @@ func _ready() -> void:
 	set_process_unhandled_key_input(true)
 
 
-func _process(delta: float) -> void:
-	EvoHudBannersToasts.process_toasts(_toast_vbox, delta)
+func _process(_delta: float) -> void:
 	_poll_ollama_startup_and_download()
 
 
@@ -246,6 +231,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if (notebook_modal != null and notebook_modal.visible) or (tree_modal != null and tree_modal.visible) or (lab_modal != null and lab_modal.visible):
 		return
+	if ke.keycode == KEY_TAB:
+		_on_lens_cycle_btn_pressed()
+		if get_viewport() != null:
+			get_viewport().set_input_as_handled()
+		return
 	var slot_idx := -1
 	match ke.keycode:
 		KEY_1, KEY_KP_1:
@@ -270,24 +260,20 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			slot_idx = 9
 	if slot_idx >= 0:
 		_on_hotbar_slot_pressed(slot_idx)
-		if get_viewport() != null:
+		if get_viewport() != null and ke.keycode != KEY_0 and ke.keycode != KEY_KP_0:
 			get_viewport().set_input_as_handled()
 
 
 func _build_ui() -> void:
-	top_bar = EvoHudTopBar.new(self)
-	top_bar.matchup_changed.connect(func(a: String, b: String) -> void: matchup_changed.emit(a, b))
-	top_bar.matchup_reset_requested.connect(func() -> void: matchup_reset_requested.emit())
-	inspector_panel = EvoHudInspectorPanel.new(self)
-	hotbar_dock = EvoHudHotbarDock.new(self)
-
 	EvoHudTopBar.build_top_left_valley_sign_and_medallions(self)
+	EvoHudStatsStrip.build_stats_strip(self)
 	EvoHudTopBar.build_top_right_clock(self)
 	EvoHudTopBar.build_settings_popup(self)
 	EvoHudHotbarDock.build_bottom_hotbar(self)
 	EvoHudHotbarDock.build_legend_panel(self)
 	EvoHudInspectorPanel.build_right_scroll_inspector(self)
 	EvoHudBannersToasts.build_banners_and_toasts(self)
+	EvoHudBannersToasts.build_event_feed_panel(self)
 	_build_modals()
 	_update_static_labels()
 	_rebuild_sub_tool_options()
@@ -326,14 +312,11 @@ func setup(world_state: EvoTypes.WorldState, lang: String = "es") -> void:
 
 func set_world_state(world_state: EvoTypes.WorldState) -> void:
 	_world_state = world_state
+	_last_shown_macro_outcome = ""
 	if _milestone_banner != null:
 		_milestone_banner.visible = false
-	if _toast_vbox != null:
-		for child in _toast_vbox.get_children():
-			child.queue_free()
 	if _world_state != null:
 		refresh_strategies(_world_state, _lang)
-		_last_seen_chronicle_count = _world_state.chronicle.size()
 		if _selected_deme_id == "" or not _world_state.demes.has(_selected_deme_id):
 			if not _world_state.demes.is_empty():
 				var first_id := str(_world_state.demes.keys()[0])
@@ -355,23 +338,19 @@ func refresh(world_state: EvoTypes.WorldState = null, is_playing_override: Varia
 	if _world_state == null:
 		return
 
-	if _world_state.chronicle.size() > _last_seen_chronicle_count:
-		for i in range(_last_seen_chronicle_count, _world_state.chronicle.size()):
-			var entry: EvoTypes.ChronicleEntry = _world_state.chronicle[i]
-			push_chronicle_toast(entry)
-		_last_seen_chronicle_count = _world_state.chronicle.size()
-	elif _world_state.chronicle.size() < _last_seen_chronicle_count:
-		_last_seen_chronicle_count = _world_state.chronicle.size()
-
-	if _world_state.macro_outcome_type != "":
+	if _world_state.macro_outcome_type == "":
+		_last_shown_macro_outcome = ""
+	elif _world_state.macro_outcome_type != _last_shown_macro_outcome:
+		_last_shown_macro_outcome = _world_state.macro_outcome_type
 		show_milestone_banner(_world_state.macro_outcome_title, _world_state.macro_outcome_summary, true)
 
+	EvoHudStatsStrip.refresh_stats_strip(self)
+	EvoHudBannersToasts.refresh_event_feed(self)
 	_update_top_bar_state()
 	_rebuild_villages_list()
 	_rebuild_active_inspector_sheet()
 	if _legend_panel != null and _legend_panel.visible:
 		_rebuild_legend_content()
-	_update_first_steps_labels()
 	_update_hotbar_visuals()
 
 	if notebook_modal != null and notebook_modal.visible:
@@ -382,12 +361,18 @@ func refresh(world_state: EvoTypes.WorldState = null, is_playing_override: Varia
 		lab_modal.refresh(_world_state, _selected_deme_id)
 
 
+func refresh_inspector_only(state: EvoTypes.WorldState = null) -> void:
+	if state != null:
+		_world_state = state
+	if _world_state == null:
+		return
+	_update_top_bar_state()
+	_rebuild_villages_list()
+	_rebuild_active_inspector_sheet()
+
+
 func refresh_strategies(state: EvoTypes.WorldState, lang: String = "es") -> void:
 	EvoHudTopBar.refresh_strategies_for_hud(self, state, lang)
-
-
-func refresh_legend(state: EvoTypes.WorldState, lang: String = "es") -> void:
-	EvoHudHotbarDock.refresh_legend_for_hud(self, state, lang)
 
 
 func _rebuild_active_inspector_sheet() -> void:
@@ -406,7 +391,6 @@ func select_hex(hex_id: String) -> void:
 		if not cell.deme_ids.is_empty():
 			if not cell.deme_ids.has(_selected_deme_id):
 				_selected_deme_id = cell.deme_ids[0]
-			_step_1_done = true
 			if _inspector_tab == "habitat":
 				_set_inspector_tab("deme")
 		else:
@@ -414,7 +398,6 @@ func select_hex(hex_id: String) -> void:
 			_set_inspector_tab("habitat")
 	_rebuild_villages_list()
 	_rebuild_active_inspector_sheet()
-	_update_first_steps_labels()
 
 
 func select_deme(deme_id: String) -> void:
@@ -423,14 +406,12 @@ func select_deme(deme_id: String) -> void:
 	_selected_deme_id = deme_id
 	var d: EvoTypes.Deme = _world_state.demes[deme_id]
 	_selected_hex_id = d.hex_id
-	_step_1_done = true
 	if _inspector_minimized:
 		_on_toggle_inspector_minimize()
 	if _inspector_tab == "habitat":
 		_set_inspector_tab("deme")
 	_rebuild_villages_list()
 	_rebuild_active_inspector_sheet()
-	_update_first_steps_labels()
 
 
 func set_playing_state(is_playing: bool) -> void:
@@ -453,16 +434,6 @@ func set_language(lang: String) -> void:
 	refresh(_world_state)
 
 
-func mark_tool_used() -> void:
-	_step_2_done = true
-	_update_first_steps_labels()
-
-
-func mark_generation_advanced() -> void:
-	_step_3_done = true
-	_update_first_steps_labels()
-
-
 func get_active_tool() -> String:
 	return _active_tool
 
@@ -473,10 +444,6 @@ func get_active_sub_mode() -> String:
 
 func get_brush_radius() -> int:
 	return _brush_radius
-
-
-func get_active_lens() -> String:
-	return _active_lens
 
 
 func open_notebook_modal() -> void:
@@ -499,14 +466,9 @@ func show_milestone_banner(title: String, summary: String, is_macro: bool = fals
 	EvoHudBannersToasts.show_milestone_banner(self, title, summary, is_macro)
 
 
-func push_chronicle_toast(entry: EvoTypes.ChronicleEntry) -> void:
-	EvoHudBannersToasts.push_chronicle_toast(self, entry)
-
-
 func _update_static_labels() -> void:
 	EvoHudTopBar.update_static_labels(self)
 	_update_hotbar_visuals()
-	_update_first_steps_labels()
 
 
 func _update_top_bar_state() -> void:
@@ -537,12 +499,8 @@ func _rebuild_hex_sheet() -> void:
 	EvoHudInspectorPanel.rebuild_hex_sheet(self)
 
 
-func _build_deme_relations_lines(d: EvoTypes.Deme) -> Array[String]:
+func _build_deme_relations_lines(d: EvoTypes.Deme) -> Array[Dictionary]:
 	return EvoHudInspectorPanel.build_deme_relations_lines(_world_state, _lang, d)
-
-
-func _update_first_steps_labels() -> void:
-	EvoHudBannersToasts.update_first_steps_labels(self)
 
 
 func _on_strategy_option_selected(_index: int) -> void:
@@ -552,17 +510,11 @@ func _on_strategy_option_selected(_index: int) -> void:
 	var sel_b := maxi(0, strategy_b_option.selected)
 	var strat_a_id := str(strategy_a_option.get_item_metadata(sel_a)) if strategy_a_option.item_count > 0 else EvoCatalog.DEFAULT_STRATEGY_A_ID
 	var strat_b_id := str(strategy_b_option.get_item_metadata(sel_b)) if strategy_b_option.item_count > 0 else EvoCatalog.DEFAULT_STRATEGY_B_ID
-	if top_bar != null:
-		top_bar.matchup_changed.emit(strat_a_id, strat_b_id)
-	else:
-		matchup_changed.emit(strat_a_id, strat_b_id)
+	matchup_changed.emit(strat_a_id, strat_b_id)
 
 
 func _on_matchup_reset_pressed() -> void:
-	if top_bar != null:
-		top_bar.matchup_reset_requested.emit()
-	else:
-		matchup_reset_requested.emit()
+	matchup_reset_requested.emit()
 
 
 func _on_village_selector_item_selected(index: int) -> void:
@@ -629,15 +581,13 @@ func _on_hotbar_slot_pressed(slot_idx: int) -> void:
 	var sub := str(def["sub"])
 	if sub != "":
 		_active_sub_mode = sub
-	if _active_tool != "inspect":
-		_step_2_done = true
 	_update_static_labels()
 	_rebuild_sub_tool_options()
 	tool_changed.emit(_active_tool, _active_sub_mode, _brush_radius)
 
 
 func _on_lens_cycle_btn_pressed() -> void:
-	var order := ["biome", "food", "health"]
+	var order := ["biome", "food", "health", "diplomacy", "territory"]
 	var next_idx := (order.find(_active_lens) + 1) % order.size()
 	_on_lens_pressed(str(order[next_idx]))
 
@@ -659,7 +609,6 @@ func _on_export_pressed() -> void:
 			EvoUiStyle.tr_text(_lang, "Guardado en %s" % DEFAULT_EXPORT_PATH, "Saved to %s" % DEFAULT_EXPORT_PATH),
 			false
 		)
-	export_json_requested.emit(DEFAULT_EXPORT_PATH)
 
 
 func _on_import_pressed() -> void:
@@ -673,15 +622,12 @@ func _on_import_pressed() -> void:
 				var imported := EvoTypes.WorldState.from_dict(parsed)
 				set_world_state(imported)
 				state_imported.emit(imported)
-	import_json_requested.emit(DEFAULT_EXPORT_PATH)
 
 
 func _on_play_pressed() -> void:
 	if _ollama_startup_blocked or (_missing_models_modal != null and _missing_models_modal.visible):
 		return
 	_is_playing = not _is_playing
-	if _is_playing:
-		_step_3_done = true
 	_update_static_labels()
 	play_pause_toggled.emit(_is_playing)
 
@@ -689,15 +635,13 @@ func _on_play_pressed() -> void:
 func _on_step_pressed() -> void:
 	if _ollama_startup_blocked or (_missing_models_modal != null and _missing_models_modal.visible):
 		return
-	_step_3_done = true
-	_update_first_steps_labels()
 	step_generation_requested.emit()
 
 
 func _on_speed_pressed() -> void:
-	_is_fast = not _is_fast
+	_speed_index = (_speed_index + 1) % 3
 	_update_static_labels()
-	speed_changed.emit(_is_fast)
+	speed_changed.emit(_speed_index)
 
 
 func _on_tree_btn_pressed() -> void:
@@ -831,8 +775,6 @@ func _on_tool_button_pressed(tool_id: String) -> void:
 		_active_sub_mode = "raise"
 	elif tool_id == "adjust_carrying_capacity" and not (_active_sub_mode in ["enrich", "deplete"]):
 		_active_sub_mode = "enrich"
-	elif tool_id != "inspect":
-		_step_2_done = true
 	_update_static_labels()
 	_rebuild_sub_tool_options()
 	tool_changed.emit(_active_tool, _active_sub_mode, _brush_radius)
@@ -840,16 +782,12 @@ func _on_tool_button_pressed(tool_id: String) -> void:
 
 func _on_sub_mode_selected(sub_mode: String) -> void:
 	_active_sub_mode = sub_mode
-	_step_2_done = true
 	_rebuild_sub_tool_options()
 	_update_hotbar_visuals()
-	_update_first_steps_labels()
 	tool_changed.emit(_active_tool, _active_sub_mode, _brush_radius)
 
 
 func _on_sea_level_btn_pressed(delta: float) -> void:
-	_step_2_done = true
-	_update_first_steps_labels()
 	sea_level_change_requested.emit(delta)
 
 
@@ -862,6 +800,8 @@ func _on_brush_radius_pressed(rad: int) -> void:
 func _on_lens_pressed(lens_id: String) -> void:
 	_active_lens = lens_id
 	_update_static_labels()
+	if _legend_panel != null and _legend_panel.visible:
+		_rebuild_legend_content()
 	lens_changed.emit(_active_lens)
 
 

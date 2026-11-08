@@ -1,11 +1,6 @@
 class_name EvoDecisionModel
 extends RefCounted
 
-const DEFAULT_OLLAMA_HOST: String = EvoOllamaClient.DEFAULT_OLLAMA_HOST
-const DEFAULT_OLLAMA_PORT: int = EvoOllamaClient.DEFAULT_OLLAMA_PORT
-const DEFAULT_SYSTEM_ONE_MODEL: String = EvoHeuristicScorer.DEFAULT_SYSTEM_ONE_MODEL
-const SECONDARY_SYSTEM_ONE_MODEL: String = EvoHeuristicScorer.SECONDARY_SYSTEM_ONE_MODEL
-
 
 static func resolve_deme_decision_model_tag(
 	deme_id: String,
@@ -27,10 +22,6 @@ static func check_ollama_status(force_refresh: bool = false) -> Dictionary:
 	return EvoOllamaClient.check_ollama_status(force_refresh)
 
 
-static func refresh_ollama_status_async() -> void:
-	EvoOllamaClient.refresh_ollama_status_async()
-
-
 static func is_decision_eligible(
 	deme: EvoTypes.Deme,
 	dec: EvoTypes.DecisionDef,
@@ -38,44 +29,6 @@ static func is_decision_eligible(
 	state: EvoTypes.WorldState = null
 ) -> bool:
 	return EvoHeuristicScorer.is_decision_eligible(deme, dec, traits_catalog, state)
-
-
-static func get_eligible_decisions(
-	deme: EvoTypes.Deme,
-	decisions_catalog: Dictionary,
-	traits_catalog: Dictionary = {},
-	state: EvoTypes.WorldState = null
-) -> Array[EvoTypes.DecisionDef]:
-	return EvoHeuristicScorer.get_eligible_decisions(deme, decisions_catalog, traits_catalog, state)
-
-
-static func get_eligible_decision_ids(
-	deme: EvoTypes.Deme,
-	decisions_catalog: Dictionary,
-	traits_catalog: Dictionary = {},
-	state: EvoTypes.WorldState = null
-) -> Array[String]:
-	return EvoHeuristicScorer.get_eligible_decision_ids(deme, decisions_catalog, traits_catalog, state)
-
-
-static func pick_dominant_decision(probs: Dictionary) -> String:
-	return EvoHeuristicScorer.pick_dominant_decision(probs)
-
-
-static func compute_environmental_decision_weights(
-	deme: EvoTypes.Deme,
-	cell: EvoTypes.HexCell,
-	state: EvoTypes.WorldState
-) -> Dictionary:
-	return EvoHeuristicScorer.compute_environmental_decision_weights(deme, cell, state)
-
-
-static func modulate_deme_probabilities_for_turn(
-	deme: EvoTypes.Deme,
-	cell: EvoTypes.HexCell,
-	state: EvoTypes.WorldState
-) -> void:
-	EvoHeuristicScorer.modulate_deme_probabilities_for_turn(deme, cell, state)
 
 
 static func blend_with_environmental_weights(
@@ -103,11 +56,14 @@ static func blend_with_environmental_weights(
 	if eligible_ids.is_empty():
 		return {"probabilities": model_probs.duplicate(), "dominant_decision_id": EvoHeuristicScorer.pick_dominant_decision(model_probs)}
 	var norm_model: Dictionary = EvoHeuristicScorer.normalize_decision_probabilities(model_probs, eligible_ids)["probabilities"]
+	var env_blend_ratio: float = 0.25
+	var effective_env_ratio: float = clampf(env_blend_ratio, 0.45, 0.65) if float(env_weights.get("dec-territorial-dispute", 0.0)) >= 0.30 else env_blend_ratio
+	var model_ratio: float = 1.0 - effective_env_ratio
 	var blended: Dictionary = {}
 	for dec_id in eligible_ids:
 		var m_prob := float(norm_model.get(dec_id, 0.0))
 		var e_weight := float(env_weights.get(dec_id, 0.0))
-		blended[dec_id] = 0.75 * m_prob + 0.25 * e_weight
+		blended[dec_id] = model_ratio * m_prob + effective_env_ratio * e_weight
 	return EvoHeuristicScorer.normalize_decision_probabilities(blended, eligible_ids)
 
 
@@ -118,24 +74,8 @@ static func normalize_decision_probabilities(
 	return EvoHeuristicScorer.normalize_decision_probabilities(raw_scores, eligible_ids)
 
 
-static func compute_baseline_mobility(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> float:
-	return EvoHeuristicScorer.compute_baseline_mobility(deme, state)
-
-
-static func build_compact_system_one_state(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> String:
-	return EvoHeuristicScorer.build_compact_system_one_state(deme, state)
-
-
-static func build_compact_decision_criteria(eligible_decisions: Array[EvoTypes.DecisionDef]) -> Dictionary:
-	return EvoHeuristicScorer.build_compact_decision_criteria(eligible_decisions)
-
-
 static func compute_deme_evaluation_signature(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> String:
 	return EvoHeuristicScorer.compute_deme_evaluation_signature(deme, state)
-
-
-static func build_deme_evaluation_signature(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> String:
-	return EvoHeuristicScorer.build_deme_evaluation_signature(deme, state)
 
 
 static func build_contextual_justification(
@@ -321,42 +261,7 @@ static func prefetch_for_state(state: EvoTypes.WorldState) -> void:
 	if not EvoOllamaClient.needs_prefetch():
 		return
 
-	var prev_gen := state.generation
-	var prev_season := state.season
-	state.generation = prev_gen + 1
-	state.season = "dry_cold" if prev_season == "wet_warm" else "wet_warm"
-	var gamma_season: float = 1.20 if state.season == "wet_warm" else 0.75
-	var delta_temp: float = 0.04 if state.season == "wet_warm" else -0.04
-	var delta_hum: float = 0.05 if state.season == "wet_warm" else -0.05
-
-	var collapsed_prev_gen_hexes: Dictionary = {}
-	for i in range(state.chronicle.size() - 1, -1, -1):
-		var entry := state.chronicle[i]
-		if entry.generation < prev_gen:
-			break
-		if entry.event_type == "tragedy_of_commons" and entry.generation == prev_gen:
-			collapsed_prev_gen_hexes[entry.hex_id] = true
-
-	var saved_cells: Dictionary = {}
-	for cid in state.cells.keys():
-		var cell: EvoTypes.HexCell = state.cells[cid]
-		if cell.biome == "ocean":
-			continue
-		saved_cells[cid] = [cell.carrying_capacity, cell.current_resources, cell.temperature, cell.humidity]
-		cell.temperature = clampf(snappedf(cell.temperature + delta_temp, 0.01), -1.0, 1.0)
-		cell.humidity = clampf(snappedf(cell.humidity + delta_hum, 0.01), 0.0, 1.0)
-		var recovery_rate: float = 0.005 if collapsed_prev_gen_hexes.has(cell.id) else 0.05
-		var next_k := clampf(
-			snappedf(cell.carrying_capacity + recovery_rate * (cell.carrying_capacity_max - cell.carrying_capacity), 0.01),
-			10.0,
-			cell.carrying_capacity_max
-		)
-		var next_r := minf(
-			next_k,
-			snappedf(cell.current_resources + next_k * cell.seasonal_regen_rate * gamma_season, 0.01)
-		)
-		cell.carrying_capacity = next_k
-		cell.current_resources = next_r
+	var climate_snapshot := EvoEnvPhase.project_next_turn_climate_in_place(state)
 
 	var next_reps_by_sig: Dictionary = {}
 	for deme_id in state.demes.keys():
@@ -369,15 +274,7 @@ static func prefetch_for_state(state: EvoTypes.WorldState) -> void:
 
 	EvoOllamaClient.prefetch_for_reps(next_reps_by_sig, state)
 
-	state.generation = prev_gen
-	state.season = prev_season
-	for cid in saved_cells.keys():
-		var cell: EvoTypes.HexCell = state.cells[cid]
-		var sv: Array = saved_cells[cid]
-		cell.carrying_capacity = float(sv[0])
-		cell.current_resources = float(sv[1])
-		cell.temperature = float(sv[2])
-		cell.humidity = float(sv[3])
+	EvoEnvPhase.restore_projected_climate(state, climate_snapshot)
 	for deme_id in saved_eval_sigs.keys():
 		var deme: EvoTypes.Deme = state.demes[deme_id]
 		deme.set_meta("eval_sig", saved_eval_sigs[deme_id])
@@ -410,7 +307,8 @@ static func apply_completed_live_results(state: EvoTypes.WorldState, lang: Strin
 			var dominant_id: String = str(blended["dominant_decision_id"])
 			var confidence: float = float(entry["confidence"])
 			var dominant_prob: float = float(probs[dominant_id]) if probs.has(dominant_id) else 0.5
-			var dom_changed := deme.last_dominant_decision_id != dominant_id
+			if deme.last_dominant_decision_id != dominant_id:
+				any_dom_changed = true
 			deme.last_decision_probabilities = probs.duplicate()
 			deme.last_dominant_decision_id = dominant_id
 			deme.last_confidence = confidence
@@ -424,10 +322,7 @@ static func apply_completed_live_results(state: EvoTypes.WorldState, lang: Strin
 					lang,
 					confidence
 				)
-			if dom_changed:
-				any_dom_changed = true
-			if dom_changed or deme.id != "":
-				any_updated = true
+			any_updated = true
 
 	return {"updated": any_updated, "dom_changed": any_dom_changed, "revision": current_rev}
 

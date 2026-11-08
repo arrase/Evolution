@@ -3,8 +3,6 @@ extends RefCounted
 
 const DEFAULT_OLLAMA_HOST: String = "127.0.0.1"
 const DEFAULT_OLLAMA_PORT: int = 11434
-const DEFAULT_SYSTEM_ONE_MODEL: String = EvoUserSettings.DEFAULT_PRIMARY_MODEL
-const SECONDARY_SYSTEM_ONE_MODEL: String = EvoUserSettings.DEFAULT_SECONDARY_MODEL
 const STATUS_TIMEOUT_MS: int = 1500
 const EVAL_TIMEOUT_MS: int = 60000
 const PULL_STALL_TIMEOUT_MS: int = 60000
@@ -252,10 +250,6 @@ static func start_pull_models(models: Array[String]) -> void:
 	_mutex.unlock()
 
 
-static func trigger_auto_pull_missing_models(models: Array[String]) -> void:
-	start_pull_models(models)
-
-
 static func cancel_pull() -> void:
 	_mutex.lock()
 	_pull_cancel_requested = true
@@ -399,18 +393,6 @@ static func _resolve_ollama_model_for_tag(desired: String, status: Dictionary) -
 	return s_tag
 
 
-static func build_compact_system_one_state(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Dictionary:
-	var cell: EvoTypes.HexCell = state.cells[deme.hex_id] if state.cells.has(deme.hex_id) else null
-	var top_prior := EvoHeuristicScorer.build_top_strategy_prior(deme, cell, state)
-	var geo_summary := EvoHeuristicScorer.build_geopolitics_summary(deme, cell, state)
-	return {
-		"briefing": EvoHeuristicScorer.build_compact_system_one_state(deme, state, top_prior, geo_summary),
-		"strategy_traits_prior": top_prior,
-		"geopolitics": geo_summary,
-		"memory": str(geo_summary.get("memory", "quiet"))
-	}
-
-
 static func build_live_job(sig: String, rep: EvoTypes.Deme, state: EvoTypes.WorldState) -> Dictionary:
 	if not state.cells.has(rep.hex_id):
 		return {}
@@ -445,13 +427,6 @@ static func _can_enqueue_locked() -> bool:
 		bool(_cached_ollama_status.get("primary_ready", false))
 		or bool(_cached_ollama_status.get("secondary_ready", false))
 	)
-
-
-static func can_enqueue_jobs() -> bool:
-	_mutex.lock()
-	var ok := _can_enqueue_locked()
-	_mutex.unlock()
-	return ok
 
 
 static func needs_prefetch() -> bool:

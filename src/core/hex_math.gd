@@ -86,6 +86,3 @@ static func axial_to_world(q: int, r: int, hex_size: float = HEX_SIZE) -> Vector
 	var x: float = hex_size * sqrt(3.0) * (float(q) + float(r) * 0.5)
 	var y: float = hex_size * 1.5 * float(r)
 	return Vector2(x, y)
-
-static func compute_village_sector_offset(_index: int, _total_count: int, _hex_size: float = HEX_SIZE) -> Vector2:
-	return Vector2.ZERO

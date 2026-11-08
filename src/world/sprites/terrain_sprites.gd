@@ -4,21 +4,21 @@ extends EvoPixelCanvas
 
 static func draw_terrain_sprite(sprite_name: String) -> Image:
 	match sprite_name:
-		"tree_tropical", "tree_canopy":
+		"tree_tropical":
 			return _draw_tree_tropical()
-		"tree_tropical_2", "palm_cluster":
+		"tree_tropical_2":
 			return _draw_tree_tropical_2()
-		"tree_savanna", "savanna_tree", "acacia_tree":
+		"tree_savanna":
 			return _draw_tree_savanna()
 		"tree_savanna_2":
 			return _draw_tree_savanna_2()
-		"tree_tundra", "pine_tree":
+		"tree_tundra":
 			return _draw_tree_tundra()
 		"tree_tundra_2":
 			return _draw_tree_tundra_2()
 		"bush_arid":
 			return _draw_bush_arid()
-		"bush_berry", "bush_cluster":
+		"bush_berry":
 			return _draw_bush_berry()
 		"fallen_log":
 			return _draw_fallen_log()
@@ -28,9 +28,9 @@ static func draw_terrain_sprite(sprite_name: String) -> Image:
 			return _draw_tall_grass()
 		"dry_scrub":
 			return _draw_dry_scrub()
-		"rock_mountain", "mountain_peak":
+		"rock_mountain":
 			return _draw_rock_mountain()
-		"coastal_reeds", "marsh_reeds":
+		"coastal_reeds":
 			return _draw_coastal_reeds()
 		"tree_stump":
 			return _draw_tree_stump()
@@ -278,7 +278,6 @@ static func _draw_tree_savanna() -> Image:
 		Vector2(58, 66), Vector2(68, 66), Vector2(72, 110), Vector2(54, 110)
 	])
 	_poly_outlined(img, trunk, Color("#8a542e"), Color("#593318"), C_OUTLINE, 2.4)
-	_aa_line(img, 62.0, 74.0, 36.0, 48.0, Color("#6e3f20"), 5.0)
 	_aa_line(img, 62.0, 74.0, 36.0, 48.0, C_OUTLINE, 6.8)
 	_aa_line(img, 62.0, 74.0, 36.0, 48.0, Color("#824c28"), 3.6)
 

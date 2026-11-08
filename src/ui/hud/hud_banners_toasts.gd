@@ -1,6 +1,25 @@
 class_name EvoHudBannersToasts
 extends RefCounted
 
+const EVENT_FEED_FILTER_IDS: Array[String] = [
+	"all",
+	"war",
+	"diplomacy",
+	"health",
+	"evolution"
+]
+
+const EVENT_FEED_FILTER_MAP: Dictionary = {
+	"war": ["war", "war_repelled", "siege", "raid", "betrayal", "pillage"],
+	"diplomacy": ["pact", "tribute", "merge", "walled_union", "absorption", "colonize"],
+	"health": ["epidemic", "epidemic_spread", "epidemic_recovered", "famine", "tragedy_of_commons"],
+	"evolution": [
+		"baldwin_trait", "cultural_innovation", "allopatric_speciation", "symbiosis",
+		"cultural_loss", "extinction", "total_extinction", "single_survivor",
+		"ecological_equilibrium", "fortify"
+	]
+}
+
 
 static func build_banners_and_toasts(hud: Control) -> void:
 	# Top-Center Golden Parchment Milestone / Outcome Banner
@@ -12,8 +31,8 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	hud._milestone_banner.anchor_bottom = 0.0
 	hud._milestone_banner.offset_left = -220
 	hud._milestone_banner.offset_right = 220
-	hud._milestone_banner.offset_top = 12
-	hud._milestone_banner.offset_bottom = 92
+	hud._milestone_banner.offset_top = 76
+	hud._milestone_banner.offset_bottom = 156
 	hud._milestone_banner.z_index = 25
 	var banner_style := EvoUiStyle.make_parchment_card(Color("#fef3c7"), EvoUiStyle.COLOR_GOLD_BRIGHT, 8)
 	banner_style.border_width_left = 4
@@ -49,228 +68,201 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	close_banner_btn.pressed.connect(func() -> void: hud._milestone_banner.visible = false)
 	b_hbox.add_child(close_banner_btn)
 
-	# Bottom-Left Chronicle Toast Stack
-	hud._toast_vbox = VBoxContainer.new()
-	hud._toast_vbox.anchor_left = 0.0
-	hud._toast_vbox.anchor_right = 0.0
-	hud._toast_vbox.anchor_top = 1.0
-	hud._toast_vbox.anchor_bottom = 1.0
-	hud._toast_vbox.offset_left = 10
-	hud._toast_vbox.offset_right = 310
-	hud._toast_vbox.offset_top = -240
-	hud._toast_vbox.offset_bottom = -16
-	hud._toast_vbox.alignment = BoxContainer.ALIGNMENT_END
-	hud._toast_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud._toast_vbox.add_theme_constant_override("separation", 5)
-	hud.add_child(hud._toast_vbox)
-
-	# Compact Collapsible First-Steps Quest Note (Hidden by default to keep bottom-left clear)
-	hud._first_steps_panel = PanelContainer.new()
-	hud._first_steps_panel.visible = false
-	hud._first_steps_panel.anchor_left = 0.0
-	hud._first_steps_panel.anchor_right = 0.0
-	hud._first_steps_panel.anchor_top = 1.0
-	hud._first_steps_panel.anchor_bottom = 1.0
-	hud._first_steps_panel.offset_left = 10
-	hud._first_steps_panel.offset_right = 278
-	hud._first_steps_panel.offset_top = -88
-	hud._first_steps_panel.offset_bottom = -8
-	hud._first_steps_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(5))
-	hud.add_child(hud._first_steps_panel)
-
-	var fs_hbox := HBoxContainer.new()
-	fs_hbox.add_theme_constant_override("separation", 6)
-	hud._first_steps_panel.add_child(fs_hbox)
-
-	var fs_vbox := VBoxContainer.new()
-	fs_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fs_vbox.add_theme_constant_override("separation", 1)
-	fs_hbox.add_child(fs_vbox)
-
-	hud._step1_lbl = Label.new()
-	hud._step1_lbl.add_theme_font_size_override("font_size", 10)
-	fs_vbox.add_child(hud._step1_lbl)
-
-	hud._step2_lbl = Label.new()
-	hud._step2_lbl.add_theme_font_size_override("font_size", 10)
-	fs_vbox.add_child(hud._step2_lbl)
-
-	hud._step3_lbl = Label.new()
-	hud._step3_lbl.add_theme_font_size_override("font_size", 10)
-	fs_vbox.add_child(hud._step3_lbl)
-
-	var hide_fs_btn := Button.new()
-	hide_fs_btn.text = "✕"
-	hide_fs_btn.custom_minimum_size = Vector2(22, 22)
-	hide_fs_btn.pressed.connect(func() -> void: hud._first_steps_panel.visible = false)
-	fs_hbox.add_child(hide_fs_btn)
-
-	# Startup Ollama Offline / Missing Decision Models Modal (Full-Screen Blocking Backdrop)
-	hud._missing_models_modal = ColorRect.new()
-	hud._missing_models_modal.visible = false
-	hud._missing_models_modal.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	hud._missing_models_modal.color = Color(0.06, 0.04, 0.03, 0.72)
-	hud._missing_models_modal.mouse_filter = Control.MOUSE_FILTER_STOP
-	hud._missing_models_modal.z_index = 60
-	hud.add_child(hud._missing_models_modal)
-
-	var mm_card := PanelContainer.new()
-	mm_card.anchor_left = 0.5
-	mm_card.anchor_right = 0.5
-	mm_card.anchor_top = 0.5
-	mm_card.anchor_bottom = 0.5
-	mm_card.offset_left = -230
-	mm_card.offset_right = 230
-	mm_card.offset_top = -120
-	mm_card.offset_bottom = 120
-	mm_card.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(8))
-	hud._missing_models_modal.add_child(mm_card)
-
-	var mm_inner := PanelContainer.new()
-	mm_inner.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(10, false))
-	mm_card.add_child(mm_inner)
-
-	var mm_vbox := VBoxContainer.new()
-	mm_vbox.add_theme_constant_override("separation", 8)
-	mm_inner.add_child(mm_vbox)
-
-	hud._missing_models_title_lbl = Label.new()
-	hud._missing_models_title_lbl.add_theme_font_size_override("font_size", 14)
-	hud._missing_models_title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
-	hud._missing_models_title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	mm_vbox.add_child(hud._missing_models_title_lbl)
-
-	hud._missing_models_desc_lbl = Label.new()
-	hud._missing_models_desc_lbl.add_theme_font_size_override("font_size", 11)
-	hud._missing_models_desc_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
-	hud._missing_models_desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	mm_vbox.add_child(hud._missing_models_desc_lbl)
-
-	hud._missing_models_progress_bar = ProgressBar.new()
-	hud._missing_models_progress_bar.visible = false
-	hud._missing_models_progress_bar.min_value = 0.0
-	hud._missing_models_progress_bar.max_value = 100.0
-	hud._missing_models_progress_bar.value = 0.0
-	hud._missing_models_progress_bar.show_percentage = true
-	hud._missing_models_progress_bar.custom_minimum_size = Vector2(0, 16)
-	EvoUiStyle.style_progress_bar(hud._missing_models_progress_bar, EvoUiStyle.COLOR_GREEN_OK)
-	mm_vbox.add_child(hud._missing_models_progress_bar)
-
-	hud._missing_models_status_lbl = Label.new()
-	hud._missing_models_status_lbl.visible = false
-	hud._missing_models_status_lbl.add_theme_font_size_override("font_size", 11)
-	hud._missing_models_status_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
-	hud._missing_models_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	mm_vbox.add_child(hud._missing_models_status_lbl)
-
-	var mm_btns := HBoxContainer.new()
-	mm_btns.alignment = BoxContainer.ALIGNMENT_END
-	mm_btns.add_theme_constant_override("separation", 8)
-	mm_vbox.add_child(mm_btns)
-
-	hud._missing_models_skip_btn = Button.new()
-	hud._missing_models_skip_btn.pressed.connect(hud._on_missing_models_skip_pressed)
-	mm_btns.add_child(hud._missing_models_skip_btn)
-
-	hud._missing_models_download_btn = Button.new()
-	hud._missing_models_download_btn.pressed.connect(hud._on_missing_models_download_pressed)
-	mm_btns.add_child(hud._missing_models_download_btn)
+	EvoHudSettingsModals.build_missing_models_modal(hud)
 
 
-static func build_legend_panel(hud: Control) -> void:
-	var legend_panel := PanelContainer.new()
-	legend_panel.anchor_left = 0.0
-	legend_panel.anchor_right = 0.0
-	legend_panel.anchor_top = 0.0
-	legend_panel.anchor_bottom = 0.0
-	legend_panel.offset_left = 10
-	legend_panel.offset_right = 236
-	legend_panel.offset_top = 132
-	legend_panel.offset_bottom = 262
-	legend_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(5))
-	hud.add_child(legend_panel)
+static func build_event_feed_panel(hud: Control) -> void:
+	hud._event_feed_panel = PanelContainer.new()
+	hud._event_feed_panel.anchor_left = 0.0
+	hud._event_feed_panel.anchor_right = 0.0
+	hud._event_feed_panel.anchor_top = 1.0
+	hud._event_feed_panel.anchor_bottom = 1.0
+	hud._event_feed_panel.offset_left = 10
+	hud._event_feed_panel.offset_right = 380
+	hud._event_feed_panel.offset_top = -270
+	hud._event_feed_panel.offset_bottom = -10
+	hud._event_feed_panel.z_index = 18
+	hud._event_feed_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(5))
+	hud.add_child(hud._event_feed_panel)
 
 	var outer_vbox := VBoxContainer.new()
-	outer_vbox.add_theme_constant_override("separation", 3)
-	legend_panel.add_child(outer_vbox)
+	outer_vbox.add_theme_constant_override("separation", 4)
+	hud._event_feed_panel.add_child(outer_vbox)
 
+	# Header Row: Title + Filter Pills + Collapse Button
 	var header_row := HBoxContainer.new()
-	header_row.add_theme_constant_override("separation", 4)
+	header_row.add_theme_constant_override("separation", 3)
 	outer_vbox.add_child(header_row)
 
 	var title_lbl := Label.new()
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_lbl.clip_text = true
 	title_lbl.add_theme_font_size_override("font_size", 11)
 	title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
 	header_row.add_child(title_lbl)
 
+	var filter_btns: Dictionary = {}
+	for f_id in EVENT_FEED_FILTER_IDS:
+		var f_btn := Button.new()
+		f_btn.custom_minimum_size = Vector2(26, 22)
+		f_btn.add_theme_font_size_override("font_size", 10)
+		f_btn.pressed.connect(func() -> void:
+			hud._event_feed_filter = f_id
+			refresh_event_feed(hud)
+		)
+		header_row.add_child(f_btn)
+		filter_btns[f_id] = f_btn
+
 	var body_card := PanelContainer.new()
-	body_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(6, false))
+	body_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(5, false))
 	outer_vbox.add_child(body_card)
 
-	var toggle_btn := Button.new()
-	toggle_btn.text = "▾"
-	toggle_btn.custom_minimum_size = Vector2(20, 20)
-	toggle_btn.add_theme_font_size_override("font_size", 10)
-	toggle_btn.pressed.connect(func() -> void:
-		body_card.visible = not body_card.visible
-		toggle_btn.text = "▾" if body_card.visible else "▸"
+	var collapse_btn := Button.new()
+	collapse_btn.text = "▾"
+	collapse_btn.custom_minimum_size = Vector2(22, 22)
+	collapse_btn.add_theme_font_size_override("font_size", 10)
+	collapse_btn.pressed.connect(func() -> void:
+		hud._event_feed_collapsed = not hud._event_feed_collapsed
+		body_card.visible = not hud._event_feed_collapsed
+		collapse_btn.text = "▸" if hud._event_feed_collapsed else "▾"
+		hud._event_feed_panel.offset_top = -46 if hud._event_feed_collapsed else -270
 	)
-	header_row.add_child(toggle_btn)
+	header_row.add_child(collapse_btn)
 
-	var items_vbox := VBoxContainer.new()
-	items_vbox.add_theme_constant_override("separation", 3)
-	body_card.add_child(items_vbox)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	body_card.add_child(scroll)
 
-	var legend_defs := [
-		{"key": "legend_flow_pact", "icon": "icon_pact", "color": Color("#10b981")},
-		{"key": "legend_flow_war", "icon": "icon_war", "color": Color("#ef4444")},
-		{"key": "legend_flow_raid", "icon": "icon_raid", "color": Color("#f97316")},
-		{"key": "legend_flow_betrayal", "icon": "icon_betrayal", "color": Color("#be123c")}
-	]
-	var legend_labels: Dictionary = {}
-	for def in legend_defs:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		items_vbox.add_child(row)
+	hud._event_feed_vbox = VBoxContainer.new()
+	hud._event_feed_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._event_feed_vbox.add_theme_constant_override("separation", 3)
+	scroll.add_child(hud._event_feed_vbox)
 
-		var swatch := ColorRect.new()
-		swatch.custom_minimum_size = Vector2(4, 14)
-		swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		swatch.color = def["color"]
-		row.add_child(swatch)
-
-		var icon_rect := TextureRect.new()
-		icon_rect.custom_minimum_size = Vector2(14, 14)
-		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		icon_rect.texture = EvoUiStyle.get_pixel_icon(str(def["icon"]))
-		row.add_child(icon_rect)
-
-		var lbl := Label.new()
-		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		lbl.clip_text = true
-		lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		lbl.add_theme_font_size_override("font_size", 10)
-		lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
-		row.add_child(lbl)
-		legend_labels[str(def["key"])] = lbl
-
-	hud.set_meta("_legend_title_lbl", title_lbl)
-	hud.set_meta("_legend_labels", legend_labels)
-	refresh_legend_texts(hud)
+	hud.set_meta("_event_feed_title_lbl", title_lbl)
+	hud.set_meta("_event_feed_filter_btns", filter_btns)
 
 
-static func refresh_legend_texts(hud: Control) -> void:
-	if not hud.has_meta("_legend_title_lbl") or not hud.has_meta("_legend_labels"):
+static func refresh_event_feed(hud: Control) -> void:
+	if hud._event_feed_panel == null or hud._event_feed_vbox == null:
 		return
-	var title_lbl := hud.get_meta("_legend_title_lbl") as Label
-	title_lbl.text = EvoUiStyle.tr_text(hud._lang, "🗺️ Leyenda Geopolítica", "🗺️ Geopolitical Legend")
-	var legend_labels: Dictionary = hud.get_meta("_legend_labels")
-	for k in legend_labels.keys():
-		var lbl := legend_labels[k] as Label
-		lbl.text = EvoI18n.t(hud._lang, str(k))
+
+	var lang: String = hud._lang
+	var title_lbl := hud.get_meta("_event_feed_title_lbl") as Label
+	title_lbl.text = EvoUiStyle.tr_text(lang, "📜 Crónica en Vivo", "📜 Live Chronicle")
+
+	var filter_btns: Dictionary = hud.get_meta("_event_feed_filter_btns")
+	for f_id in EVENT_FEED_FILTER_IDS:
+		var btn := filter_btns[f_id] as Button
+		btn.text = _filter_short_label(lang, f_id)
+		btn.tooltip_text = _filter_tooltip_label(lang, f_id)
+		EvoUiStyle.apply_button_active(btn, hud._event_feed_filter == f_id)
+
+	if hud._world_state == null:
+		for child in hud._event_feed_vbox.get_children():
+			hud._event_feed_vbox.remove_child(child)
+			child.queue_free()
+		hud.set_meta("_last_event_feed_key", "")
+		return
+
+	var state: EvoTypes.WorldState = hud._world_state
+	var active_filter: String = hud._event_feed_filter
+	var last_entry_id: String = (state.chronicle[-1] as EvoTypes.ChronicleEntry).id if not state.chronicle.is_empty() else ""
+	var feed_key := "%d:%d:%s:%s:%s:%d" % [
+		state.get_instance_id(),
+		state.generation,
+		last_entry_id,
+		active_filter,
+		lang,
+		state.chronicle.size()
+	]
+	if str(hud.get_meta("_last_event_feed_key", "")) == feed_key and hud._event_feed_vbox.get_child_count() > 0:
+		return
+	hud.set_meta("_last_event_feed_key", feed_key)
+
+	for child in hud._event_feed_vbox.get_children():
+		hud._event_feed_vbox.remove_child(child)
+		child.queue_free()
+
+	var allowed_types: Array = EVENT_FEED_FILTER_MAP[active_filter] if EVENT_FEED_FILTER_MAP.has(active_filter) else []
+
+	var shown := 0
+	for i in range(state.chronicle.size() - 1, -1, -1):
+		var entry: EvoTypes.ChronicleEntry = state.chronicle[i]
+		if active_filter != "all" and not (entry.event_type in allowed_types):
+			continue
+		var ev_color := EvoUiStyle.get_event_type_color(entry.event_type)
+		var is_current := (entry.generation == state.generation)
+
+		var row_btn := Button.new()
+		row_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		row_btn.clip_text = true
+		row_btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		row_btn.custom_minimum_size = Vector2(0, 24)
+		row_btn.add_theme_font_size_override("font_size", 10)
+		row_btn.text = "G%d · (%s) · %s" % [
+			entry.generation,
+			entry.hex_id,
+			_clean_toast_title(entry.title)
+		]
+		row_btn.tooltip_text = "%s\n%s" % [entry.title, entry.causal_explanation]
+
+		var bg_col := Color("#fff8db") if is_current else Color("#fbf2de")
+		var border_col := ev_color.lightened(0.15) if is_current else ev_color
+		var normal_style := EvoUiStyle.make_parchment_card(bg_col, border_col, 4)
+		normal_style.border_width_left = 4
+		var hover_style := EvoUiStyle.make_parchment_card(Color("#fef08a"), border_col, 4)
+		hover_style.border_width_left = 4
+		row_btn.add_theme_stylebox_override("normal", normal_style)
+		row_btn.add_theme_stylebox_override("hover", hover_style)
+		row_btn.add_theme_stylebox_override("pressed", hover_style)
+		row_btn.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK if is_current else EvoUiStyle.COLOR_INK)
+		row_btn.pressed.connect(hud._on_modal_jump_to_hex.bind(entry.hex_id, entry.deme_id))
+		hud._event_feed_vbox.add_child(row_btn)
+
+		shown += 1
+		if shown >= 30:
+			break
+
+	if shown == 0:
+		var empty_lbl := Label.new()
+		empty_lbl.text = EvoUiStyle.tr_text(lang, "Sin eventos registrados en este filtro.", "No recorded events in this filter.")
+		empty_lbl.add_theme_font_size_override("font_size", 10)
+		empty_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
+		hud._event_feed_vbox.add_child(empty_lbl)
+
+
+static func _filter_short_label(lang: String, filter_id: String) -> String:
+	match filter_id:
+		"all":
+			return EvoUiStyle.tr_text(lang, "Todo", "All")
+		"war":
+			return "⚔"
+		"diplomacy":
+			return "🤝"
+		"health":
+			return "☣"
+		"evolution":
+			return "🧬"
+	return filter_id
+
+
+static func _filter_tooltip_label(lang: String, filter_id: String) -> String:
+	match filter_id:
+		"all":
+			return EvoUiStyle.tr_text(lang, "Todos los eventos", "All events")
+		"war":
+			return EvoUiStyle.tr_text(lang, "⚔ Guerra, asedio, saqueo y traición", "⚔ War, siege, raid & betrayal")
+		"diplomacy":
+			return EvoUiStyle.tr_text(lang, "🤝 Pactos, tributos, uniones y colonización", "🤝 Pacts, tribute, unions & colonization")
+		"health":
+			return EvoUiStyle.tr_text(lang, "☣ Epidemias, contagios y hambrunas", "☣ Epidemics, contagion & famine")
+		"evolution":
+			return EvoUiStyle.tr_text(lang, "🧬 Evolución, rasgos, fortificación y extinción", "🧬 Evolution, traits, fortification & extinction")
+	return filter_id
 
 
 static func show_ollama_offline_popup(hud: Control) -> void:
@@ -332,20 +324,6 @@ static func show_missing_models_popup(hud: Control, missing_models: Array) -> vo
 	hud._missing_models_modal.visible = true
 
 
-static func process_toasts(toast_vbox: VBoxContainer, delta: float) -> void:
-	if toast_vbox == null:
-		return
-	for child in toast_vbox.get_children():
-		if child.has_meta("ttl"):
-			var ttl: float = float(child.get_meta("ttl")) - delta
-			if ttl <= 0.0:
-				child.queue_free()
-			else:
-				child.set_meta("ttl", ttl)
-				if ttl < 1.0:
-					(child as CanvasItem).modulate.a = clampf(ttl, 0.0, 1.0)
-
-
 static func show_milestone_banner(hud: Control, title: String, summary: String, is_macro: bool = false) -> void:
 	if hud._milestone_banner == null:
 		return
@@ -361,81 +339,3 @@ static func _clean_toast_title(raw_title: String) -> String:
 			cleaned = cleaned.substr(prefix.length()).strip_edges()
 			break
 	return cleaned
-
-
-static func push_chronicle_toast(hud: Control, entry: EvoTypes.ChronicleEntry) -> void:
-	if hud._toast_vbox == null:
-		return
-
-	var header_text := "G%d · %s · 📍(%s)" % [
-		entry.generation,
-		EvoUiStyle.get_event_type_label(entry.event_type, hud._lang),
-		entry.hex_id
-	]
-	var body_text := _clean_toast_title(entry.title)
-
-	if hud._toast_vbox.get_child_count() > 0:
-		var newest: Node = hud._toast_vbox.get_child(hud._toast_vbox.get_child_count() - 1)
-		if int(newest.get_meta("generation", -1)) == entry.generation and str(newest.get_meta("event_type", "")) == entry.event_type:
-			var top_existing := newest.get_meta("top_lbl") as Label
-			var title_existing := newest.get_meta("title_lbl") as Label
-			top_existing.text = header_text
-			title_existing.text = body_text
-			newest.set_meta("ttl", 3.8)
-			(newest as CanvasItem).modulate.a = 1.0
-			return
-
-	while hud._toast_vbox.get_child_count() >= 2:
-		var oldest: Node = hud._toast_vbox.get_child(0)
-		hud._toast_vbox.remove_child(oldest)
-		oldest.queue_free()
-
-	var ev_color := EvoUiStyle.get_event_type_color(entry.event_type)
-	var toast := PanelContainer.new()
-	toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	toast.set_meta("ttl", 3.8)
-	toast.set_meta("generation", entry.generation)
-	toast.set_meta("event_type", entry.event_type)
-	var style := EvoUiStyle.make_parchment_card(Color("#fbf2de"), ev_color, 5)
-	style.border_width_left = 4
-	toast.add_theme_stylebox_override("panel", style)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 2)
-	toast.add_child(vbox)
-
-	var top_lbl := Label.new()
-	top_lbl.text = header_text
-	top_lbl.add_theme_font_size_override("font_size", 10)
-	top_lbl.add_theme_color_override("font_color", ev_color)
-	vbox.add_child(top_lbl)
-
-	var title_lbl := Label.new()
-	title_lbl.text = body_text
-	title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title_lbl.max_lines_visible = 2
-	title_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	title_lbl.add_theme_font_size_override("font_size", 11)
-	title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
-	vbox.add_child(title_lbl)
-
-	toast.set_meta("top_lbl", top_lbl)
-	toast.set_meta("title_lbl", title_lbl)
-	hud._toast_vbox.add_child(toast)
-
-
-static func update_first_steps_labels(hud: Control) -> void:
-	if hud._step1_lbl == null:
-		return
-	var c1 := "☑" if hud._step_1_done else "☐"
-	var c2 := "☑" if hud._step_2_done else "☐"
-	var c3 := "☑" if hud._step_3_done else "☐"
-
-	hud._step1_lbl.text = EvoUiStyle.tr_text(hud._lang, "%s 1. Seleccionar aldea" % c1, "%s 1. Select village" % c1)
-	hud._step2_lbl.text = EvoUiStyle.tr_text(hud._lang, "%s 2. Usar herramienta (1-0)" % c2, "%s 2. Use tool (1-0)" % c2)
-	hud._step3_lbl.text = EvoUiStyle.tr_text(hud._lang, "%s 3. Avanzar generación" % c3, "%s 3. Advance generation" % c3)
-
-	hud._step1_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT if hud._step_1_done else EvoUiStyle.COLOR_CREAM_TEXT)
-	hud._step2_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT if hud._step_2_done else EvoUiStyle.COLOR_CREAM_TEXT)
-	hud._step3_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT if hud._step_3_done else EvoUiStyle.COLOR_CREAM_TEXT)
-	refresh_legend_texts(hud)

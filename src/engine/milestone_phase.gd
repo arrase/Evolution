@@ -155,6 +155,7 @@ static func run_milestone_phase(
 				if not deme.cultural_trait_ids.has(new_trait.id):
 					deme.cultural_trait_ids.append(new_trait.id)
 
+			var ancestor_hex_id := deme.hex_id
 			if trigger_type == "baldwin_assimilation":
 				deme.baldwin_counters[dec_id] = 0
 				if state.lineage_tree.has(deme.lineage_id):
@@ -173,6 +174,7 @@ static func run_milestone_phase(
 						lin_c.acquired_trait_ids.append(new_trait.id)
 			elif trigger_type == "allopatric_speciation":
 				var old_lineage_id := deme.lineage_id
+				ancestor_hex_id = (state.lineage_tree[old_lineage_id] as EvoTypes.LineageNode).founder_hex_id if state.lineage_tree.has(old_lineage_id) else deme.hex_id
 				deme.isolation_turns = 0
 				var slug := EvoDecisionModel._slugify(new_trait.name)
 				var san_deme := EvoDecisionModel._slugify(deme.id)
@@ -219,6 +221,7 @@ static func run_milestone_phase(
 						(state.lineage_tree[old_lineage_id] as EvoTypes.LineageNode).extinct_generation = state.generation
 
 			var chronicle_type := "baldwin_trait" if trigger_type == "baldwin_assimilation" else trigger_type
+			EvoTypes.push_event(state, chronicle_type, ancestor_hex_id if chronicle_type == "allopatric_speciation" else deme.hex_id, deme.hex_id, deme.id)
 			var entry := EvoTypes.ChronicleEntry.new()
 			entry.id = "chronicle-%s-%d-%s" % [chronicle_type, state.generation, deme.id]
 			entry.generation = state.generation
