@@ -1848,4 +1848,204 @@ func _test_social_memory_defense_tribute_and_synoecism() -> void:
 		var ui_tex := EvoUiStyle.get_pixel_icon(icon_key)
 		_assert(ui_tex != null, "EvoUiStyle.get_pixel_icon('%s') returns valid Texture2D" % icon_key)
 
+	# 6. Social Interactions Rebalance Regressions (Military Scale, Farm Protection, Hawk-Dove/Betrayal Caps, Walled Union Persistence)
+	# 6a. Repelled Small Army vs. Large Fortified City
+	var state_repel := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
+	var repel_att: EvoTypes.Deme = state_repel.demes["deme-rift-west"]
+	var repel_def: EvoTypes.Deme = state_repel.demes["deme-rift-east"]
+	(state_repel.cells[repel_att.hex_id] as EvoTypes.HexCell).deme_ids.erase(repel_att.id)
+	(state_repel.cells[repel_def.hex_id] as EvoTypes.HexCell).deme_ids.erase(repel_def.id)
+	repel_att.hex_id = "0,0"
+	repel_def.hex_id = "1,0"
+	(state_repel.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([repel_att.id])
+	(state_repel.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([repel_def.id])
+	repel_att.population = 62 # warband_pop = int(round(62 * 0.48)) == 30
+	repel_att.energy_reserves = 80.0
+	repel_att.last_decision_probabilities = {"dec-territorial-dispute": 0.65, "dec-conservative-forage": 0.35}
+	repel_def.population = 240
+	repel_def.defense_tier = 2
+	repel_def.energy_reserves = 160.0
+	repel_def.last_decision_probabilities = {"dec-cooperate-store": 0.70, "dec-conservative-forage": 0.30}
+	var repel_farm: EvoTypes.HexCell = state_repel.cells["1,1"]
+	repel_farm.biome = "savanna"
+	repel_farm.altitude = 0.45
+	repel_farm.owner_deme_id = repel_def.id
+	repel_farm.land_use = "crops"
+	repel_farm.has_ruins = false
+	var repel_flows: Array[EvoTypes.HexEdgeFlow] = []
+	var repel_invaded := EvoDemographyMigration._execute_territorial_invasion(
+		repel_att,
+		state_repel.cells["0,0"],
+		state_repel.cells["1,0"],
+		repel_def,
+		state_repel,
+		"en",
+		repel_flows,
+		{},
+		{repel_att.id: 62, repel_def.id: 240},
+		{repel_att.id: 62, repel_def.id: 240},
+		{
+			repel_att.id: EvoEcologyInteraction.compute_effective_vector(repel_att, state_repel),
+			repel_def.id: EvoEcologyInteraction.compute_effective_vector(repel_def, state_repel)
+		}
+	)
+	_assert(not repel_invaded and (240 - repel_def.population) <= 4, "Small repelled warband (warband_pop=30) inflicts at most 4 casualties on fortified city (pop=240, def=2)")
+	_assert(repel_def.defense_tier == 2, "Small repelled warband does not downgrade fortified city's defense_tier (remains 2)")
+	_assert(repel_farm.owner_deme_id == repel_def.id and repel_farm.land_use == "crops" and not repel_farm.has_ruins, "Small repelled warband does not destroy or unclaim fortified city's active crops cell")
+
+	# 6b. Active Farm Colonization Protection & min_keep_pop
+	var state_farm_prot := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-war")
+	var fp_city: EvoTypes.Deme = state_farm_prot.demes["deme-rift-west"]
+	var fp_rival: EvoTypes.Deme = state_farm_prot.demes["deme-rift-east"]
+	(state_farm_prot.cells[fp_city.hex_id] as EvoTypes.HexCell).deme_ids.erase(fp_city.id)
+	(state_farm_prot.cells[fp_rival.hex_id] as EvoTypes.HexCell).deme_ids.erase(fp_rival.id)
+	fp_city.hex_id = "0,0"
+	fp_rival.hex_id = "2,0"
+	(state_farm_prot.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([fp_city.id])
+	(state_farm_prot.cells["2,0"] as EvoTypes.HexCell).deme_ids.assign([fp_rival.id])
+	(state_farm_prot.cells["0,0"] as EvoTypes.HexCell).temperature = 0.0
+	(state_farm_prot.cells["0,0"] as EvoTypes.HexCell).carrying_capacity = 600.0
+	(state_farm_prot.cells["0,0"] as EvoTypes.HexCell).current_resources = 600.0
+	(state_farm_prot.cells["2,0"] as EvoTypes.HexCell).temperature = 0.0
+	(state_farm_prot.cells["2,0"] as EvoTypes.HexCell).carrying_capacity = 300.0
+	(state_farm_prot.cells["2,0"] as EvoTypes.HexCell).current_resources = 300.0
+	fp_city.population = 285
+	fp_city.defense_tier = 2
+	fp_city.salubrity = 1.0
+	fp_city.energy_reserves = 200.0
+	fp_city.last_decision_probabilities = {"dec-selective-migration": 0.85, "dec-cooperate-store": 0.15}
+	fp_city.last_dominant_decision_id = "dec-selective-migration"
+	fp_rival.population = 65
+	fp_rival.defense_tier = 0
+	fp_rival.salubrity = 1.0
+	fp_rival.energy_reserves = 100.0
+	fp_rival.last_decision_probabilities = {"dec-selective-migration": 0.70, "dec-territorial-dispute": 0.30}
+	fp_rival.last_dominant_decision_id = "dec-selective-migration"
+	var fp_crops_ids: Array[String] = ["1,0", "1,-1", "0,1", "-1,1"]
+	for cid in fp_crops_ids:
+		var fc: EvoTypes.HexCell = state_farm_prot.cells[cid]
+		fc.biome = "savanna"
+		fc.altitude = 0.45
+		fc.current_resources = 500.0
+		fc.owner_deme_id = fp_city.id
+		fc.land_use = "crops"
+	for cid in ["0,-1", "-1,0"]:
+		var wc: EvoTypes.HexCell = state_farm_prot.cells[cid]
+		wc.biome = "savanna"
+		wc.altitude = 0.45
+		wc.current_resources = 500.0
+		wc.owner_deme_id = ""
+		wc.land_use = "wild"
+	for nid in HexMath.get_neighbor_ids(2, 0, state_farm_prot.cells):
+		if not fp_crops_ids.has(nid):
+			var oc: EvoTypes.HexCell = state_farm_prot.cells[nid]
+			oc.biome = "ocean"
+			oc.altitude = 0.05
+	var fp_vec_city := EvoEcologyInteraction.compute_effective_vector(fp_city, state_farm_prot)
+	var fp_vec_rival := EvoEcologyInteraction.compute_effective_vector(fp_rival, state_farm_prot)
+	var fp_ext := {
+		fp_city.id: float(fp_city.population) * 0.42 * (1.0 + 0.55 * fp_vec_city.metabolic_cost) + 3.0,
+		fp_rival.id: float(fp_rival.population) * 0.42 * (1.0 + 0.55 * fp_vec_rival.metabolic_cost)
+	}
+	EvoDemographyMigration.run_demography_and_migration_phase(
+		state_farm_prot,
+		"en",
+		{fp_city.id: 285, fp_rival.id: 65},
+		{fp_city.id: fp_vec_city, fp_rival.id: fp_vec_rival},
+		{},
+		fp_ext
+	)
+	var all_crops_protected := true
+	for cid in fp_crops_ids:
+		var fc: EvoTypes.HexCell = state_farm_prot.cells[cid]
+		if not fc.deme_ids.is_empty() or fc.owner_deme_id != fp_city.id or fc.land_use != "crops":
+			all_crops_protected = false
+			break
+	_assert(all_crops_protected, "Neither owning Tier IV city nor adjacent martial rival buds colonists onto active owned crops cells")
+	_assert(fp_city.population >= 280 and fp_city.get_village_tier() == 4, "Tier IV city (pop=285, def=2) respects min_keep_pop=280 and does not drop below Tier IV via normal budding")
+
+	# 6c. Proportional Hawk-Dove & Betrayal Cap
+	var state_hd_cap := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
+	var sm_hawk: EvoTypes.Deme = state_hd_cap.demes["deme-rift-west"]
+	var lg_dove: EvoTypes.Deme = state_hd_cap.demes["deme-rift-east"]
+	(state_hd_cap.cells[sm_hawk.hex_id] as EvoTypes.HexCell).deme_ids.erase(sm_hawk.id)
+	(state_hd_cap.cells[lg_dove.hex_id] as EvoTypes.HexCell).deme_ids.erase(lg_dove.id)
+	sm_hawk.hex_id = "0,0"
+	lg_dove.hex_id = "1,0"
+	(state_hd_cap.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([sm_hawk.id])
+	(state_hd_cap.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([lg_dove.id])
+	(state_hd_cap.cells["0,0"] as EvoTypes.HexCell).current_resources = 0.0
+	(state_hd_cap.cells["1,0"] as EvoTypes.HexCell).current_resources = 600.0
+	sm_hawk.population = 15
+	sm_hawk.defense_tier = 0
+	sm_hawk.last_decision_probabilities = {"dec-territorial-dispute": 0.80, "dec-conservative-forage": 0.20}
+	lg_dove.population = 300
+	lg_dove.defense_tier = 3
+	lg_dove.last_decision_probabilities = {"dec-cooperate-store": 0.75, "dec-conservative-forage": 0.25}
+	var hd_vecs := {
+		sm_hawk.id: EvoEcologyInteraction.compute_effective_vector(sm_hawk, state_hd_cap),
+		lg_dove.id: EvoEcologyInteraction.compute_effective_vector(lg_dove, state_hd_cap)
+	}
+	var hd_hawks := {sm_hawk.id: 1.0, lg_dove.id: 1.0}
+	var hd_ext := {sm_hawk.id: 0.0, lg_dove.id: 0.0}
+	var hd_flows: Array[EvoTypes.HexEdgeFlow] = []
+	EvoEcologyInteraction.run_resource_and_symbiosis_phase(state_hd_cap, "en", hd_vecs, hd_hawks, hd_ext, hd_flows)
+	var stolen_energy := float(hd_ext[sm_hawk.id])
+	_assert(stolen_energy > 0.0 and stolen_energy <= 6.75, "Small Hawk (pop=15) disputing large Dove city (pop=300, def=3) steals at most 0.45 * 15 = 6.75 energy (stole %.4f)" % stolen_energy)
+
+	lg_dove.population = 300
+	lg_dove.defense_tier = 2
+	lg_dove.energy_reserves = 200.0
+	sm_hawk.population = 15
+	sm_hawk.energy_reserves = 20.0
+	var bet_cap_pk := EvoTypes.make_pair_key(sm_hawk.id, lg_dove.id)
+	state_hd_cap.active_pacts[bet_cap_pk] = 3
+	EvoEcologyInteraction._execute_betrayal(
+		sm_hawk,
+		lg_dove,
+		state_hd_cap.cells["0,0"],
+		state_hd_cap.cells["1,0"],
+		bet_cap_pk,
+		state_hd_cap,
+		"en",
+		{sm_hawk.id: 5.0, lg_dove.id: 120.0},
+		hd_flows
+	)
+	_assert((300 - lg_dove.population) <= 7, "Small betrayer (pop=15) betraying large city (pop=300, def=2) inflicts at most int(round(15 * 0.45)) = 7 casualties (inflicted %d)" % (300 - lg_dove.population))
+
+	# 6d. Walled Union Persistence Across Tier Advancement
+	var state_wu_persist := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-trade")
+	var wu_a: EvoTypes.Deme = state_wu_persist.demes["deme-rift-west"]
+	var wu_b: EvoTypes.Deme = state_wu_persist.demes["deme-rift-east"]
+	(state_wu_persist.cells[wu_a.hex_id] as EvoTypes.HexCell).deme_ids.erase(wu_a.id)
+	(state_wu_persist.cells[wu_b.hex_id] as EvoTypes.HexCell).deme_ids.erase(wu_b.id)
+	wu_a.hex_id = "0,0"
+	wu_b.hex_id = "1,0"
+	(state_wu_persist.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([wu_a.id])
+	(state_wu_persist.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([wu_b.id])
+	(state_wu_persist.cells["0,0"] as EvoTypes.HexCell).carrying_capacity = 500.0
+	(state_wu_persist.cells["0,0"] as EvoTypes.HexCell).current_resources = 500.0
+	(state_wu_persist.cells["1,0"] as EvoTypes.HexCell).carrying_capacity = 500.0
+	(state_wu_persist.cells["1,0"] as EvoTypes.HexCell).current_resources = 500.0
+	var shared_union_id := "union-%s-%s" % [wu_b.id, wu_a.id]
+	wu_a.population = 185
+	wu_a.defense_tier = 1
+	wu_a.walled_union_id = shared_union_id
+	wu_a.energy_reserves = 140.0
+	wu_a.last_decision_probabilities = {"dec-cooperate-store": 0.70, "dec-conservative-forage": 0.30}
+	wu_a.last_dominant_decision_id = "dec-cooperate-store"
+	wu_b.population = 155
+	wu_b.defense_tier = 1
+	wu_b.walled_union_id = shared_union_id
+	wu_b.energy_reserves = 140.0
+	wu_b.last_decision_probabilities = {"dec-exchange-symbiosis": 0.70, "dec-conservative-forage": 0.30}
+	wu_b.last_dominant_decision_id = "dec-exchange-symbiosis"
+	state_wu_persist.active_pacts[EvoTypes.make_pair_key(wu_a.id, wu_b.id)] = 5
+	EvoBiophysPhase.run_biophysical_phase(state_wu_persist, "en")
+	_assert(
+		state_wu_persist.demes.has(wu_a.id) and state_wu_persist.demes.has(wu_b.id) and wu_a.walled_union_id == shared_union_id and wu_b.walled_union_id == shared_union_id,
+		"Walled Union partners (Tier III pop=%d and Tier II pop=%d) preserve shared walled_union_id across tier advancement without absorbing each other" % [wu_a.population, wu_b.population]
+	)
+
+
 

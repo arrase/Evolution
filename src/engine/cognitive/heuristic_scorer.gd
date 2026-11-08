@@ -56,7 +56,7 @@ static func _has_nearby_rival_deme(deme: EvoTypes.Deme, state: EvoTypes.WorldSta
 	if state == null or not state.cells.has(deme.hex_id):
 		return true
 	var geo := inspect_geopolitical_context(deme, state.cells[deme.hex_id], state)
-	return bool(geo["has_intra_rival"]) or bool(geo["has_adjacent_rival"])
+	return bool(geo.get("has_intra_rival", false)) or bool(geo.get("has_adjacent_rival", false)) or bool(geo.get("has_betrayal_temptation", false))
 
 
 static func get_eligible_decisions(
@@ -205,7 +205,7 @@ static func inspect_geopolitical_context(
 	var active_vendettas: int = 0
 	var adjacent_rivals_count: int = 0
 	var nearby_horde_threat := false
-	var max_neighbor_reserves: float = 0.0
+	var neighbor_max_reserves: float = 0.0
 	var owned_rural_count: int = 0
 	var has_same_tier_ally := false
 	var deme_tier := deme.get_village_tier()
@@ -249,13 +249,14 @@ static func inspect_geopolitical_context(
 				sum_pop += other.population
 				if other.id != deme.id:
 					has_nearby_deme = true
-					max_neighbor_reserves = maxf(max_neighbor_reserves, other.energy_reserves)
+					neighbor_max_reserves = maxf(neighbor_max_reserves, other.energy_reserves)
 					if other.lineage_id != deme.lineage_id and (not has_pacts or not EvoTypes.is_pact_active(state, deme.id, other.id)):
 						has_intra_rival = true
 						adjacent_rivals_count += 1
 						if other.energy_reserves > deme.energy_reserves * 1.15:
 							neighbor_has_surplus = true
-						if other.population < int(float(deme.population) * 0.85) or other.energy_reserves < 45.0:
+						var other_eff: float = float(other.population) * (1.0 + 0.35 * float(other.defense_tier))
+						if other_eff < float(deme.population) * 0.85 or (other.energy_reserves < 45.0 and other.population <= deme.population and other.defense_tier <= deme.defense_tier):
 							neighbor_is_weaker = true
 						if other.population >= 55 and (other.cultural_trait_ids.has("cul-warrior-expansion") or other.id.contains("-w") or other.last_dominant_decision_id == "dec-territorial-dispute"):
 							nearby_horde_threat = true
@@ -270,7 +271,7 @@ static func inspect_geopolitical_context(
 					var other: EvoTypes.Deme = state.demes[oid]
 					if other.id != deme.id:
 						has_nearby_deme = true
-						max_neighbor_reserves = maxf(max_neighbor_reserves, other.energy_reserves)
+						neighbor_max_reserves = maxf(neighbor_max_reserves, other.energy_reserves)
 						if other.get_village_tier() == deme_tier and deme_tier >= 2 and (other.lineage_id == deme.lineage_id or (has_pacts and EvoTypes.is_pact_active(state, deme.id, other.id))):
 							has_same_tier_ally = true
 						if other.lineage_id != deme.lineage_id and (not has_pacts or not EvoTypes.is_pact_active(state, deme.id, other.id)):
@@ -278,7 +279,8 @@ static func inspect_geopolitical_context(
 							adjacent_rivals_count += 1
 							if ncell.current_resources > cell.current_resources * 1.15 or other.energy_reserves > deme.energy_reserves * 1.15:
 								neighbor_has_surplus = true
-							if other.population < int(float(deme.population) * 0.85) or other.energy_reserves < 45.0:
+							var other_eff: float = float(other.population) * (1.0 + 0.35 * float(other.defense_tier))
+							if other_eff < float(deme.population) * 0.85 or (other.energy_reserves < 45.0 and other.population <= deme.population and other.defense_tier <= deme.defense_tier):
 								neighbor_is_weaker = true
 							if ncell.biome != "ocean" and ncell.altitude <= 0.85 and other.population >= 55:
 								if other.cultural_trait_ids.has("cul-warrior-expansion") or other.id.contains("-w") or other.last_dominant_decision_id == "dec-territorial-dispute":
@@ -339,6 +341,7 @@ static func inspect_geopolitical_context(
 
 	var adequacy := (cell.current_resources if cell != null else 300.0) / maxf(1.0, float(cell_pop) * 0.85)
 	var needs_rural_hinterland := deme_tier >= 3 and owned_rural_count < 2
+	var has_betrayal_temptation: bool = active_pact_count > 0 and state != null and not EvoCatalog.deme_has_trait(deme, "cul-communal-conservation") and (state.season == "dry_cold" or deme.energy_reserves < 65.0) and neighbor_max_reserves > deme.energy_reserves * 1.15
 
 	var res := {
 		"has_intra_rival": has_intra_rival,
@@ -352,7 +355,7 @@ static func inspect_geopolitical_context(
 		"adjacent_rivals": adjacent_rivals_count,
 		"nearby_horde_threat": nearby_horde_threat,
 		"memory_digest": memory_digest,
-		"neighbor_max_reserves": max_neighbor_reserves,
+		"neighbor_max_reserves": neighbor_max_reserves,
 		"env_adequacy": adequacy,
 		"cell_pop": cell_pop,
 		"village_tier": deme_tier,
@@ -360,7 +363,8 @@ static func inspect_geopolitical_context(
 		"needs_rural_hinterland": needs_rural_hinterland,
 		"salubrity": deme.salubrity,
 		"in_walled_union": deme.walled_union_id != "",
-		"has_same_tier_ally": has_same_tier_ally
+		"has_same_tier_ally": has_same_tier_ally,
+		"has_betrayal_temptation": has_betrayal_temptation
 	}
 	if deme != null:
 		deme.set_meta("geo_ctx_key", cache_key)
@@ -398,12 +402,15 @@ static func compute_environmental_decision_weights(
 
 	var weights: Dictionary = base_probs.duplicate()
 	var geo := inspect_geopolitical_context(deme, cell, state) if (cell != null and state != null) else {}
+	var has_rival: bool = bool(geo.get("has_intra_rival", true)) or bool(geo.get("has_adjacent_rival", true))
+	var has_betrayal_temptation: bool = bool(geo.get("has_betrayal_temptation", false))
 	var eligible_ids: Array[String] = base_eligible
-	if state != null and base_eligible.size() > 1 and not bool(geo.get("has_intra_rival", true)) and not bool(geo.get("has_adjacent_rival", true)):
+	if state != null and base_eligible.size() > 1 and not has_rival and not has_betrayal_temptation:
 		var filtered: Array[String] = []
 		for dec_id in base_eligible:
-			if dec_id != "dec-territorial-dispute":
-				filtered.append(dec_id)
+			if dec_id == "dec-territorial-dispute" and not has_rival and not has_betrayal_temptation:
+				continue
+			filtered.append(dec_id)
 		if not filtered.is_empty():
 			eligible_ids = filtered
 
@@ -454,7 +461,6 @@ static func compute_environmental_decision_weights(
 			has_warrior
 			or EvoCatalog.deme_has_trait(deme, "cul-extraction-tools")
 			or EvoCatalog.deme_has_trait(deme, "bio-r-strategy")
-			or vec.extraction_efficiency > 0.3
 			or vec.social_cohesion < 0.0
 		)
 		if is_martial:
@@ -470,7 +476,7 @@ static func compute_environmental_decision_weights(
 		var is_cooperative := (
 			EvoCatalog.deme_has_trait(deme, "cul-communal-conservation")
 			or (EvoCatalog.deme_has_trait(deme, "bio-social-instinct") and not has_warrior and not EvoCatalog.deme_has_trait(deme, "bio-r-strategy"))
-			or has_active_pact
+			or (has_active_pact and not is_martial and not has_betrayal_temptation)
 		)
 		if is_cooperative:
 			if weights.has("dec-cooperate-store"):
@@ -498,6 +504,12 @@ static func compute_environmental_decision_weights(
 		if is_cognitive and weights.has("dec-explore-innovate"):
 			weights["dec-explore-innovate"] = float(weights["dec-explore-innovate"]) * (1.0 + env_pressure * 1.35)
 
+	if has_betrayal_temptation:
+		if weights.has("dec-territorial-dispute"):
+			weights["dec-territorial-dispute"] = float(weights["dec-territorial-dispute"]) * (1.55 + 0.35 * reserve_stress)
+		if weights.has("dec-intensive-overexploit"):
+			weights["dec-intensive-overexploit"] = float(weights["dec-intensive-overexploit"]) * (1.30 + 0.25 * reserve_stress)
+
 	if bool(geo.get("nearby_horde_threat", false)) or int(geo.get("active_vendettas", 0)) > 0:
 		var has_warrior_trait := EvoCatalog.deme_has_trait(deme, "cul-warrior-expansion")
 		if not has_warrior_trait:
@@ -505,7 +517,7 @@ static func compute_environmental_decision_weights(
 				weights["dec-cooperate-store"] = float(weights["dec-cooperate-store"]) * 1.28
 			if weights.has("dec-exchange-symbiosis"):
 				weights["dec-exchange-symbiosis"] = float(weights["dec-exchange-symbiosis"]) * 1.18
-		if has_warrior_trait or deme.defense_tier >= 2:
+		if has_warrior_trait:
 			if weights.has("dec-territorial-dispute"):
 				weights["dec-territorial-dispute"] = float(weights["dec-territorial-dispute"]) * 1.22
 

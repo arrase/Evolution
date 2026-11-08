@@ -2,6 +2,11 @@ class_name EvoEcologyInteraction
 extends RefCounted
 
 const DEFENSE_TIER_BONUS: Array[float] = [0.0, 0.45, 0.95, 1.55]
+const DEFENSE_ATTENUATION_SCALE: Array[float] = [1.0, 0.75, 0.50, 0.30]
+
+
+static func get_max_rural_quota(tier: int) -> int:
+	return 0 if tier < 2 else (1 if tier == 2 else (2 if tier == 3 else 4))
 
 
 static func compute_effective_vector(
@@ -148,31 +153,30 @@ static func _is_deme_stressed_for_betrayal(
 
 static func _is_opportunistic_betrayer(
 	deme: EvoTypes.Deme,
-	v_eff: EvoTypes.BiophysicalVector,
 	p_coop: float,
-	p_exch: float,
+	_p_exch: float,
 	p_disp: float,
 	p_over: float,
+	v_eff: EvoTypes.BiophysicalVector,
 	formal_pact_active: bool,
 	victim_defense_tier: int = 0
 ) -> bool:
 	if not formal_pact_active:
 		return false
-	if victim_defense_tier >= 2 and p_disp + p_over <= p_coop + p_exch + 0.18:
+	var has_warrior: bool = deme.cultural_trait_ids.has("cul-warrior-expansion")
+	if deme.cultural_trait_ids.has("cul-communal-conservation") and not has_warrior and p_coop >= 0.22:
 		return false
-	var has_coop_culture := (
-		deme.cultural_trait_ids.has("cul-communal-conservation")
-		or deme.cultural_trait_ids.has("cul-interdeme-barter")
+	if v_eff.social_cohesion > 0.85 and not has_warrior and p_coop >= 0.38:
+		return false
+	var agg_score: float = (
+		p_disp
+		+ 0.75 * p_over
+		+ (0.16 if has_warrior else 0.0)
+		+ (0.12 if deme.biological_trait_ids.has("bio-r-strategy") else 0.0)
+		+ (0.10 if deme.cultural_trait_ids.has("cul-extraction-tools") else 0.0)
+		+ (0.06 if (deme.cultural_trait_ids.has("cul-interdeme-barter") or deme.cultural_trait_ids.has("cul-fire-processing")) else 0.0)
 	)
-	if p_disp + p_over > p_coop + p_exch + 0.08 and (v_eff.social_cohesion < 0.55 or not has_coop_culture):
-		return true
-	var has_aggressive_cul := (
-		deme.cultural_trait_ids.has("cul-warrior-expansion")
-		or deme.cultural_trait_ids.has("cul-extraction-tools")
-	)
-	if has_aggressive_cul and not has_coop_culture and p_disp + p_over >= p_coop + p_exch:
-		return true
-	return false
+	return agg_score >= (0.26 if victim_defense_tier >= 2 else 0.18) or p_disp >= 0.16
 
 
 static func _execute_betrayal(
@@ -187,7 +191,8 @@ static func _execute_betrayal(
 	turn_geopolitical_flows: Array[EvoTypes.HexEdgeFlow]
 ) -> void:
 	var ext_victim := float(extracted_energy_by_deme.get(victim.id, 0.0))
-	var desired_loot := snappedf(clampf(victim.energy_reserves * 0.30 + ext_victim * 0.25, 10.0, 45.0), 0.01)
+	var impact_scale: float = clampf(float(betrayer.population) / maxf(20.0, float(victim.population)), 0.25, 1.35) * DEFENSE_ATTENUATION_SCALE[clampi(victim.defense_tier, 0, 3)]
+	var desired_loot: float = snappedf(clampf((victim.energy_reserves * 0.30 + ext_victim * 0.25) * impact_scale, 8.0, 45.0), 0.01)
 	var from_reserves := minf(victim.energy_reserves, desired_loot * 0.70)
 	var from_ext := minf(ext_victim, desired_loot - from_reserves)
 	if from_reserves + from_ext < desired_loot:
@@ -197,7 +202,8 @@ static func _execute_betrayal(
 	extracted_energy_by_deme[victim.id] = maxf(0.0, snappedf(ext_victim - from_ext, 0.01))
 	betrayer.energy_reserves = minf(220.0, snappedf(betrayer.energy_reserves + loot, 0.01))
 
-	var casualties := maxi(3, int(round(float(victim.population) * 0.14)))
+	var base_cas_rate: float = 0.14 if betrayer.cultural_trait_ids.has("cul-warrior-expansion") else 0.09
+	var casualties: int = maxi(2, mini(int(round(float(betrayer.population) * 0.45)), int(round(float(victim.population) * clampf(base_cas_rate * impact_scale, 0.03, 0.18)))))
 	victim.population = maxi(5, victim.population - casualties)
 
 	state.active_pacts[pair_key] = -4
@@ -316,14 +322,36 @@ static func _run_pacts_and_betrayals(
 		var p_disp_2: float = float(ap2[2])
 		var p_over_2: float = float(ap2[3])
 
-		if formal_pact:
+		if formal_pact and not (d1.walled_union_id != "" and d1.walled_union_id == d2.walled_union_id):
+			var d1_wants_betray := _is_opportunistic_betrayer(
+				d1, p_coop_1, p_exch_1, p_disp_1, p_over_1, v1, formal_pact, d2.defense_tier
+			)
+			var d2_wants_betray := _is_opportunistic_betrayer(
+				d2, p_coop_2, p_exch_2, p_disp_2, p_over_2, v2, formal_pact, d1.defense_tier
+			)
+			var d1_can_betray := float(d1.population) >= float(d2.population) * 0.45 and d2.energy_reserves >= 45.0
+			var d2_can_betray := float(d2.population) >= float(d1.population) * 0.45 and d1.energy_reserves >= 45.0
+			var d1_winter_greed := (
+				d1.lineage_id != d2.lineage_id
+				and state.season == "dry_cold"
+				and d2.energy_reserves >= 75.0
+				and d2.energy_reserves > d1.energy_reserves * 1.25
+			)
+			var d2_winter_greed := (
+				d1.lineage_id != d2.lineage_id
+				and state.season == "dry_cold"
+				and d1.energy_reserves >= 75.0
+				and d1.energy_reserves > d2.energy_reserves * 1.25
+			)
 			var d1_betrays := (
-				_is_deme_stressed_for_betrayal(d1, c1, state, v1, ext_1)
-				and _is_opportunistic_betrayer(d1, v1, p_coop_1, p_exch_1, p_disp_1, p_over_1, formal_pact, d2.defense_tier)
+				d1_wants_betray
+				and d1_can_betray
+				and (_is_deme_stressed_for_betrayal(d1, c1, state, v1, ext_1) or d1_winter_greed)
 			)
 			var d2_betrays := (
-				_is_deme_stressed_for_betrayal(d2, c2, state, v2, ext_2)
-				and _is_opportunistic_betrayer(d2, v2, p_coop_2, p_exch_2, p_disp_2, p_over_2, formal_pact, d1.defense_tier)
+				d2_wants_betray
+				and d2_can_betray
+				and (_is_deme_stressed_for_betrayal(d2, c2, state, v2, ext_2) or d2_winter_greed)
 			)
 			if d1_betrays or d2_betrays:
 				betrayed_pairs_this_turn[pair_key] = true
@@ -587,13 +615,23 @@ static func _execute_raid_if_successful(
 	var pact_defense_bonus := compute_pact_defense_bonus(victim, state)
 	var fort_bonus: float = DEFENSE_TIER_BONUS[clampi(victim.defense_tier, 0, 3)]
 
+	var eff_victim_pop: float = float(victim.population)
+	if victim.walled_union_id != "":
+		for nid in HexMath.get_neighbor_ids(c_victim.q, c_victim.r, state.cells):
+			var ncell: EvoTypes.HexCell = state.cells[nid]
+			for pid in ncell.deme_ids:
+				if pid != victim.id and state.demes.has(pid):
+					var partner: EvoTypes.Deme = state.demes[pid]
+					if partner.walled_union_id == victim.walled_union_id and int(state.active_pacts.get(EvoTypes.make_pair_key(victim.id, partner.id), 0)) >= 0:
+						eff_victim_pop += 0.40 * float(partner.population)
+
 	var raider_score := (
 		float(raider.population)
 		* (0.8 + 0.5 * vec_r.extraction_efficiency + 0.4 * vec_r.spatial_mobility + warrior_r)
 		* (0.25 + p_r_disp + 0.5 * p_r_over)
 	)
 	var defense_score := (
-		float(victim.population)
+		eff_victim_pop
 		* (0.85 + 0.65 * vec_v.social_cohesion + pact_defense_bonus + warrior_v + fort_bonus)
 		* (0.5 + p_v_disp + 0.5 * p_v_coop)
 	)
@@ -601,7 +639,7 @@ static func _execute_raid_if_successful(
 	if raider_score <= defense_score * 0.92:
 		return false
 
-	if victim.defense_tier < 2 and victim.energy_reserves >= 55.0 and (p_v_exch >= 0.28 or (p_v_coop + p_v_exch >= 0.65 and p_v_disp < 0.10)):
+	if victim.defense_tier <= 2 and victim.energy_reserves >= 35.0 and (p_v_exch >= 0.18 or (victim.cultural_trait_ids.has("cul-interdeme-barter") and (p_v_coop + p_v_exch) >= 0.10) or ((victim.population >= 55 or victim.defense_tier >= 1) and (p_v_coop + p_v_exch) >= 0.34 and p_v_disp < 0.20)):
 		var tribute := snappedf(clampf(victim.energy_reserves * 0.18, 10.0, 28.0), 0.1)
 		victim.energy_reserves = maxf(0.0, snappedf(victim.energy_reserves - tribute, 0.01))
 		raider.energy_reserves = minf(220.0, snappedf(raider.energy_reserves + tribute, 0.01))
@@ -655,18 +693,19 @@ static func _execute_raid_if_successful(
 	raider.energy_reserves = minf(220.0, snappedf(raider.energy_reserves + from_reserves, 0.01))
 
 	var r_loss := maxi(1, int(round(float(raider.population) * 0.025)))
-	var v_loss := maxi(1, int(round(float(victim.population) * 0.04 * cas_scale)))
+	var v_loss := maxi(1, mini(int(round(float(raider.population) * 0.14)), int(round(float(victim.population) * 0.04 * cas_scale))))
 	raider.population = maxi(10, raider.population - r_loss)
 	victim.population = maxi(8, victim.population - v_loss)
 
 	for rcid in HexMath.get_neighbor_ids(c_victim.q, c_victim.r, state.cells):
-		var r_cell: EvoTypes.HexCell = state.cells[rcid]
-		if r_cell.owner_deme_id == victim.id:
-			var r_plunder := snappedf(minf(r_cell.current_resources, 18.0), 0.01)
-			r_cell.current_resources = maxf(0.0, snappedf(r_cell.current_resources - r_plunder, 0.01))
-			r_cell.owner_deme_id = ""
-			r_cell.land_use = "wild"
-			r_cell.has_ruins = true
+		var ncell: EvoTypes.HexCell = state.cells[rcid]
+		if ncell.owner_deme_id == victim.id:
+			var r_plunder: float = snappedf(minf(ncell.current_resources * 0.20 * loot_scale, 18.0 * loot_scale), 0.01)
+			ncell.current_resources = maxf(0.0, snappedf(ncell.current_resources - r_plunder, 0.01))
+			if victim.defense_tier == 0 or (victim.defense_tier == 1 and raider_score >= defense_score * 1.35):
+				ncell.owner_deme_id = ""
+				ncell.land_use = "wild"
+				ncell.has_ruins = true
 			raider.energy_reserves = minf(220.0, snappedf(raider.energy_reserves + r_plunder, 0.01))
 			loot = snappedf(loot + r_plunder, 0.01)
 			break
@@ -784,7 +823,7 @@ static func enforce_rural_hinterland_quotas(state: EvoTypes.WorldState) -> void:
 			continue
 		var dcell: EvoTypes.HexCell = state.cells[deme.hex_id]
 		var tier := deme.get_village_tier()
-		var max_rural: int = 0 if tier < 2 else (1 if tier == 2 else (2 if tier == 3 else 4))
+		var max_rural: int = get_max_rural_quota(tier)
 		if dcell.biome in ["ocean", "high_mountain"] or dcell.altitude > 0.85:
 			max_rural = 0
 
@@ -817,7 +856,7 @@ static func _update_and_harvest_rural_hinterlands(
 			continue
 		var dcell: EvoTypes.HexCell = state.cells[deme.hex_id]
 		var tier := deme.get_village_tier()
-		var max_rural: int = 0 if tier < 2 else (1 if tier == 2 else (2 if tier == 3 else 4))
+		var max_rural: int = get_max_rural_quota(tier)
 		if dcell.biome in ["ocean", "high_mountain"] or dcell.altitude > 0.85:
 			max_rural = 0
 
@@ -1147,8 +1186,10 @@ static func run_resource_and_symbiosis_phase(
 		if p_disp_1 < 0.25 and p_disp_2 < 0.25:
 			continue
 		if p_disp_1 >= 0.25 and p_disp_2 >= 0.25:
-			d1.population = maxi(10, int(floor(float(d1.population) * 0.88)))
-			d2.population = maxi(10, int(floor(float(d2.population) * 0.88)))
+			var loss_1: float = clampf(0.12 * clampf(float(d2.population) / maxf(15.0, float(d1.population)), 0.20, 1.50) * DEFENSE_ATTENUATION_SCALE[clampi(d1.defense_tier, 0, 3)], 0.02, 0.18)
+			var loss_2: float = clampf(0.12 * clampf(float(d1.population) / maxf(15.0, float(d2.population)), 0.20, 1.50) * DEFENSE_ATTENUATION_SCALE[clampi(d2.defense_tier, 0, 3)], 0.02, 0.18)
+			d1.population = maxi(10, int(floor(float(d1.population) * (1.0 - loss_1))))
+			d2.population = maxi(10, int(floor(float(d2.population) * (1.0 - loss_2))))
 			hawk_penalty_by_deme[d1.id] = 1.25
 			hawk_penalty_by_deme[d2.id] = 1.25
 			var flow := EvoTypes.HexEdgeFlow.new()
@@ -1166,9 +1207,11 @@ static func run_resource_and_symbiosis_phase(
 			var c_dove := c2 if p_disp_1 >= 0.25 else c1
 			var hawk_social := (effective_vec_by_deme[hawk.id] as EvoTypes.BiophysicalVector).social_cohesion
 			var dove_social := (effective_vec_by_deme[dove.id] as EvoTypes.BiophysicalVector).social_cohesion
-			var capture_mult := 0.22 * (1.0 + maxf(0.0, hawk_social - dove_social))
+			var pop_ratio: float = clampf(float(hawk.population) / maxf(15.0, float(dove.population)), 0.10, 1.40)
+			var dove_def_scale: float = DEFENSE_ATTENUATION_SCALE[clampi(dove.defense_tier, 0, 3)]
+			var capture_mult: float = 0.22 * (1.0 + maxf(0.0, hawk_social - dove_social)) * pop_ratio * dove_def_scale
 			var dove_ext := float(extracted_energy_by_deme.get(dove.id, 0.0))
-			var captured := snappedf(dove_ext * capture_mult, 0.0001)
+			var captured: float = snappedf(minf(dove_ext * capture_mult, float(hawk.population) * 0.45), 0.0001)
 			extracted_energy_by_deme[hawk.id] = snappedf(float(extracted_energy_by_deme.get(hawk.id, 0.0)) + captured, 0.0001)
 			extracted_energy_by_deme[dove.id] = maxf(0.0, snappedf(dove_ext - captured, 0.0001))
 			var flow := EvoTypes.HexEdgeFlow.new()

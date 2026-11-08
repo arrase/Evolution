@@ -6,6 +6,8 @@ Executes the biophysical, ecological, geopolitical, and demographic simulation r
 ## Interface
 - `[ecology_interaction.gd:EvoEcologyInteraction]` — Static ecological and geopolitical interaction phase processor.
 - `[ecology_interaction.gd:DEFENSE_TIER_BONUS]` — Constant array `[0.0, 0.45, 0.95, 1.55]` defining combat defense bonuses for fortification tiers `0..3`.
+- `[ecology_interaction.gd:DEFENSE_ATTENUATION_SCALE]` — Constant array `[1.0, 0.75, 0.50, 0.30]` attenuating dispute, betrayal, and siege impact across fortification tiers `0..3`.
+- `[ecology_interaction.gd:get_max_rural_quota]` — Returns the maximum rural hinterland hex quota (`0`, `1`, `2`, `4`) for settlement tiers `1..4`.
 - `[ecology_interaction.gd:compute_effective_vector]` — Computes a deme's clamped `EvoTypes.BiophysicalVector` from its biological traits, cultural traits, and probability-weighted decisions.
 - `[ecology_interaction.gd:get_archetype_prob]` — Sums decision probabilities matching a target `archetype` string.
 - `[ecology_interaction.gd:compute_pact_defense_bonus]` — Computes allied defensive reinforcement bonus (clamped to `[0.0, 1.10]`) from active pacts and `walled_union_id` partners in adjacent hexes.
@@ -22,7 +24,7 @@ Executes the biophysical, ecological, geopolitical, and demographic simulation r
 - `[ecology_interaction.gd:_run_defense_fortification_phase]` — `deme.defense_tier` is bounded to `0..3` and requires minimum population (`38`, `65`, `100`), deme energy reserves, and local cell resources to upgrade.
 - `[demography_migration.gd:is_hex_passable_for_deme]` — Ocean cells and cells with `altitude > 0.85` cannot be colonized or traversed, and every cell maintains `deme_ids.size() <= 1`.
 - `[demography_migration.gd:run_demography_and_migration_phase]` — Per-turn demographic `growth_rate` is clamped to `[-0.45, 0.35]`, `deme.salubrity` is clamped to `[0.05, 1.0]` (triggering epidemics when `< 0.35` and `population >= 130`), and `deme.innovation_counter` is capped at `2.0`.
-- `[demography_migration.gd:run_demography_and_migration_phase]` — Demes dropping below `population < 10` go extinct and leave `cell.has_ruins = true`; colonist fission requires `migrants >= 10`, leaves the parent deme with at least `10` individuals, and targets only empty passable hexes (`ncell.deme_ids.is_empty()`).
+- `[demography_migration.gd:run_demography_and_migration_phase]` — Demes dropping below `population < 10` go extinct and leave `cell.has_ruins = true`; colonist fission requires `migrants >= 10`, leaves the parent deme with at least `10` individuals (`min_keep_pop`), and targets only passable land cells that are empty and have no active rural ownership (`ncell.deme_ids.is_empty() and ncell.owner_deme_id == ""`); active Walled Unions (`walled_union_id`) persist when members advance to higher urban categories (`Tier II–IV`) without mutual absorption.
 - `[demography_migration.gd:run_demography_and_migration_phase]` — Cultural loss bottlenecks (`lost_half` or `pre_fission_pop < 50`) are checked against `pre_fission_pop_by_deme` so healthy parent demes do not lose cultural traits solely from colonist budding.
 
 ## Side Effects

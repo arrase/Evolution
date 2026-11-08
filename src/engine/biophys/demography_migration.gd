@@ -101,40 +101,48 @@ static func _compute_combat_forces(
 	var eff_def_pop := float(defender.population)
 	var union_fort_bonus := 0.0
 
-	var flank_bonus := 0.0
+	var def_rural_bonus := 0.0
+	var flanking_support_pop := 0.0
+	var coalition_support_pop := 0.0
 	if state.cells.has(defender.hex_id):
 		var dcell: EvoTypes.HexCell = state.cells[defender.hex_id]
 		var nids := HexMath.get_neighbor_ids(dcell.q, dcell.r, state.cells)
-		for oid in dcell.deme_ids:
-			if oid != attacker.id and state.demes.has(oid):
-				var ally_att: EvoTypes.Deme = state.demes[oid]
-				if ally_att.lineage_id == attacker.lineage_id and ally_att.population >= 35:
-					flank_bonus = minf(0.85, flank_bonus + 0.28)
+		var owned_rural_count := 0
 		for nid in nids:
 			var ncell: EvoTypes.HexCell = state.cells[nid]
+			if ncell.owner_deme_id == defender.id and (ncell.land_use == "crops" or ncell.land_use == "pasture"):
+				owned_rural_count += 1
 			for oid in ncell.deme_ids:
-				if oid != attacker.id and state.demes.has(oid):
-					var ally_att: EvoTypes.Deme = state.demes[oid]
-					if ally_att.lineage_id == attacker.lineage_id and ally_att.population >= 35:
-						flank_bonus = minf(0.85, flank_bonus + 0.28)
+				if oid != attacker.id and oid != defender.id and state.demes.has(oid):
+					var od: EvoTypes.Deme = state.demes[oid]
+					if od.population > 0 and (od.lineage_id == attacker.lineage_id or EvoTypes.is_pact_active(state, attacker.id, od.id)):
+						flanking_support_pop += float(od.population)
+						coalition_support_pop += 0.32 * float(od.population)
+		def_rural_bonus = minf(0.24, float(owned_rural_count) * 0.08)
 		if defender.walled_union_id != "":
 			for nid in nids:
 				var ncell: EvoTypes.HexCell = state.cells[nid]
 				for p_id in ncell.deme_ids:
 					if p_id != defender.id and state.demes.has(p_id):
-						var partner: EvoTypes.Deme = state.demes[p_id]
-						if partner.population > 0 and partner.walled_union_id == defender.walled_union_id:
-							eff_def_pop += 0.55 * float(partner.population)
-							union_fort_bonus += 0.25 * EvoEcologyInteraction.DEFENSE_TIER_BONUS[clampi(partner.defense_tier, 0, 3)]
+						var u_partner: EvoTypes.Deme = state.demes[p_id]
+						if (
+							u_partner.population > 0
+							and u_partner.walled_union_id == defender.walled_union_id
+							and int(state.active_pacts.get(EvoTypes.make_pair_key(defender.id, u_partner.id), 0)) >= 0
+						):
+							eff_def_pop += 0.55 * float(u_partner.population)
+							union_fort_bonus += 0.25 * EvoEcologyInteraction.DEFENSE_TIER_BONUS[clampi(u_partner.defense_tier, 0, 3)]
 
-	var att_force := (
-		float(warband_pop)
-		* (1.0 + 0.55 * maxf(0.0, att_vec.extraction_efficiency) + att_warrior + att_r_strat + flank_bonus)
+	var eff_warband_pop: float = float(warband_pop) + minf(float(warband_pop) * 1.20, coalition_support_pop)
+	var flank_bonus: float = 1.0 + clampf((flanking_support_pop / maxf(25.0, float(defender.population))) * 0.38, 0.0, 0.50)
+	var att_mult := (
+		(1.0 + 0.55 * maxf(0.0, att_vec.extraction_efficiency) + att_warrior + att_r_strat)
 		* (0.75 + p_att_disp)
 	)
+	var att_force: float = eff_warband_pop * att_mult * flank_bonus
 	var def_force := (
 		eff_def_pop
-		* (1.0 + 0.60 * maxf(0.0, def_vec.social_cohesion) + pact_bonus + def_warrior + fort_bonus + union_fort_bonus)
+		* (1.0 + 0.60 * maxf(0.0, def_vec.social_cohesion) + pact_bonus + def_warrior + fort_bonus + union_fort_bonus + def_rural_bonus)
 	)
 	return Vector2(att_force, def_force)
 
@@ -214,7 +222,7 @@ static func _execute_territorial_invasion(
 	var att_force := forces.x
 	var def_force := forces.y
 
-	if att_force >= def_force:
+	if att_force >= def_force * 0.92:
 		var captured_tier := maxi(0, defender.defense_tier - 1)
 		var att_loss := maxi(2, int(round(float(warband_pop) * clampf(0.22 * (def_force / maxf(1.0, att_force)), 0.08, 0.35))))
 		var def_loss := maxi(4, int(round(float(defender.population) * clampf(0.35 * (att_force / maxf(1.0, def_force)), 0.20, 0.55))))
@@ -293,7 +301,7 @@ static func _execute_territorial_invasion(
 		warband.last_justification = attacker.last_justification
 
 		var wb_tier := warband.get_village_tier()
-		var wb_max_rural: int = 0 if wb_tier < 2 else (1 if wb_tier == 2 else (2 if wb_tier == 3 else 4))
+		var wb_max_rural: int = EvoEcologyInteraction.get_max_rural_quota(wb_tier)
 		var wb_rural: Array[EvoTypes.HexCell] = []
 		for rcid in HexMath.get_neighbor_ids(target_cell.q, target_cell.r, state.cells):
 			var r_cell: EvoTypes.HexCell = state.cells[rcid]
@@ -351,25 +359,40 @@ static func _execute_territorial_invasion(
 		return true
 	else:
 		var def_tier := clampi(defender.defense_tier, 0, 3)
-		var loss_rate := 0.28 + 0.06 * float(def_tier)
-		var att_loss := maxi(4, int(round(float(warband_pop) * loss_rate)))
-		var def_loss := maxi(2, int(round(float(defender.population) * (0.16 - 0.02 * float(def_tier)))))
-		var survivors := maxi(0, warband_pop - att_loss)
-		attacker.population = maxi(10, attacker.population + survivors)
-		attacker.energy_reserves = maxf(0.0, snappedf(attacker.energy_reserves - 15.0, 0.01))
-		defender.population = maxi(5, defender.population - def_loss)
+		var force_ratio: float = clampf(att_force / maxf(1.0, def_force), 0.05, 1.0)
+		var def_cas_scale: float = EvoEcologyInteraction.DEFENSE_ATTENUATION_SCALE[def_tier]
+		var scaled_def_loss: int = int(round(float(defender.population) * 0.11 * pow(force_ratio, 1.4) * def_cas_scale))
+		var def_losses: int = clampi(scaled_def_loss, 1, maxi(1, int(round(float(warband_pop) * 0.35 * def_cas_scale))))
+		defender.population = maxi(10, defender.population - def_losses)
 		pre_fission_pop_by_deme[defender.id] = defender.population
 
-		for rcid in HexMath.get_neighbor_ids(target_cell.q, target_cell.r, state.cells):
-			var r_cell: EvoTypes.HexCell = state.cells[rcid]
-			if r_cell.owner_deme_id == defender.id:
-				var r_plunder := snappedf(minf(r_cell.current_resources, 18.0), 0.01)
-				r_cell.current_resources = maxf(0.0, snappedf(r_cell.current_resources - r_plunder, 0.01))
-				r_cell.owner_deme_id = ""
-				r_cell.land_use = "wild"
-				r_cell.has_ruins = true
-				attacker.energy_reserves = minf(220.0, snappedf(attacker.energy_reserves + r_plunder, 0.01))
-				break
+		var att_losses: int = maxi(2, int(round(float(warband_pop) * (0.45 + 0.10 * float(def_tier)))))
+		var surviving_attackers: int = maxi(0, warband_pop - att_losses)
+		var att_cell: EvoTypes.HexCell = state.cells[attacker.hex_id] if state.cells.has(attacker.hex_id) else origin_cell
+		if attacker.population > 0 and (
+			attacker.hex_id == target_cell.id
+			or (att_cell != null and HexMath.hex_distance(att_cell.q, att_cell.r, target_cell.q, target_cell.r) <= 1)
+		):
+			attacker.population = maxi(10, attacker.population + surviving_attackers)
+		attacker.energy_reserves = maxf(0.0, snappedf(attacker.energy_reserves - 15.0, 0.01))
+
+		var r_plunder: float = 0.0
+		var pillaged_rural := false
+		if force_ratio >= 0.75 and def_tier <= 1:
+			for rcid in HexMath.get_neighbor_ids(target_cell.q, target_cell.r, state.cells):
+				var ncell: EvoTypes.HexCell = state.cells[rcid]
+				if ncell.owner_deme_id == defender.id and (ncell.land_use == "crops" or ncell.land_use == "pasture"):
+					ncell.owner_deme_id = ""
+					ncell.land_use = "wild"
+					ncell.has_ruins = true
+					r_plunder = snappedf(minf(defender.energy_reserves * 0.18, 22.0), 0.01)
+					pillaged_rural = true
+					break
+			if not pillaged_rural and def_tier == 0:
+				r_plunder = snappedf(minf(defender.energy_reserves * 0.12, 14.0), 0.01)
+		if r_plunder > 0.0:
+			defender.energy_reserves = maxf(0.0, snappedf(defender.energy_reserves - r_plunder, 0.01))
+			attacker.energy_reserves = minf(220.0, snappedf(attacker.energy_reserves + r_plunder, 0.01))
 
 		for pk in state.active_pacts.keys():
 			var sep := "__" if str(pk).contains("__") else "|"
@@ -394,14 +417,13 @@ static func _execute_territorial_invasion(
 
 		if def_tier >= 1:
 			var is_isolated_defender := defender.merged_count == 0 and EvoEcologyInteraction.compute_pact_defense_bonus(defender, state) <= 0.0
-			if att_force >= def_force * 0.80:
-				if defender.energy_reserves >= 10.0 and not is_isolated_defender:
-					defender.energy_reserves = maxf(0.0, snappedf(defender.energy_reserves - 10.0, 0.01))
-				else:
-					defender.energy_reserves = maxf(0.0, snappedf(defender.energy_reserves - 10.0, 0.01))
-					defender.defense_tier = maxi(0, defender.defense_tier - 1)
-			elif is_isolated_defender and att_force >= def_force * 0.45:
-				defender.energy_reserves = maxf(0.0, snappedf(defender.energy_reserves - 10.0, 0.01))
+			if force_ratio >= 0.75:
+				defender.energy_reserves = maxf(0.0, snappedf(defender.energy_reserves - 6.0, 0.01))
+			if (
+				att_force >= def_force * 0.82
+				and float(warband_pop) >= float(defender.population) * 0.45
+				and (defender.energy_reserves < 10.0 or is_isolated_defender)
+			):
 				defender.defense_tier = maxi(0, defender.defense_tier - 1)
 
 			var siege_flow := EvoTypes.HexEdgeFlow.new()
@@ -418,7 +440,7 @@ static func _execute_territorial_invasion(
 				"defender": defender.name,
 				"attacker": attacker.name,
 				"hex": target_cell.id,
-				"casualties": str(att_loss + def_loss)
+				"casualties": str(att_losses + def_losses)
 			}
 			var siege_entry := EvoTypes.ChronicleEntry.new()
 			siege_entry.id = "chronicle-siege-%d-%s-%s" % [state.generation, defender.id, attacker.id]
@@ -435,7 +457,7 @@ static func _execute_territorial_invasion(
 			"defender": defender.name,
 			"attacker": attacker.name,
 			"hex": target_cell.id,
-			"casualties": str(att_loss + def_loss)
+			"casualties": str(att_losses + def_losses)
 		}
 		var entry := EvoTypes.ChronicleEntry.new()
 		entry.id = "chronicle-war-repel-%d-%s-%s" % [state.generation, defender.id, attacker.id]
@@ -658,8 +680,8 @@ static func run_demography_and_migration_phase(
 					var forces := _compute_combat_forces(deme, warband_pop, other, state)
 					if (
 						forces.x >= forces.y * 0.82
-						or (adequacy < 0.75 and forces.x >= forces.y * 0.68)
-						or (deme.cultural_trait_ids.has("cul-warrior-expansion") and forces.x >= forces.y * 0.45)
+						or (other.defense_tier <= 1 and forces.x >= forces.y * 0.55)
+						or (deme.cultural_trait_ids.has("cul-warrior-expansion") and other.defense_tier <= 1 and forces.x >= forces.y * 0.50)
 					):
 						var ratio := forces.x / maxf(1.0, forces.y)
 						if ratio > best_ratio:
@@ -708,17 +730,33 @@ static func run_demography_and_migration_phase(
 		if has_intentional_migration and deme.population >= min_pop_for_forced_fission and migrants < 10:
 			migrants = 10
 
-		if not has_intentional_migration or migrants < 10 or (deme.population - migrants) < 10:
+		if not has_intentional_migration:
 			continue
 
-		var cur_rival_dist := _min_distance_to_rival(current_cell, deme, state, rival_dist_cache) if is_martial_expander else 999
+		var cur_rival_dist: int = _min_distance_to_rival(current_cell, deme, state, rival_dist_cache)
+		var min_keep_pop: int = 10 if (is_emergency or current_cell.biome == "coastal_shallows") else 15
+		if not is_emergency and current_cell.biome != "coastal_shallows":
+			var c_tier: int = deme.get_village_tier()
+			if c_tier == 4:
+				min_keep_pop = 280
+			elif c_tier == 3:
+				min_keep_pop = 170
+			elif c_tier == 2:
+				min_keep_pop = 90 if deme.defense_tier == 1 else 120
+			if not is_martial_expander and cur_rival_dist <= 2 and deme.defense_tier < 2:
+				min_keep_pop = maxi(min_keep_pop, 115)
+
+		migrants = mini(migrants, deme.population - min_keep_pop)
+		if migrants < 10 or (deme.population - migrants) < min_keep_pop:
+			continue
+
 		var is_pure_martial_march := (
 			martial_trigger
 			and deme.last_dominant_decision_id != "dec-selective-migration"
 			and current_cell.biome != "coastal_shallows"
 			and not is_emergency
 		)
-		if is_pure_martial_march and _has_vanguard_closer_to_rival(deme, cur_rival_dist, state, rival_dist_cache):
+		if is_pure_martial_march and cur_rival_dist > 2 and _has_vanguard_closer_to_rival(deme, cur_rival_dist, state, rival_dist_cache):
 			continue
 		var v_eff_mobility := v_eff.spatial_mobility
 		var mig_mobility := clampf(v_eff_mobility + p_migrate * 0.25, -1.5, 1.5)
@@ -726,14 +764,17 @@ static func run_demography_and_migration_phase(
 			mig_mobility = maxf(mig_mobility, 0.35)
 		if is_martial_expander:
 			mig_mobility = maxf(mig_mobility, 0.35)
+		var owned_rural: int = 0
 		var candidates: Array[EvoTypes.HexCell] = []
 		for nid in HexMath.get_neighbor_ids(current_cell.q, current_cell.r, state.cells):
 			var ncell: EvoTypes.HexCell = state.cells[nid]
+			if ncell.owner_deme_id == deme.id and (ncell.land_use == "crops" or ncell.land_use == "pasture"):
+				owned_rural += 1
 			if not is_hex_passable_for_deme(ncell, mig_mobility):
 				continue
 			if not ncell.deme_ids.is_empty():
 				continue
-			if ncell.owner_deme_id != "" and ncell.owner_deme_id != deme.id and not is_martial_expander:
+			if ncell.owner_deme_id != "" and not (is_martial_expander and ncell.owner_deme_id == deme.id):
 				continue
 			var n_dist := _min_distance_to_rival(ncell, deme, state, rival_dist_cache) if is_martial_expander else 999
 			if is_pure_martial_march and (n_dist > cur_rival_dist or (cur_rival_dist > 1 and n_dist == cur_rival_dist)):
@@ -743,15 +784,33 @@ static func run_demography_and_migration_phase(
 		if candidates.is_empty():
 			continue
 
+		var max_rural_q: int = EvoEcologyInteraction.get_max_rural_quota(deme.get_village_tier())
+		var reserve_farms: int = maxi(0, mini(2, max_rural_q - owned_rural))
+		if (
+			not is_martial_expander
+			and not is_emergency
+			and current_cell.biome != "coastal_shallows"
+			and deme.population <= int(current_cell.carrying_capacity * 0.70)
+			and candidates.size() <= reserve_farms
+		):
+			continue
+
 		var target_cell: EvoTypes.HexCell = candidates[0]
 		if candidates.size() > 1:
 			var best_score := -INF
 			for cand in candidates:
 				var sc := cand.current_resources
-				if is_martial_expander and cur_rival_dist < 999:
-					var dc := _min_distance_to_rival(cand, deme, state, rival_dist_cache)
-					if dc < cur_rival_dist or (cur_rival_dist == 1 and dc == 1):
+				var dc := _min_distance_to_rival(cand, deme, state, rival_dist_cache)
+				if is_martial_expander:
+					if cur_rival_dist < 999 and (dc < cur_rival_dist or (cur_rival_dist == 1 and dc == 1)):
 						sc += 45.0 + float(maxi(0, 10 - dc)) * 8.0
+				else:
+					if dc <= 1:
+						sc -= 260.0
+					elif dc == 2:
+						sc -= 90.0
+					else:
+						sc += float(mini(dc, 5)) * 35.0
 				if sc > best_score:
 					best_score = sc
 					target_cell = cand
@@ -965,6 +1024,8 @@ static func run_demography_and_migration_phase(
 			continue
 		if HexMath.hex_distance(c1.q, c1.r, c2.q, c2.r) != 1:
 			continue
+		if d1.population < 25 or d2.population < 25 or newly_created_demes.has(d1.id) or newly_created_demes.has(d2.id):
+			continue
 
 		var pact_val := int(state.active_pacts.get(pk, 0))
 		var qualifies := false
@@ -992,23 +1053,42 @@ static func run_demography_and_migration_phase(
 				if p1_coop >= 0.30 and p2_coop >= 0.30:
 					qualifies = true
 
-		if not qualifies and d1.lineage_id == d2.lineage_id and pact_val >= 0 and compute_deme_divergence(d1, d2) <= 0.25:
+		var both_besieging_warriors := (
+			d1.lineage_id == d2.lineage_id
+			and d1.cultural_trait_ids.has("cul-warrior-expansion")
+			and _min_distance_to_rival(c1, d1, state, rival_dist_cache) == 1
+			and _min_distance_to_rival(c2, d2, state, rival_dist_cache) == 1
+		)
+		if not qualifies and not both_besieging_warriors and d1.lineage_id == d2.lineage_id and pact_val >= 0 and compute_deme_divergence(d1, d2) <= 0.25:
 			var d1_has_empty := false
 			for nid in HexMath.get_neighbor_ids(c1.q, c1.r, state.cells):
 				var ncell: EvoTypes.HexCell = state.cells[nid]
-				if ncell.biome != "ocean" and ncell.altitude <= 0.85 and ncell.deme_ids.is_empty():
+				if ncell.biome != "ocean" and ncell.altitude <= 0.85 and ncell.deme_ids.is_empty() and ncell.owner_deme_id == "":
 					d1_has_empty = true
 					break
 			var d2_has_empty := false
 			for nid in HexMath.get_neighbor_ids(c2.q, c2.r, state.cells):
 				var ncell: EvoTypes.HexCell = state.cells[nid]
-				if ncell.biome != "ocean" and ncell.altitude <= 0.85 and ncell.deme_ids.is_empty():
+				if ncell.biome != "ocean" and ncell.altitude <= 0.85 and ncell.deme_ids.is_empty() and ncell.owner_deme_id == "":
 					d2_has_empty = true
 					break
 			if not d1_has_empty or not d2_has_empty:
 				qualifies = true
 
 		if not qualifies:
+			continue
+
+		if d1.walled_union_id != "" and d1.walled_union_id == d2.walled_union_id:
+			var u_flow := EvoTypes.HexEdgeFlow.new()
+			u_flow.from_hex_id = c1.id
+			u_flow.to_hex_id = c2.id
+			u_flow.flow_type = "merge"
+			u_flow.intensity = 0.85
+			u_flow.from_deme_id = d1.id
+			u_flow.to_deme_id = d2.id
+			state.active_flows.append(u_flow)
+			had_lineage_contact[d1.id] = true
+			had_lineage_contact[d2.id] = true
 			continue
 
 		var t1 := d1.get_village_tier()
@@ -1018,6 +1098,11 @@ static func run_demography_and_migration_phase(
 			if float(d1.population + d2.population) > maxf(c1.carrying_capacity_max, c2.carrying_capacity_max) * 1.45:
 				continue
 			var d1_hosts := t1 > t2
+			if d1.lineage_id == d2.lineage_id and d1.cultural_trait_ids.has("cul-warrior-expansion"):
+				var dist_1 := _min_distance_to_rival(c1, d1, state, rival_dist_cache)
+				var dist_2 := _min_distance_to_rival(c2, d2, state, rival_dist_cache)
+				if dist_1 != dist_2:
+					d1_hosts = dist_1 < dist_2
 			var host_deme := d1 if d1_hosts else d2
 			var joiner_deme := d2 if d1_hosts else d1
 			var host_cell := c1 if d1_hosts else c2
@@ -1045,7 +1130,7 @@ static func run_demography_and_migration_phase(
 						r_cell.owner_deme_id = ""
 						r_cell.land_use = "wild"
 			var host_tier := host_deme.get_village_tier()
-			var host_max_rural: int = 0 if host_tier < 2 else (1 if host_tier == 2 else (2 if host_tier == 3 else 4))
+			var host_max_rural: int = EvoEcologyInteraction.get_max_rural_quota(host_tier)
 			var host_rural: Array[EvoTypes.HexCell] = []
 			for rcid in HexMath.get_neighbor_ids(host_cell.q, host_cell.r, state.cells):
 				var r_cell: EvoTypes.HexCell = state.cells[rcid]
