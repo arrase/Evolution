@@ -301,7 +301,7 @@ static func build_top_right_clock(hud: Control) -> void:
 	clock_frame.offset_left = -356
 	clock_frame.offset_right = -10
 	clock_frame.offset_top = 10
-	clock_frame.offset_bottom = 126
+	clock_frame.offset_bottom = 150
 	clock_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
 	hud.add_child(clock_frame)
 
@@ -416,6 +416,40 @@ static func build_top_right_clock(hud: Control) -> void:
 	hud._pressure_bar.custom_minimum_size = Vector2(0, 6)
 	EvoUiStyle.style_progress_bar(hud._pressure_bar, Color("#22c55e"))
 	mana_vbox.add_child(hud._pressure_bar)
+
+	# Row 4: Compact 4-Pip Turn Phase Bar
+	var phase_row := HBoxContainer.new()
+	phase_row.add_theme_constant_override("separation", 3)
+	dial_vbox.add_child(phase_row)
+
+	hud._phase_pip_panels.clear()
+	hud._phase_pip_labels.clear()
+	hud._phase_pip_active_styles.clear()
+	var active_colors := [
+		Color("#10b981"),
+		Color("#38bdf8"),
+		Color("#ef4444"),
+		Color("#f59e0b")
+	]
+	for col in active_colors:
+		hud._phase_pip_active_styles.append(EvoUiStyle.make_parchment_card((col as Color).darkened(0.55), EvoUiStyle.COLOR_GOLD_BRIGHT, 2))
+	hud._phase_pip_inactive_style = EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_PARCHMENT_ALT, EvoUiStyle.COLOR_GOLD_BEVEL, 2)
+	for p_idx in range(4):
+		var pip_panel := PanelContainer.new()
+		pip_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		pip_panel.custom_minimum_size = Vector2(0, 18)
+		pip_panel.add_theme_stylebox_override("panel", hud._phase_pip_inactive_style)
+		phase_row.add_child(pip_panel)
+
+		var pip_lbl := Label.new()
+		pip_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		pip_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		pip_lbl.clip_text = true
+		pip_lbl.add_theme_font_size_override("font_size", 9)
+		pip_panel.add_child(pip_lbl)
+
+		hud._phase_pip_panels.append(pip_panel)
+		hud._phase_pip_labels.append(pip_lbl)
 
 
 static func build_settings_popup(hud: Control) -> void:
@@ -767,6 +801,32 @@ static func update_static_labels(hud: Control) -> void:
 	if hud._villages_title_lbl != null:
 		hud._villages_title_lbl.text = EvoUiStyle.tr_text(hud._lang, "🏘️ Aldeas Vivas del Valle", "🏘️ Living Valley Villages")
 
+	var phase_texts_es := ["1. Clima", "2. Mente", "3. Choque", "4. Linaje"]
+	var phase_texts_en := ["1. Env", "2. Mind", "3. Clash", "4. Lineage"]
+	for i in range(mini(4, hud._phase_pip_labels.size())):
+		hud._phase_pip_labels[i].text = phase_texts_en[i] if hud._lang == "en" else phase_texts_es[i]
+	update_phase_bar_visuals(hud)
+
+
+static func update_phase_bar_visuals(hud: Control) -> void:
+	var active_phase: int = hud._active_micro_phase
+	if hud._phase_pip_active_styles.size() < 4:
+		hud._phase_pip_active_styles.clear()
+		for col in [Color("#10b981"), Color("#38bdf8"), Color("#ef4444"), Color("#f59e0b")]:
+			hud._phase_pip_active_styles.append(EvoUiStyle.make_parchment_card((col as Color).darkened(0.55), EvoUiStyle.COLOR_GOLD_BRIGHT, 2))
+	if hud._phase_pip_inactive_style == null:
+		hud._phase_pip_inactive_style = EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_PARCHMENT_ALT, EvoUiStyle.COLOR_GOLD_BEVEL, 2)
+	for i in range(mini(4, hud._phase_pip_panels.size())):
+		var panel: PanelContainer = hud._phase_pip_panels[i]
+		var lbl: Label = hud._phase_pip_labels[i]
+		var is_active: bool = (active_phase == i + 1)
+		if is_active:
+			panel.add_theme_stylebox_override("panel", hud._phase_pip_active_styles[i])
+			lbl.add_theme_color_override("font_color", Color("#fef08a"))
+		else:
+			panel.add_theme_stylebox_override("panel", hud._phase_pip_inactive_style)
+			lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK if active_phase == 0 else EvoUiStyle.COLOR_SEPIA)
+
 
 static func update_top_bar_state(hud: Control) -> void:
 	if hud._world_state == null:
@@ -846,7 +906,7 @@ static func refresh_decision_model_selectors(hud: Control) -> void:
 	if hud._primary_model_opt == null or hud._secondary_model_opt == null:
 		return
 	var status := EvoDecisionModel.check_ollama_status(false)
-	var decision_models: Array = status["decision_models"] if status.has("decision_models") else []
+	var decision_models: Array = status["decision_models"]
 	var p_model := EvoUserSettings.primary_model
 	var s_model := EvoUserSettings.secondary_model
 

@@ -89,6 +89,11 @@ var _speed_btn: Button
 var _pressure_bar: ProgressBar
 var _pressure_label: Label
 var _settings_btn: Button
+var _active_micro_phase: int = 0
+var _phase_pip_panels: Array[PanelContainer] = []
+var _phase_pip_labels: Array[Label] = []
+var _phase_pip_active_styles: Array[StyleBoxFlat] = []
+var _phase_pip_inactive_style: StyleBoxFlat = null
 
 # Settings, Camera & Ollama Models Diagnostic Popup
 var _settings_popup: PanelContainer
@@ -438,6 +443,11 @@ func set_playing_state(is_playing: bool) -> void:
 	_update_static_labels()
 
 
+func set_active_micro_phase(phase: int) -> void:
+	_active_micro_phase = clampi(phase, 0, 4)
+	EvoHudTopBar.update_phase_bar_visuals(self)
+
+
 func set_language(lang: String) -> void:
 	_lang = lang
 	refresh_strategies(_world_state, _lang)
@@ -585,6 +595,9 @@ func _on_village_cycle_pressed(step: int) -> void:
 
 func _inject_trait_into_deme(deme_id: String, trait_id: String) -> void:
 	if _world_state != null:
+		EvoTurnEngine.flush_pending_micro_phases(_world_state, _active_micro_phase, _lang)
+		if _active_micro_phase in [1, 2, 3]:
+			set_active_micro_phase(0)
 		EvoCatalog.inject_trait_into_deme(_world_state, deme_id, trait_id, _lang)
 	inject_trait_requested.emit(deme_id, trait_id)
 	refresh(_world_state)
@@ -610,7 +623,7 @@ func _on_toggle_inspector_minimize() -> void:
 	_inspector_minimized = not _inspector_minimized
 	_inspector_body_vbox.visible = not _inspector_minimized
 	_inspector_minimize_btn.text = "▸" if _inspector_minimized else "▾"
-	_inspector_frame.offset_bottom = 228 if _inspector_minimized else 865
+	_inspector_frame.offset_bottom = 254 if _inspector_minimized else 865
 	if not _inspector_minimized:
 		_rebuild_active_inspector_sheet()
 
@@ -649,6 +662,9 @@ func _on_preset_selected(index: int) -> void:
 
 func _on_export_pressed() -> void:
 	if _world_state != null:
+		EvoTurnEngine.flush_pending_micro_phases(_world_state, _active_micro_phase, _lang)
+		if _active_micro_phase in [1, 2, 3]:
+			set_active_micro_phase(0)
 		var json_str := JSON.stringify(_world_state.to_dict(), "\t")
 		var f := FileAccess.open(DEFAULT_EXPORT_PATH, FileAccess.WRITE)
 		if f != null:
@@ -759,6 +775,7 @@ func _commit_context_window_text(raw_text: String) -> void:
 			EvoUserSettings.save_settings()
 			EvoOllamaClient.clear_cache()
 			if _world_state != null:
+				EvoDecisionModel.invalidate_state_caches(_world_state)
 				EvoDecisionModel.evaluate_all_demes(_world_state, _lang)
 			_update_top_bar_state()
 	if _context_window_input != null:
@@ -769,6 +786,7 @@ func _apply_decision_models_update() -> void:
 	EvoOllamaClient.clear_cache()
 	EvoDecisionModel.check_ollama_status(true)
 	if _world_state != null:
+		EvoDecisionModel.invalidate_state_caches(_world_state)
 		EvoDecisionModel.reassign_world_models(_world_state)
 		EvoDecisionModel.evaluate_all_demes(_world_state, _lang)
 	_update_static_labels()

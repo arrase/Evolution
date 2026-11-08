@@ -7,21 +7,19 @@ const COST_ADJUST_CAPACITY: int = 10
 const COST_ADJUST_SEA_LEVEL: int = 25
 
 
-static func advance_generation(state: EvoTypes.WorldState, lang: String = "es") -> Dictionary:
-	var prev_chronicle_count := state.chronicle.size()
-
-	EvoEnvPhase.run_environmental_phase(state, lang)
-	EvoDecisionModel.evaluate_all_demes(state, lang, false)
-	EvoBiophysPhase.run_biophysical_phase(state, lang)
-	EvoMilestonePhase.run_milestone_phase(state, lang)
-
+static func _collect_chronicle_summary(
+	state: EvoTypes.WorldState,
+	start_idx: int,
+	phase_num: int,
+	phase_id: String
+) -> Dictionary:
 	var new_entries: Array[EvoTypes.ChronicleEntry] = []
 	var has_milestone := false
 	var has_macro_outcome := false
 	var milestone_entry: EvoTypes.ChronicleEntry = null
 	var outcome_entry: EvoTypes.ChronicleEntry = null
 
-	for i in range(prev_chronicle_count, state.chronicle.size()):
+	for i in range(maxi(0, start_idx), state.chronicle.size()):
 		var entry := state.chronicle[i]
 		new_entries.append(entry)
 		if entry.event_type in ["baldwin_trait", "cultural_innovation", "allopatric_speciation"]:
@@ -31,9 +29,9 @@ static func advance_generation(state: EvoTypes.WorldState, lang: String = "es") 
 			has_macro_outcome = true
 			outcome_entry = entry
 
-	EvoDecisionModel.prefetch_for_state(state)
-
 	return {
+		"phase": phase_num,
+		"phase_id": phase_id,
 		"generation": state.generation,
 		"new_entries": new_entries,
 		"has_milestone": has_milestone,
@@ -41,6 +39,78 @@ static func advance_generation(state: EvoTypes.WorldState, lang: String = "es") 
 		"milestone_entry": milestone_entry,
 		"outcome_entry": outcome_entry
 	}
+
+
+static func step_phase_1_environment(state: EvoTypes.WorldState, lang: String = "es") -> Dictionary:
+	var start_idx := state.chronicle.size()
+	state.set_meta("_turn_start_chronicle_count", start_idx)
+	state.set_meta("_in_flight_micro_phase", 1)
+	EvoEnvPhase.run_environmental_phase(state, lang)
+	EvoDecisionModel.invalidate_state_caches(state)
+	EvoDecisionModel.prefetch_for_state(state, true)
+	return _collect_chronicle_summary(state, start_idx, 1, "environment")
+
+
+static func step_phase_2_decisions(state: EvoTypes.WorldState, lang: String = "es") -> Dictionary:
+	var start_idx := state.chronicle.size()
+	state.set_meta("_in_flight_micro_phase", 2)
+	EvoDecisionModel.evaluate_all_demes(state, lang, false)
+	return _collect_chronicle_summary(state, start_idx, 2, "decisions")
+
+
+static func step_phase_3_ecology_borders(state: EvoTypes.WorldState, lang: String = "es") -> Dictionary:
+	var start_idx := state.chronicle.size()
+	state.set_meta("_in_flight_micro_phase", 3)
+	EvoBiophysPhase.run_ecology_and_borders_step(state, lang)
+	return _collect_chronicle_summary(state, start_idx, 3, "ecology_borders")
+
+
+static func step_phase_4_demography_milestones(state: EvoTypes.WorldState, lang: String = "es") -> Dictionary:
+	if state.has_meta("_in_flight_micro_phase"):
+		state.remove_meta("_in_flight_micro_phase")
+	var turn_start_idx := state.chronicle.size()
+	if state.has_meta("_turn_start_chronicle_count"):
+		turn_start_idx = int(state.get_meta("_turn_start_chronicle_count"))
+		state.remove_meta("_turn_start_chronicle_count")
+	EvoBiophysPhase.run_demography_and_migration_step(state, lang)
+	EvoMilestonePhase.run_milestone_phase(state, lang)
+	var summary := _collect_chronicle_summary(state, turn_start_idx, 4, "demography_milestones")
+	EvoDecisionModel.invalidate_state_caches(state)
+	var cur_season := state.season
+	state.season = "dry_cold" if cur_season == "wet_warm" else "wet_warm"
+	EvoDecisionModel.prefetch_for_state(state, false)
+	state.season = cur_season
+	EvoDecisionModel.invalidate_state_caches(state)
+	return summary
+
+
+static func complete_in_flight_turn(state: EvoTypes.WorldState, lang: String = "es") -> Dictionary:
+	var phase := int(state.get_meta("_in_flight_micro_phase", 0)) if state.has_meta("_in_flight_micro_phase") else 0
+	if phase == 0:
+		if state.has_meta("_step3_ctx"):
+			phase = 3
+		elif state.has_meta("_turn_start_chronicle_count"):
+			phase = 1
+	if phase not in [1, 2, 3]:
+		return {}
+	if phase < 2:
+		step_phase_2_decisions(state, lang)
+	if phase < 3:
+		step_phase_3_ecology_borders(state, lang)
+	return step_phase_4_demography_milestones(state, lang)
+
+
+static func flush_pending_micro_phases(state: EvoTypes.WorldState, active_phase: int = 0, lang: String = "es") -> void:
+	if not state.has_meta("_in_flight_micro_phase") and active_phase in [1, 2, 3] and (state.has_meta("_turn_start_chronicle_count") or state.has_meta("_step3_ctx")):
+		state.set_meta("_in_flight_micro_phase", active_phase)
+	complete_in_flight_turn(state, lang)
+
+
+static func advance_generation(state: EvoTypes.WorldState, lang: String = "es") -> Dictionary:
+	step_phase_1_environment(state, lang)
+	step_phase_2_decisions(state, lang)
+	step_phase_3_ecology_borders(state, lang)
+	return step_phase_4_demography_milestones(state, lang)
 
 
 static func _can_afford(state: EvoTypes.WorldState, cost: int) -> bool:
@@ -53,89 +123,26 @@ static func _spend_points(state: EvoTypes.WorldState, cost: int) -> void:
 
 
 static func _displace_submerged_demes(state: EvoTypes.WorldState, lang: String = "es") -> void:
-	var is_en := lang == "en"
 	for cid in state.cells.keys():
 		var cell: EvoTypes.HexCell = state.cells[cid]
 		if cell.biome != "ocean" or cell.deme_ids.is_empty():
 			continue
 
 		var resident_ids := cell.deme_ids.duplicate()
-		cell.deme_ids.clear()
-
 		for deme_id in resident_ids:
 			if not state.demes.has(deme_id):
+				cell.deme_ids.erase(deme_id)
 				continue
 			var deme: EvoTypes.Deme = state.demes[deme_id]
-
-			var candidates: Array[EvoTypes.HexCell] = []
-			for nid in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
-				var ncell: EvoTypes.HexCell = state.cells[nid]
-				if ncell.biome != "ocean" and ncell.altitude <= 0.85 and ncell.deme_ids.size() < 3:
-					candidates.append(ncell)
-
-			candidates.sort_custom(func(a: EvoTypes.HexCell, b: EvoTypes.HexCell) -> bool:
-				return a.current_resources > b.current_resources
-			)
-
-			if not candidates.is_empty():
-				var target_cell := candidates[0]
-				deme.hex_id = target_cell.id
-				deme.energy_reserves = snappedf(deme.energy_reserves * 0.80, 0.01)
-				target_cell.deme_ids.append(deme.id)
-
-				var flow := EvoTypes.HexEdgeFlow.new()
-				flow.from_hex_id = cell.id
-				flow.to_hex_id = target_cell.id
-				flow.flow_type = "migration"
-				flow.intensity = 0.65
-				flow.from_deme_id = deme.id
-				flow.to_deme_id = deme.id
-				state.active_flows.append(flow)
-			else:
-				state.demes.erase(deme_id)
-				var drowned_pacts: Array[String] = []
-				for pk_var in state.active_pacts.keys():
-					var pk := str(pk_var)
-					var sep := "__" if pk.contains("__") else "|"
-					var parts := pk.split(sep)
-					if parts.size() == 2 and (parts[0] == deme_id or parts[1] == deme_id):
-						drowned_pacts.append(pk)
-				for pk in drowned_pacts:
-					state.active_pacts.erase(pk)
-				if not state.recent_extinction_hexes.has(cell.id):
-					state.recent_extinction_hexes.append(cell.id)
-
-				var entry := EvoTypes.ChronicleEntry.new()
-				entry.id = "chronicle-submerge-brush-%d-%s" % [state.generation, deme.id]
-				entry.generation = state.generation
-				entry.event_type = "extinction"
-				entry.title = ("%s Submerged" if is_en else "%s Sumergido") % deme.name
-				entry.causal_explanation = (
-					"%s went extinct when cell (%s) submerged into ocean with no accessible terrestrial refuge." % [deme.name, cell.id]
-					if is_en
-					else "%s se extinguió cuando la celda (%s) quedó sumergida en el océano sin refugio terrestre accesible." % [deme.name, cell.id]
-				)
-				entry.hex_id = cell.id
-				entry.deme_id = deme.id
-				entry.lineage_id = deme.lineage_id
-				state.chronicle.append(entry)
-
-				var has_relatives := false
-				for rem_id in state.demes.keys():
-					var rem: EvoTypes.Deme = state.demes[rem_id]
-					if rem.lineage_id == deme.lineage_id:
-						has_relatives = true
-						break
-				if not has_relatives and state.lineage_tree.has(deme.lineage_id):
-					(state.lineage_tree[deme.lineage_id] as EvoTypes.LineageNode).extinct_generation = state.generation
+			EvoDemographyMigration.evacuate_or_merge_displaced_deme(deme, cell, state, lang, "submerge_brush")
 
 	var valid_flows: Array[EvoTypes.HexEdgeFlow] = []
 	for fl in state.active_flows:
-		if fl.from_deme_id != "" and not state.demes.has(fl.from_deme_id):
+		if fl.from_deme_id != "" and not state.demes.has(fl.from_deme_id) and fl.flow_type != "merge":
 			continue
 		if fl.to_deme_id != "" and not state.demes.has(fl.to_deme_id):
 			continue
-		if fl.flow_type != "migration":
+		if fl.flow_type not in ["migration", "merge"]:
 			if fl.from_deme_id != "" and state.demes.has(fl.from_deme_id):
 				fl.from_hex_id = (state.demes[fl.from_deme_id] as EvoTypes.Deme).hex_id
 			if fl.to_deme_id != "" and state.demes.has(fl.to_deme_id):
@@ -150,12 +157,12 @@ static func _displace_submerged_demes(state: EvoTypes.WorldState, lang: String =
 
 	var valid_conns: Array[Dictionary] = []
 	for conn in state.disused_connections:
-		var fa := str(conn.get("from_deme_id", ""))
-		var fb := str(conn.get("to_deme_id", ""))
+		var fa := str(conn["from_deme_id"])
+		var fb := str(conn["to_deme_id"])
 		if (fa != "" and not state.demes.has(fa)) or (fb != "" and not state.demes.has(fb)):
 			continue
-		var ha := str(conn.get("from_hex_id", ""))
-		var hb := str(conn.get("to_hex_id", ""))
+		var ha := str(conn["from_hex_id"])
+		var hb := str(conn["to_hex_id"])
 		if (state.cells.has(ha) and (state.cells[ha] as EvoTypes.HexCell).biome == "ocean") or (state.cells.has(hb) and (state.cells[hb] as EvoTypes.HexCell).biome == "ocean"):
 			continue
 		valid_conns.append(conn)

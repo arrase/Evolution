@@ -86,70 +86,16 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 			cell.current_resources = maxf(cell.current_resources, roundf(cell.carrying_capacity * 0.35))
 			biome_changed_hexes[cell.id] = true
 
-	var is_en := lang == "en"
 	for cid in state.cells.keys():
 		var cell: EvoTypes.HexCell = state.cells[cid]
 		if cell.biome == "ocean" and not cell.deme_ids.is_empty():
 			var resident_ids := cell.deme_ids.duplicate()
-			cell.deme_ids.clear()
-
 			for deme_id in resident_ids:
 				if not state.demes.has(deme_id):
+					cell.deme_ids.erase(deme_id)
 					continue
 				var deme: EvoTypes.Deme = state.demes[deme_id]
-
-				var candidates: Array[EvoTypes.HexCell] = []
-				for nid in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
-					var ncell: EvoTypes.HexCell = state.cells[nid]
-					if ncell.biome != "ocean" and ncell.deme_ids.size() < 3 and ncell.altitude <= 0.85:
-						candidates.append(ncell)
-
-				candidates.sort_custom(func(a: EvoTypes.HexCell, b: EvoTypes.HexCell) -> bool:
-					return a.current_resources > b.current_resources
-				)
-
-				if not candidates.is_empty():
-					var target_cell := candidates[0]
-					deme.hex_id = target_cell.id
-					deme.energy_reserves = snappedf(deme.energy_reserves * 0.80, 0.01)
-					target_cell.deme_ids.append(deme.id)
-
-					var flow := EvoTypes.HexEdgeFlow.new()
-					flow.from_hex_id = cell.id
-					flow.to_hex_id = target_cell.id
-					flow.flow_type = "migration"
-					flow.intensity = 0.65
-					flow.from_deme_id = deme.id
-					flow.to_deme_id = deme.id
-					state.active_flows.append(flow)
-				else:
-					state.demes.erase(deme_id)
-					if not state.recent_extinction_hexes.has(cell.id):
-						state.recent_extinction_hexes.append(cell.id)
-
-					var entry := EvoTypes.ChronicleEntry.new()
-					entry.id = "chronicle-submerge-%d-%s" % [next_generation, deme.id]
-					entry.generation = next_generation
-					entry.event_type = "extinction"
-					entry.title = ("%s Submerged" if is_en else "%s Sumergido") % deme.name
-					entry.causal_explanation = (
-						"%s went extinct when cell (%s) submerged into ocean with no accessible terrestrial refuge." % [deme.name, cell.id]
-						if is_en
-						else "%s se extinguió cuando la celda (%s) quedó sumergida en el océano sin refugio terrestre accesible." % [deme.name, cell.id]
-					)
-					entry.hex_id = cell.id
-					entry.deme_id = deme.id
-					entry.lineage_id = deme.lineage_id
-					state.chronicle.append(entry)
-
-					var has_relatives := false
-					for rem_id in state.demes.keys():
-						var rem: EvoTypes.Deme = state.demes[rem_id]
-						if rem.lineage_id == deme.lineage_id:
-							has_relatives = true
-							break
-					if not has_relatives and state.lineage_tree.has(deme.lineage_id):
-						(state.lineage_tree[deme.lineage_id] as EvoTypes.LineageNode).extinct_generation = next_generation
+				EvoDemographyMigration.evacuate_or_merge_displaced_deme(deme, cell, state, lang, "submerge")
 
 	_prune_stale_pacts(state)
 
@@ -157,7 +103,10 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 	var delta_hum: float = 0.05 if state.season == "wet_warm" else -0.05
 
 	var collapsed_prev_gen_hexes: Dictionary = {}
-	for entry in state.chronicle:
+	for idx in range(state.chronicle.size() - 1, -1, -1):
+		var entry: EvoTypes.ChronicleEntry = state.chronicle[idx]
+		if entry.generation < prev_generation:
+			break
 		if entry.event_type == "tragedy_of_commons" and entry.generation == prev_generation:
 			collapsed_prev_gen_hexes[entry.hex_id] = true
 

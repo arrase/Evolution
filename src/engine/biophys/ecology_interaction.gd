@@ -101,10 +101,6 @@ static func compute_pact_defense_bonus(
 		return 0.0
 	var v_cell: EvoTypes.HexCell = state.cells[victim.hex_id]
 	var bonus: float = 0.0
-	for ally_id in v_cell.deme_ids:
-		if ally_id != victim.id and state.demes.has(ally_id) and EvoTypes.is_pact_active(state, victim.id, ally_id):
-			var ally: EvoTypes.Deme = state.demes[ally_id]
-			bonus += 0.25 * clampf(float(ally.population) / maxf(20.0, float(victim.population)), 0.4, 1.5) + 0.08 * float(ally.defense_tier)
 	for nid in HexMath.get_neighbor_ids(v_cell.q, v_cell.r, state.cells):
 		var a_cell: EvoTypes.HexCell = state.cells[nid]
 		for ally_id in a_cell.deme_ids:
@@ -385,6 +381,7 @@ static func _run_pacts_and_betrayals(
 					var ex_flow: EvoTypes.HexEdgeFlow = existing_flows_by_key[flow_key]
 					ex_flow.flow_type = "pact"
 					ex_flow.intensity = 0.80
+					turn_geopolitical_flows.append(ex_flow)
 				else:
 					var flow := EvoTypes.HexEdgeFlow.new()
 					flow.from_hex_id = c1.id
@@ -431,13 +428,6 @@ static func _run_defense_fortification_phase(
 		var has_rival := false
 		var allies: Array[EvoTypes.Deme] = []
 		if not (p_coop_exch >= 0.25 or has_fort_trait) or (deme.energy_reserves < req_res and not state.active_pacts.is_empty()):
-			for oid in cell.deme_ids:
-				if oid != deme.id and state.demes.has(oid):
-					var other: EvoTypes.Deme = state.demes[oid]
-					if EvoTypes.is_pact_active(state, deme.id, other.id):
-						allies.append(other)
-					elif other.lineage_id != deme.lineage_id:
-						has_rival = true
 			for nid in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
 				var ncell: EvoTypes.HexCell = state.cells[nid]
 				for oid in ncell.deme_ids:
@@ -543,10 +533,14 @@ static func _has_recent_raid_chronicle(
 	raider_id: String,
 	victim_id: String
 ) -> bool:
+	var min_gen := state.generation - 2
 	var suffix_ab := "-%s-%s" % [raider_id, victim_id]
 	var suffix_ba := "-%s-%s" % [victim_id, raider_id]
-	for entry in state.chronicle:
-		if entry.event_type == "raid" and entry.generation >= state.generation - 2:
+	for idx in range(state.chronicle.size() - 1, -1, -1):
+		var entry: EvoTypes.ChronicleEntry = state.chronicle[idx]
+		if entry.generation < min_gen:
+			break
+		if entry.event_type == "raid":
 			if entry.id.ends_with(suffix_ab) or entry.id.ends_with(suffix_ba):
 				return true
 	return false
@@ -663,23 +657,22 @@ static func _execute_raid_if_successful(
 	state.active_flows.append(flow)
 	turn_geopolitical_flows.append(flow)
 
-	if not _has_recent_raid_chronicle(state, raider.id, victim.id):
-		var params := {
-			"raider": raider.name,
-			"victim": victim.name,
-			"loot": str(int(round(loot))),
-			"hex": c_victim.id
-		}
-		var entry := EvoTypes.ChronicleEntry.new()
-		entry.id = "chronicle-raid-%d-%s-%s" % [state.generation, raider.id, victim.id]
-		entry.generation = state.generation
-		entry.event_type = "raid"
-		entry.title = EvoI18n.t(lang, "chronicle_raid_title", params)
-		entry.causal_explanation = EvoI18n.t(lang, "chronicle_raid_desc", params)
-		entry.hex_id = c_victim.id
-		entry.deme_id = raider.id
-		entry.lineage_id = raider.lineage_id
-		state.chronicle.append(entry)
+	var params := {
+		"raider": raider.name,
+		"victim": victim.name,
+		"loot": str(int(round(loot))),
+		"hex": c_victim.id
+	}
+	var entry := EvoTypes.ChronicleEntry.new()
+	entry.id = "chronicle-raid-%d-%s-%s" % [state.generation, raider.id, victim.id]
+	entry.generation = state.generation
+	entry.event_type = "raid"
+	entry.title = EvoI18n.t(lang, "chronicle_raid_title", params)
+	entry.causal_explanation = EvoI18n.t(lang, "chronicle_raid_desc", params)
+	entry.hex_id = c_victim.id
+	entry.deme_id = raider.id
+	entry.lineage_id = raider.lineage_id
+	state.chronicle.append(entry)
 
 	return true
 
@@ -772,6 +765,102 @@ static func run_resource_and_symbiosis_phase(
 			valid_demes.append(d)
 			valid_cells.append(state.cells[d.hex_id])
 
+	var demand_by_deme: Dictionary = {}
+	var annexed_energy_by_deme: Dictionary = {}
+	for d in valid_demes:
+		var v_eff: EvoTypes.BiophysicalVector = effective_vec_by_deme[d.id]
+		demand_by_deme[d.id] = maxf(
+			0.0,
+			float(d.population) * 0.50 * (1.0 + 0.60 * v_eff.extraction_efficiency)
+		)
+		annexed_energy_by_deme[d.id] = 0.0
+
+	var deme_idx_by_id: Dictionary = {}
+	var v_count := valid_demes.size()
+	for i in range(v_count):
+		deme_idx_by_id[valid_demes[i].id] = i
+
+	var adjacent_pairs: Array = []
+	for i in range(v_count):
+		var d1 := valid_demes[i]
+		var c1 := valid_cells[i]
+		if c1.biome == "ocean" or c1.altitude > 0.85:
+			continue
+		for nid in HexMath.get_neighbor_ids(c1.q, c1.r, state.cells):
+			var c2: EvoTypes.HexCell = state.cells[nid]
+			if c2.biome == "ocean" or c2.altitude > 0.85 or c2.deme_ids.is_empty():
+				continue
+			for oid in c2.deme_ids:
+				if not deme_idx_by_id.has(oid):
+					continue
+				var j: int = int(deme_idx_by_id[oid])
+				if j <= i:
+					continue
+				var d2 := valid_demes[j]
+				var pk := (d1.id + "__" + d2.id) if d1.id < d2.id else (d2.id + "__" + d1.id)
+				adjacent_pairs.append([d1, c1, d2, c2, pk])
+
+	var hawk_clashed: Dictionary = {}
+	for pair in adjacent_pairs:
+		var d1: EvoTypes.Deme = pair[0]
+		var c1: EvoTypes.HexCell = pair[1]
+		var d2: EvoTypes.Deme = pair[2]
+		var c2: EvoTypes.HexCell = pair[3]
+		if d1.lineage_id == d2.lineage_id or EvoTypes.is_pact_active(state, d1.id, d2.id):
+			continue
+		var is_h1 := float((arch_probs[d1.id] as Array)[2]) >= 0.25
+		var is_h2 := float((arch_probs[d2.id] as Array)[2]) >= 0.25
+		if is_h1 and is_h2:
+			for hawk in [d1, d2]:
+				if not hawk_clashed.has(hawk.id):
+					hawk_clashed[hawk.id] = true
+					hawk.population = maxi(10, int(floor(float(hawk.population) * 0.85)))
+					hawk_penalty_by_deme[hawk.id] = 1.25
+					var v_eff: EvoTypes.BiophysicalVector = effective_vec_by_deme[hawk.id]
+					demand_by_deme[hawk.id] = maxf(
+						0.0,
+						float(hawk.population) * 0.50 * (1.0 + 0.60 * v_eff.extraction_efficiency)
+					)
+			var flow := EvoTypes.HexEdgeFlow.new()
+			flow.from_hex_id = c1.id
+			flow.to_hex_id = c2.id
+			flow.flow_type = "dispute"
+			flow.intensity = 0.75
+			flow.from_deme_id = d1.id
+			flow.to_deme_id = d2.id
+			state.active_flows.append(flow)
+
+	for pair in adjacent_pairs:
+		var d1: EvoTypes.Deme = pair[0]
+		var c1: EvoTypes.HexCell = pair[1]
+		var d2: EvoTypes.Deme = pair[2]
+		var c2: EvoTypes.HexCell = pair[3]
+		if d1.lineage_id == d2.lineage_id or EvoTypes.is_pact_active(state, d1.id, d2.id):
+			continue
+		var is_h1 := float((arch_probs[d1.id] as Array)[2]) >= 0.25
+		var is_h2 := float((arch_probs[d2.id] as Array)[2]) >= 0.25
+		if is_h1 != is_h2:
+			var h: EvoTypes.Deme = d1 if is_h1 else d2
+			var c_h: EvoTypes.HexCell = c1 if is_h1 else c2
+			var dove: EvoTypes.Deme = d2 if is_h1 else d1
+			var c_d: EvoTypes.HexCell = c2 if is_h1 else c1
+			var hawk_social := (effective_vec_by_deme[h.id] as EvoTypes.BiophysicalVector).social_cohesion
+			var dove_social := (effective_vec_by_deme[dove.id] as EvoTypes.BiophysicalVector).social_cohesion
+			var capture_mult := 0.25 * (1.0 + maxf(0.0, hawk_social - dove_social)) / (1.0 + 0.35 * float(dove.defense_tier))
+			var req_bonus := float(demand_by_deme[h.id]) * capture_mult
+			var captured := snappedf(minf(c_d.current_resources * 0.28, minf(float(demand_by_deme[dove.id]), req_bonus)), 0.01)
+			demand_by_deme[dove.id] = maxf(0.0, float(demand_by_deme[dove.id]) - captured)
+			c_d.current_resources = maxf(0.0, snappedf(c_d.current_resources - captured, 0.01))
+			annexed_energy_by_deme[h.id] = float(annexed_energy_by_deme.get(h.id, 0.0)) + captured
+			var flow := EvoTypes.HexEdgeFlow.new()
+			flow.from_hex_id = c_h.id
+			flow.to_hex_id = c_d.id
+			flow.flow_type = "dispute"
+			flow.intensity = 0.65
+			flow.from_deme_id = h.id
+			flow.to_deme_id = dove.id
+			state.active_flows.append(flow)
+
 	var tragedy_hexes: Dictionary = {}
 	for entry in state.chronicle:
 		if entry.event_type == "tragedy_of_commons":
@@ -787,167 +876,17 @@ static func run_resource_and_symbiosis_phase(
 		if resident_demes.is_empty():
 			continue
 
-		var demand_by_deme: Dictionary = {}
-		for deme in resident_demes:
-			var v_eff: EvoTypes.BiophysicalVector = effective_vec_by_deme[deme.id]
-			demand_by_deme[deme.id] = maxf(
-				0.0,
-				float(deme.population) * 0.50 * (1.0 + 0.60 * v_eff.extraction_efficiency)
-			)
-
-		var lineages_in_hex: Dictionary = {}
-		for deme in resident_demes:
-			lineages_in_hex[deme.lineage_id] = true
-		var has_rival_lineages := lineages_in_hex.size() >= 2
-
-		var hawks: Array[EvoTypes.Deme] = []
-		var doves: Array[EvoTypes.Deme] = []
-		var exchangers: Array[EvoTypes.Deme] = []
-
-		for deme in resident_demes:
-			var ap: Array = arch_probs[deme.id]
-			var is_active_hawk := has_rival_lineages and float(ap[2]) >= 0.25
-			if is_active_hawk:
-				hawks.append(deme)
-			else:
-				doves.append(deme)
-				if float(ap[1]) >= 0.20:
-					exchangers.append(deme)
-
-		var hawk_lineages: Dictionary = {}
-		for hawk in hawks:
-			hawk_lineages[hawk.lineage_id] = true
-		var has_rival_hawks := hawk_lineages.size() >= 2
-
-		if has_rival_lineages:
-			if has_rival_hawks:
-				for i in range(hawks.size()):
-					var hawk := hawks[i]
-					var opp := hawks[(i + 1) % hawks.size()]
-					for candidate_opp in hawks:
-						if candidate_opp.lineage_id != hawk.lineage_id:
-							opp = candidate_opp
-							break
-					hawk.population = maxi(10, int(floor(float(hawk.population) * 0.85)))
-					hawk_penalty_by_deme[hawk.id] = 1.25
-					var v_eff: EvoTypes.BiophysicalVector = effective_vec_by_deme[hawk.id]
-					demand_by_deme[hawk.id] = maxf(
-						0.0,
-						float(hawk.population) * 0.50 * (1.0 + 0.60 * v_eff.extraction_efficiency)
-					)
-					var flow := EvoTypes.HexEdgeFlow.new()
-					flow.from_hex_id = cell.id
-					flow.to_hex_id = cell.id
-					flow.flow_type = "dispute"
-					flow.intensity = 0.75
-					flow.from_deme_id = hawk.id
-					flow.to_deme_id = opp.id
-					state.active_flows.append(flow)
-			elif hawks.size() >= 1 and doves.size() >= 1:
-				for hawk in hawks:
-					var rival_doves: Array[EvoTypes.Deme] = []
-					for dove in doves:
-						if dove.lineage_id != hawk.lineage_id:
-							rival_doves.append(dove)
-					if rival_doves.is_empty():
-						continue
-					var sum_dove_social: float = 0.0
-					for dove in rival_doves:
-						sum_dove_social += (effective_vec_by_deme[dove.id] as EvoTypes.BiophysicalVector).social_cohesion
-					var avg_dove_social := sum_dove_social / float(rival_doves.size())
-
-					var hawk_social := (effective_vec_by_deme[hawk.id] as EvoTypes.BiophysicalVector).social_cohesion
-					var capture_mult := 0.25 * (1.0 + maxf(0.0, hawk_social - avg_dove_social))
-					var hawk_demand := float(demand_by_deme[hawk.id])
-					var req_bonus := hawk_demand * capture_mult
-					var total_dove_demand: float = 0.0
-					for dove in rival_doves:
-						total_dove_demand += float(demand_by_deme[dove.id])
-					var actual_captured := minf(total_dove_demand, req_bonus)
-
-					demand_by_deme[hawk.id] = hawk_demand + actual_captured
-					if total_dove_demand > 0.0:
-						for dove in rival_doves:
-							var cur_d := float(demand_by_deme[dove.id])
-							var share := cur_d / total_dove_demand
-							demand_by_deme[dove.id] = maxf(0.0, cur_d - actual_captured * share)
-
-					for dove in rival_doves:
-						var flow := EvoTypes.HexEdgeFlow.new()
-						flow.from_hex_id = cell.id
-						flow.to_hex_id = cell.id
-						flow.flow_type = "dispute"
-						flow.intensity = 0.65
-						flow.from_deme_id = hawk.id
-						flow.to_deme_id = dove.id
-						state.active_flows.append(flow)
-
 		var total_demand: float = 0.0
 		for deme in resident_demes:
-			total_demand += float(demand_by_deme[deme.id])
+			total_demand += float(demand_by_deme.get(deme.id, 0.0))
 		var total_extracted := minf(cell.current_resources, total_demand)
 
 		for deme in resident_demes:
-			var d_dem := float(demand_by_deme[deme.id])
+			var d_dem := float(demand_by_deme.get(deme.id, 0.0))
 			var ext := (total_extracted * (d_dem / total_demand)) if total_demand > 0.0 else 0.0
-			extracted_energy_by_deme[deme.id] = ext
+			extracted_energy_by_deme[deme.id] = snappedf(ext + float(annexed_energy_by_deme.get(deme.id, 0.0)), 0.0001)
 
 		cell.current_resources = maxf(0.0, snappedf(cell.current_resources - total_extracted, 0.01))
-
-		if exchangers.size() >= 2:
-			var logged_symbiosis_in_cell := false
-			for i in range(exchangers.size()):
-				var ex := exchangers[i]
-				var partner := exchangers[(i + 1) % exchangers.size()]
-				var base_ext := float(extracted_energy_by_deme[ex.id])
-				extracted_energy_by_deme[ex.id] = snappedf(base_ext * 1.20, 0.0001)
-				symbiosis_bonus_applied[ex.id] = true
-
-				var flow := EvoTypes.HexEdgeFlow.new()
-				flow.from_hex_id = cell.id
-				flow.to_hex_id = cell.id
-				flow.flow_type = "exchange"
-				flow.intensity = 0.60
-				flow.from_deme_id = ex.id
-				flow.to_deme_id = partner.id
-				state.active_flows.append(flow)
-				var intra_pk := (ex.id + "__" + partner.id) if ex.id < partner.id else (partner.id + "__" + ex.id)
-				existing_flows_by_key[intra_pk] = flow
-
-			for donor in exchangers:
-				var donor_initial_traits: Array = initial_cultural_traits_by_deme.get(donor.id, [])
-				for receiver in exchangers:
-					if donor.id == receiver.id:
-						continue
-					if not EvoCatalog.deme_has_cultural_capacity(receiver, state.traits_catalog):
-						continue
-					var receiver_social := (effective_vec_by_deme[receiver.id] as EvoTypes.BiophysicalVector).social_cohesion
-					for tid_var in donor_initial_traits:
-						var tid := str(tid_var)
-						if not _can_acquire_trait(receiver, tid, state.traits_catalog):
-							continue
-						var tdef: EvoTypes.TraitDef = state.traits_catalog[tid]
-						if receiver_social >= tdef.vector.transmission_threshold:
-							receiver.cultural_trait_ids.append(tid)
-							effective_vec_by_deme[receiver.id] = compute_effective_vector(receiver, state)
-							if not logged_symbiosis_in_cell:
-								logged_symbiosis_in_cell = true
-								var tname := EvoI18n.trait_name(lang, tdef)
-								var entry := EvoTypes.ChronicleEntry.new()
-								entry.id = "chronicle-symbiosis-%d-%s-%s" % [state.generation, cell.id, receiver.id]
-								entry.generation = state.generation
-								entry.event_type = "symbiosis"
-								entry.title = ("Cultural Symbiosis: %s" if is_en else "Simbiosis Cultural: %s") % tname
-								entry.causal_explanation = (
-									"%s acquired %s through symbiotic exchange with %s in hex (%s)." % [receiver.name, tname, donor.name, cell.id]
-									if is_en
-									else "%s adquirió %s mediante intercambio simbiótico con %s en el hexágono (%s)." % [receiver.name, tname, donor.name, cell.id]
-								)
-								entry.hex_id = cell.id
-								entry.deme_id = receiver.id
-								entry.lineage_id = receiver.lineage_id
-								entry.trait_id = tid
-								state.chronicle.append(entry)
 
 		var gamma_season := 1.20 if state.season == "wet_warm" else 0.75
 		var natural_regen := cell.carrying_capacity * cell.seasonal_regen_rate * gamma_season
@@ -990,96 +929,81 @@ static func run_resource_and_symbiosis_phase(
 			)
 
 	var exchange_flow_pairs: Dictionary = {}
-	for donor_id in state.demes.keys():
-		var donor: EvoTypes.Deme = state.demes[donor_id]
-		if float((arch_probs[donor.id] as Array)[1]) < 0.20:
-			continue
-		if not state.cells.has(donor.hex_id):
-			continue
-		var donor_cell: EvoTypes.HexCell = state.cells[donor.hex_id]
-		if donor_cell.biome == "ocean" or donor_cell.altitude > 0.85:
-			continue
-		var donor_initial_traits: Array = initial_cultural_traits_by_deme.get(donor.id, [])
-		for nid in HexMath.get_neighbor_ids(donor_cell.q, donor_cell.r, state.cells):
-			var ncell: EvoTypes.HexCell = state.cells[nid]
-			if ncell.biome == "ocean" or ncell.altitude > 0.85:
-				continue
-			for ndeme_id in ncell.deme_ids:
-				if not state.demes.has(ndeme_id):
-					continue
-				var receiver: EvoTypes.Deme = state.demes[ndeme_id]
-				if float((arch_probs[receiver.id] as Array)[1]) < 0.20:
-					continue
+	for pair in adjacent_pairs:
+		var d1: EvoTypes.Deme = pair[0]
+		var c1: EvoTypes.HexCell = pair[1]
+		var d2: EvoTypes.Deme = pair[2]
+		var c2: EvoTypes.HexCell = pair[3]
+		var pair_key: String = pair[4]
 
-				if not symbiosis_bonus_applied.has(donor.id):
-					var base_ext := float(extracted_energy_by_deme[donor.id])
-					var trade_mult := (
-						1.15
-						+ (0.12 if donor_cell.biome != ncell.biome else 0.0)
-						+ (0.08 if donor.cultural_trait_ids != receiver.cultural_trait_ids else 0.0)
+		if int(state.active_pacts.get(pair_key, 0)) < 0:
+			continue
+
+		var ap1: Array = arch_probs[d1.id]
+		var ap2: Array = arch_probs[d2.id]
+		var p_coop_1 := float(ap1[0])
+		var p_exch_1 := float(ap1[1])
+		var p_coop_2 := float(ap2[0])
+		var p_exch_2 := float(ap2[1])
+
+		var both_exch := p_exch_1 >= 0.20 and p_exch_2 >= 0.20
+		var hybrid_exch := (p_exch_1 >= 0.20 or p_exch_2 >= 0.20) and (p_coop_1 + p_exch_1 >= 0.32) and (p_coop_2 + p_exch_2 >= 0.32)
+		if not (both_exch or hybrid_exch):
+			continue
+
+		if not symbiosis_bonus_applied.has(d1.id):
+			extracted_energy_by_deme[d1.id] = snappedf(float(extracted_energy_by_deme[d1.id]) * 1.20, 0.0001)
+			symbiosis_bonus_applied[d1.id] = true
+		if not symbiosis_bonus_applied.has(d2.id):
+			extracted_energy_by_deme[d2.id] = snappedf(float(extracted_energy_by_deme[d2.id]) * 1.20, 0.0001)
+			symbiosis_bonus_applied[d2.id] = true
+
+		var hex_pair_key := ("%s|%s" % [c1.id, c2.id]) if c1.id <= c2.id else ("%s|%s" % [c2.id, c1.id])
+		if not exchange_flow_pairs.has(hex_pair_key):
+			exchange_flow_pairs[hex_pair_key] = true
+			var flow := EvoTypes.HexEdgeFlow.new()
+			flow.from_hex_id = c1.id
+			flow.to_hex_id = c2.id
+			flow.flow_type = "exchange"
+			flow.intensity = 0.60
+			flow.from_deme_id = d1.id
+			flow.to_deme_id = d2.id
+			state.active_flows.append(flow)
+			existing_flows_by_key[hex_pair_key] = flow
+
+		for dir in [[d1, c1, d2, c2], [d2, c2, d1, c1]]:
+			var donor: EvoTypes.Deme = dir[0]
+			var donor_cell: EvoTypes.HexCell = dir[1]
+			var receiver: EvoTypes.Deme = dir[2]
+			var receiver_cell: EvoTypes.HexCell = dir[3]
+			if not EvoCatalog.deme_has_cultural_capacity(receiver, state.traits_catalog):
+				continue
+			var donor_initial_traits: Array = initial_cultural_traits_by_deme.get(donor.id, [])
+			var receiver_social := (effective_vec_by_deme[receiver.id] as EvoTypes.BiophysicalVector).social_cohesion
+			for tid_var in donor_initial_traits:
+				var tid := str(tid_var)
+				if not _can_acquire_trait(receiver, tid, state.traits_catalog):
+					continue
+				var tdef: EvoTypes.TraitDef = state.traits_catalog[tid]
+				if receiver_social >= tdef.vector.transmission_threshold:
+					receiver.cultural_trait_ids.append(tid)
+					effective_vec_by_deme[receiver.id] = compute_effective_vector(receiver, state)
+					var tname := EvoI18n.trait_name(lang, tdef)
+					var entry := EvoTypes.ChronicleEntry.new()
+					entry.id = "chronicle-symbiosis-%d-%s-%s-%s" % [state.generation, receiver_cell.id, receiver.id, tid]
+					entry.generation = state.generation
+					entry.event_type = "symbiosis"
+					entry.title = ("Cultural Symbiosis: %s" if is_en else "Simbiosis Cultural: %s") % tname
+					entry.causal_explanation = (
+						"%s acquired %s through inter-deme exchange with %s across hexes (%s -> %s)." % [receiver.name, tname, donor.name, donor_cell.id, receiver_cell.id]
+						if is_en
+						else "%s adquirió %s mediante intercambio inter-deme con %s entre hexágonos (%s -> %s)." % [receiver.name, tname, donor.name, donor_cell.id, receiver_cell.id]
 					)
-					extracted_energy_by_deme[donor.id] = snappedf(base_ext * trade_mult, 0.0001)
-					symbiosis_bonus_applied[donor.id] = true
-
-				var hex_pair_key := ("%s|%s" % [donor_cell.id, ncell.id]) if donor_cell.id <= ncell.id else ("%s|%s" % [ncell.id, donor_cell.id])
-				if not exchange_flow_pairs.has(hex_pair_key):
-					exchange_flow_pairs[hex_pair_key] = true
-					var flow := EvoTypes.HexEdgeFlow.new()
-					flow.from_hex_id = donor_cell.id
-					flow.to_hex_id = ncell.id
-					flow.flow_type = "exchange"
-					flow.intensity = 0.55
-					flow.from_deme_id = donor.id
-					flow.to_deme_id = receiver.id
-					state.active_flows.append(flow)
-					existing_flows_by_key[hex_pair_key] = flow
-
-				if EvoCatalog.deme_has_cultural_capacity(receiver, state.traits_catalog):
-					var receiver_social := (effective_vec_by_deme[receiver.id] as EvoTypes.BiophysicalVector).social_cohesion
-					for tid_var in donor_initial_traits:
-						var tid := str(tid_var)
-						if not _can_acquire_trait(receiver, tid, state.traits_catalog):
-							continue
-						var tdef: EvoTypes.TraitDef = state.traits_catalog[tid]
-						if receiver_social >= tdef.vector.transmission_threshold:
-							receiver.cultural_trait_ids.append(tid)
-							effective_vec_by_deme[receiver.id] = compute_effective_vector(receiver, state)
-							var tname := EvoI18n.trait_name(lang, tdef)
-							var entry := EvoTypes.ChronicleEntry.new()
-							entry.id = "chronicle-symbiosis-%d-%s-%s-%s" % [state.generation, ncell.id, receiver.id, tid]
-							entry.generation = state.generation
-							entry.event_type = "symbiosis"
-							entry.title = ("Cultural Symbiosis: %s" if is_en else "Simbiosis Cultural: %s") % tname
-							entry.causal_explanation = (
-								"%s acquired %s through inter-deme exchange with %s across hexes (%s -> %s)." % [receiver.name, tname, donor.name, donor_cell.id, ncell.id]
-								if is_en
-								else "%s adquirió %s mediante intercambio inter-deme con %s entre hexágonos (%s -> %s)." % [receiver.name, tname, donor.name, donor_cell.id, ncell.id]
-							)
-							entry.hex_id = ncell.id
-							entry.deme_id = receiver.id
-							entry.lineage_id = receiver.lineage_id
-							entry.trait_id = tid
-							state.chronicle.append(entry)
-
-	var adjacent_pairs: Array = []
-	var v_count := valid_demes.size()
-	for i in range(v_count):
-		var d1 := valid_demes[i]
-		var c1 := valid_cells[i]
-		var q1 := c1.q
-		var r1 := c1.r
-		var bad1 := c1.biome == "ocean" or c1.altitude > 0.85
-		for j in range(i + 1, v_count):
-			var c2 := valid_cells[j]
-			var dq := q1 - c2.q
-			var dr := r1 - c2.r
-			if absi(dq) > 1 or absi(dr) > 1 or absi(dq + dr) > 1:
-				continue
-			if (dq != 0 or dr != 0) and (bad1 or c2.biome == "ocean" or c2.altitude > 0.85):
-				continue
-			var d2 := valid_demes[j]
-			var pk := (d1.id + "__" + d2.id) if d1.id < d2.id else (d2.id + "__" + d1.id)
-			adjacent_pairs.append([d1, c1, d2, c2, pk])
+					entry.hex_id = receiver_cell.id
+					entry.deme_id = receiver.id
+					entry.lineage_id = receiver.lineage_id
+					entry.trait_id = tid
+					state.chronicle.append(entry)
 
 	var betrayed_pairs_this_turn: Dictionary = {}
 	_run_pacts_and_betrayals(

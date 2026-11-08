@@ -227,8 +227,6 @@ class StrategyDef extends RefCounted:
 			"icon": icon,
 			"color": color,
 			"origin": origin,
-			"biologicalTraitIds": biological_trait_ids.duplicate(),
-			"culturalTraitIds": cultural_trait_ids.duplicate(),
 			"biological_trait_ids": biological_trait_ids.duplicate(),
 			"cultural_trait_ids": cultural_trait_ids.duplicate()
 		}
@@ -242,11 +240,11 @@ class StrategyDef extends RefCounted:
 		s.color = str(data["color"]) if data.has("color") else "#10B981"
 		s.origin = str(data["origin"]) if data.has("origin") else "base"
 		s.biological_trait_ids = []
-		var raw_bio: Array = data["biologicalTraitIds"] if data.has("biologicalTraitIds") else (data["biological_trait_ids"] if data.has("biological_trait_ids") else [])
+		var raw_bio: Array = data["biological_trait_ids"] if data.has("biological_trait_ids") else (data["biologicalTraitIds"] if data.has("biologicalTraitIds") else [])
 		for item in raw_bio:
 			s.biological_trait_ids.append(str(item))
 		s.cultural_trait_ids = []
-		var raw_cul: Array = data["culturalTraitIds"] if data.has("culturalTraitIds") else (data["cultural_trait_ids"] if data.has("cultural_trait_ids") else [])
+		var raw_cul: Array = data["cultural_trait_ids"] if data.has("cultural_trait_ids") else (data["culturalTraitIds"] if data.has("culturalTraitIds") else [])
 		for item in raw_cul:
 			s.cultural_trait_ids.append(str(item))
 		return s
@@ -271,6 +269,14 @@ class HexCell extends RefCounted:
 			carrying_capacity_max = value
 	var seasonal_regen_rate: float = 0.18
 	var deme_ids: Array[String] = []
+
+	func get_resident_deme_id() -> String:
+		return deme_ids[0] if not deme_ids.is_empty() else ""
+
+	func set_resident_deme_id(deme_id: String) -> void:
+		deme_ids.clear()
+		if deme_id != "":
+			deme_ids.append(deme_id)
 
 	func duplicate_cell() -> HexCell:
 		var c := HexCell.new()
@@ -321,7 +327,8 @@ class HexCell extends RefCounted:
 		c.carrying_capacity_max = float(d["carryingCapacityMax"])
 		c.seasonal_regen_rate = float(d["seasonalRegenRate"])
 		c.deme_ids = []
-		for item in d["demeIds"]:
+		var raw_deme_ids: Array = d["deme_ids"] if d.has("deme_ids") else d["demeIds"]
+		for item in raw_deme_ids:
 			c.deme_ids.append(str(item))
 		return c
 
@@ -415,7 +422,6 @@ class Deme extends RefCounted:
 			"id": id,
 			"name": name,
 			"lineageId": lineage_id,
-			"strategyId": strategy_id,
 			"strategy_id": strategy_id,
 			"color": color,
 			"hexId": hex_id,
@@ -424,17 +430,17 @@ class Deme extends RefCounted:
 			"lastEnergyDelta": last_energy_delta,
 			"biologicalTraitIds": biological_trait_ids.duplicate(),
 			"culturalTraitIds": cultural_trait_ids.duplicate(),
-			"baldwinCounters": baldwin_counters.duplicate(),
-			"innovationCounter": innovation_counter,
+			"baldwin_counters": baldwin_counters.duplicate(),
+			"innovation_counter": innovation_counter,
 			"isolationTurns": isolation_turns,
 			"decisionModelTag": decision_model_tag,
 			"lastConfidence": last_confidence,
 			"lastDecisionProbabilities": last_decision_probabilities.duplicate(),
 			"lastDominantDecisionId": last_dominant_decision_id,
 			"lastJustification": last_justification,
-			"defenseTier": defense_tier,
-			"mergedCount": merged_count,
-			"secondaryColor": secondary_color
+			"defense_tier": defense_tier,
+			"merged_count": merged_count,
+			"secondary_color": secondary_color
 		}
 
 	static func from_dict(dict_data: Dictionary) -> Deme:
@@ -442,12 +448,12 @@ class Deme extends RefCounted:
 		d.id = str(dict_data["id"])
 		d.name = str(dict_data["name"])
 		d.lineage_id = str(dict_data["lineageId"])
-		if dict_data.has("strategyId"):
-			d.strategy_id = str(dict_data["strategyId"])
-		elif dict_data.has("strategy_id"):
+		if dict_data.has("strategy_id"):
 			d.strategy_id = str(dict_data["strategy_id"])
+		elif dict_data.has("strategyId"):
+			d.strategy_id = str(dict_data["strategyId"])
 		d.color = str(dict_data["color"])
-		d.hex_id = str(dict_data["hexId"])
+		d.hex_id = str(dict_data["hex_id"]) if dict_data.has("hex_id") else str(dict_data["hexId"])
 		d.population = int(dict_data["population"])
 		d.energy_reserves = float(dict_data["energyReserves"])
 		d.last_energy_delta = float(dict_data["lastEnergyDelta"])
@@ -458,10 +464,10 @@ class Deme extends RefCounted:
 		for item in dict_data["culturalTraitIds"]:
 			d.cultural_trait_ids.append(str(item))
 		d.baldwin_counters = {}
-		var raw_bc: Dictionary = dict_data["baldwinCounters"]
+		var raw_bc: Dictionary = dict_data["baldwin_counters"] if dict_data.has("baldwin_counters") else dict_data["baldwinCounters"]
 		for k in raw_bc.keys():
 			d.baldwin_counters[str(k)] = int(raw_bc[k])
-		d.innovation_counter = float(dict_data["innovationCounter"])
+		d.innovation_counter = float(dict_data["innovation_counter"]) if dict_data.has("innovation_counter") else float(dict_data["innovationCounter"])
 		d.isolation_turns = int(dict_data["isolationTurns"])
 		d.decision_model_tag = str(dict_data["decisionModelTag"]) if dict_data.has("decisionModelTag") else EvoUserSettings.primary_model
 		d.last_confidence = float(dict_data["lastConfidence"]) if dict_data.has("lastConfidence") else 0.85
@@ -474,11 +480,17 @@ class Deme extends RefCounted:
 			var fallback_dec_id := d.last_dominant_decision_id if d.last_dominant_decision_id != "" else "dec-conservative-forage"
 			d.last_decision_probabilities = {fallback_dec_id: 1.0}
 		d.last_justification = str(dict_data["lastJustification"])
-		if dict_data.has("defenseTier"):
+		if dict_data.has("defense_tier"):
+			d.defense_tier = int(dict_data["defense_tier"])
+		elif dict_data.has("defenseTier"):
 			d.defense_tier = int(dict_data["defenseTier"])
-		if dict_data.has("mergedCount"):
+		if dict_data.has("merged_count"):
+			d.merged_count = int(dict_data["merged_count"])
+		elif dict_data.has("mergedCount"):
 			d.merged_count = int(dict_data["mergedCount"])
-		if dict_data.has("secondaryColor"):
+		if dict_data.has("secondary_color"):
+			d.secondary_color = str(dict_data["secondary_color"])
+		elif dict_data.has("secondaryColor"):
 			d.secondary_color = str(dict_data["secondaryColor"])
 		return d
 
@@ -521,7 +533,6 @@ class LineageNode extends RefCounted:
 			"id": id,
 			"name": name,
 			"parentId": parent_id,
-			"strategyId": strategy_id,
 			"strategy_id": strategy_id,
 			"color": color,
 			"foundedGeneration": founded_generation,
@@ -538,10 +549,10 @@ class LineageNode extends RefCounted:
 		n.id = str(d["id"])
 		n.name = str(d["name"])
 		n.parent_id = str(d["parentId"]) if d.has("parentId") and d["parentId"] != null else ""
-		if d.has("strategyId"):
-			n.strategy_id = str(d["strategyId"])
-		elif d.has("strategy_id"):
+		if d.has("strategy_id"):
 			n.strategy_id = str(d["strategy_id"])
+		elif d.has("strategyId"):
+			n.strategy_id = str(d["strategyId"])
 		n.color = str(d["color"])
 		n.founded_generation = int(d["foundedGeneration"])
 		n.extinct_generation = int(d["extinctGeneration"]) if d.has("extinctGeneration") and d["extinctGeneration"] != null else -1
@@ -599,11 +610,9 @@ class ChronicleEntry extends RefCounted:
 		return {
 			"id": id,
 			"generation": generation,
-			"eventType": event_type,
-			"type": event_type,
+			"event_type": event_type,
 			"title": title,
 			"causalExplanation": causal_explanation,
-			"description": causal_explanation,
 			"hexId": hex_id,
 			"demeId": deme_id,
 			"lineageId": lineage_id,
@@ -614,7 +623,7 @@ class ChronicleEntry extends RefCounted:
 		var e := ChronicleEntry.new()
 		e.id = str(d["id"])
 		e.generation = int(d["generation"])
-		e.event_type = str(d["eventType"]) if d.has("eventType") else (str(d["type"]) if d.has("type") else "")
+		e.event_type = str(d["event_type"]) if d.has("event_type") else (str(d["eventType"]) if d.has("eventType") else (str(d["type"]) if d.has("type") else ""))
 		e.title = str(d["title"])
 		e.causal_explanation = str(d["causalExplanation"]) if d.has("causalExplanation") else (str(d["description"]) if d.has("description") else "")
 		e.hex_id = str(d["hexId"])
@@ -646,8 +655,7 @@ class HexEdgeFlow extends RefCounted:
 		return {
 			"fromHexId": from_hex_id,
 			"toHexId": to_hex_id,
-			"type": flow_type,
-			"flowType": flow_type,
+			"flow_type": flow_type,
 			"intensity": intensity,
 			"fromDemeId": from_deme_id,
 			"toDemeId": to_deme_id
@@ -657,7 +665,7 @@ class HexEdgeFlow extends RefCounted:
 		var f := HexEdgeFlow.new()
 		f.from_hex_id = str(d["fromHexId"])
 		f.to_hex_id = str(d["toHexId"])
-		f.flow_type = str(d["type"]) if d.has("type") else (str(d["flowType"]) if d.has("flowType") else "migration")
+		f.flow_type = str(d["flow_type"]) if d.has("flow_type") else (str(d["type"]) if d.has("type") else (str(d["flowType"]) if d.has("flowType") else "migration"))
 		f.intensity = float(d["intensity"])
 		f.from_deme_id = str(d["fromDemeId"]) if d.has("fromDemeId") else ""
 		f.to_deme_id = str(d["toDemeId"]) if d.has("toDemeId") else ""
@@ -744,6 +752,8 @@ class WorldState extends RefCounted:
 		return s
 
 	func to_dict() -> Dictionary:
+		if has_meta("_in_flight_micro_phase") or has_meta("_step3_ctx") or has_meta("_turn_start_chronicle_count"):
+			EvoTurnEngine.complete_in_flight_turn(self)
 		var cells_dict := {}
 		for k in cells.keys():
 			cells_dict[k] = (cells[k] as HexCell).to_dict()
@@ -781,23 +791,19 @@ class WorldState extends RefCounted:
 			"unlimitedPressureMode": unlimited_pressure_mode,
 			"freeSandboxMode": free_sandbox_mode,
 			"autoPauseOnMilestone": auto_pause_on_milestone,
-			"strategyAId": strategy_a_id,
-			"strategyBId": strategy_b_id,
 			"strategy_a_id": strategy_a_id,
 			"strategy_b_id": strategy_b_id,
 			"cells": cells_dict,
 			"demes": demes_dict,
 			"traitsCatalog": traits_dict,
 			"decisionsCatalog": decisions_dict,
-			"strategiesCatalog": strategies_dict,
 			"strategies_catalog": strategies_dict,
 			"lineageTree": lineage_dict,
 			"chronicle": chron_arr,
 			"activeFlows": flows_arr,
-			"activePacts": active_pacts.duplicate(),
 			"active_pacts": active_pacts.duplicate(),
 			"recentExtinctionHexes": recent_extinction_hexes.duplicate(),
-			"disusedConnections": disused_connections.duplicate(true),
+			"disused_connections": disused_connections.duplicate(true),
 			"quietTurns": quiet_turns,
 			"previousPopulations": previous_populations.duplicate(),
 			"macroOutcomeType": macro_outcome_type,
@@ -819,23 +825,69 @@ class WorldState extends RefCounted:
 		s.unlimited_pressure_mode = bool(d["unlimitedPressureMode"])
 		s.free_sandbox_mode = bool(d["freeSandboxMode"])
 		s.auto_pause_on_milestone = bool(d["autoPauseOnMilestone"])
-		if d.has("strategyAId"):
-			s.strategy_a_id = str(d["strategyAId"])
-		elif d.has("strategy_a_id"):
+		if d.has("strategy_a_id"):
 			s.strategy_a_id = str(d["strategy_a_id"])
-		if d.has("strategyBId"):
-			s.strategy_b_id = str(d["strategyBId"])
-		elif d.has("strategy_b_id"):
+		elif d.has("strategyAId"):
+			s.strategy_a_id = str(d["strategyAId"])
+		if d.has("strategy_b_id"):
 			s.strategy_b_id = str(d["strategy_b_id"])
+		elif d.has("strategyBId"):
+			s.strategy_b_id = str(d["strategyBId"])
 		for k in d["cells"].keys():
 			s.cells[str(k)] = HexCell.from_dict(d["cells"][k])
 		for k in d["demes"].keys():
 			s.demes[str(k)] = Deme.from_dict(d["demes"][k])
+		var assigned_demes: Dictionary = {}
+		var extra_demes: Array[Deme] = []
+		for cid in s.cells.keys():
+			var cell: HexCell = s.cells[cid]
+			var kept_id := ""
+			for raw_did in cell.deme_ids:
+				if s.demes.has(raw_did) and not assigned_demes.has(raw_did):
+					var dm: Deme = s.demes[raw_did]
+					if kept_id == "" and cell.biome != "ocean" and cell.altitude <= 0.85:
+						kept_id = raw_did
+						dm.hex_id = cell.id
+						assigned_demes[raw_did] = true
+					else:
+						extra_demes.append(dm)
+						assigned_demes[raw_did] = true
+			cell.set_resident_deme_id(kept_id)
+		for did in s.demes.keys():
+			if not assigned_demes.has(did):
+				var dm: Deme = s.demes[did]
+				if s.cells.has(dm.hex_id):
+					var c: HexCell = s.cells[dm.hex_id]
+					if c.deme_ids.is_empty() and c.biome != "ocean" and c.altitude <= 0.85:
+						c.set_resident_deme_id(dm.id)
+						assigned_demes[did] = true
+						continue
+				extra_demes.append(dm)
+				assigned_demes[did] = true
+		for deme in extra_demes:
+			var origin_cell: HexCell = s.cells.get(deme.hex_id)
+			var best_cell: HexCell = null
+			var best_dist: int = 999999
+			var best_res: float = -1.0
+			for cid in s.cells.keys():
+				var cand: HexCell = s.cells[cid]
+				if cand.biome == "ocean" or cand.altitude > 0.85 or not cand.deme_ids.is_empty():
+					continue
+				var dist: int = HexMath.hex_distance(origin_cell.q, origin_cell.r, cand.q, cand.r) if origin_cell != null else 0
+				if dist < best_dist or (dist == best_dist and cand.current_resources > best_res):
+					best_dist = dist
+					best_res = cand.current_resources
+					best_cell = cand
+			if best_cell != null:
+				deme.hex_id = best_cell.id
+				best_cell.set_resident_deme_id(deme.id)
+			else:
+				s.demes.erase(deme.id)
 		for k in d["traitsCatalog"].keys():
 			s.traits_catalog[str(k)] = TraitDef.from_dict(d["traitsCatalog"][k])
 		for k in d["decisionsCatalog"].keys():
 			s.decisions_catalog[str(k)] = DecisionDef.from_dict(d["decisionsCatalog"][k])
-		var raw_strats: Dictionary = d["strategiesCatalog"] if d.has("strategiesCatalog") else (d["strategies_catalog"] if d.has("strategies_catalog") else {})
+		var raw_strats: Dictionary = d["strategies_catalog"] if d.has("strategies_catalog") else (d["strategiesCatalog"] if d.has("strategiesCatalog") else {})
 		for k in raw_strats.keys():
 			s.strategies_catalog[str(k)] = StrategyDef.from_dict(raw_strats[k])
 		for k in d["lineageTree"].keys():
@@ -845,7 +897,7 @@ class WorldState extends RefCounted:
 		for item in d["activeFlows"]:
 			s.active_flows.append(HexEdgeFlow.from_dict(item))
 		s.active_pacts = {}
-		var raw_pacts: Dictionary = d["activePacts"] if d.has("activePacts") else (d["active_pacts"] if d.has("active_pacts") else {})
+		var raw_pacts: Dictionary = d["active_pacts"] if d.has("active_pacts") else (d["activePacts"] if d.has("activePacts") else {})
 		for k in raw_pacts.keys():
 			s.active_pacts[str(k)] = int(raw_pacts[k])
 		s.recent_extinction_hexes = []
@@ -853,10 +905,10 @@ class WorldState extends RefCounted:
 			for item in d["recentExtinctionHexes"]:
 				s.recent_extinction_hexes.append(str(item))
 		s.disused_connections = []
-		if d.has("disusedConnections"):
-			for item in d["disusedConnections"]:
-				if item is Dictionary:
-					s.disused_connections.append((item as Dictionary).duplicate(true))
+		var raw_disused: Array = d["disused_connections"] if d.has("disused_connections") else (d["disusedConnections"] if d.has("disusedConnections") else [])
+		for item in raw_disused:
+			if item is Dictionary:
+				s.disused_connections.append((item as Dictionary).duplicate(true))
 		s.quiet_turns = int(d["quietTurns"]) if d.has("quietTurns") else 0
 		s.previous_populations = {}
 		if d.has("previousPopulations"):

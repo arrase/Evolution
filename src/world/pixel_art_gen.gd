@@ -122,18 +122,12 @@ static func ensure_all_assets(force_rebuild: bool = false) -> void:
 	if _initialized and not force_rebuild:
 		return
 	_initialized = true
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://assets/sprites/terrain"))
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://assets/sprites/villages"))
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://assets/sprites/ui"))
-
-	for s_name in HEX_TILE_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/terrain/%s.png" % s_name, force_rebuild)
-	for s_name in TERRAIN_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/terrain/%s.png" % s_name, force_rebuild)
-	for s_name in VILLAGE_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/villages/%s.png" % s_name, force_rebuild)
+	if force_rebuild:
+		_image_cache.clear()
+		_texture_cache.clear()
+		_villager_colored_cache.clear()
 	for s_name in UI_SPRITES:
-		_generate_and_register(s_name, "res://assets/sprites/ui/%s.png" % s_name, force_rebuild)
+		_generate_and_register(s_name)
 
 
 static func get_texture(sprite_name: String) -> ImageTexture:
@@ -174,17 +168,8 @@ static func get_villager_texture(pose: String, tunic_color: Color) -> ImageTextu
 	return tex
 
 
-static func _generate_and_register(sprite_name: String, file_path: String, force_rebuild: bool = false) -> void:
-	var abs_path := ProjectSettings.globalize_path(file_path)
-	var img: Image
-	if not force_rebuild and FileAccess.file_exists(abs_path):
-		img = Image.load_from_file(abs_path)
-		if sprite_name.begins_with("hex_tile_") and img.get_width() < 224:
-			img = _build_sprite_image(sprite_name)
-			img.save_png(abs_path)
-	else:
-		img = _build_sprite_image(sprite_name)
-		img.save_png(abs_path)
+static func _generate_and_register(sprite_name: String) -> void:
+	var img := _build_sprite_image(sprite_name)
 	_image_cache[sprite_name] = img
 	_texture_cache[sprite_name] = ImageTexture.create_from_image(img)
 

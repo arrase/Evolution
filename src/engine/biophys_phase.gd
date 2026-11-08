@@ -42,7 +42,7 @@ static func _build_edge_flows(
 			state.active_flows.append(geo_flow)
 
 
-static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es") -> void:
+static func run_ecology_and_borders_step(state: EvoTypes.WorldState, lang: String = "es") -> Dictionary:
 	var initial_pop_by_deme: Dictionary = {}
 	var effective_vec_by_deme: Dictionary = {}
 	var hawk_penalty_by_deme: Dictionary = {}
@@ -67,6 +67,46 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 		extracted_energy_by_deme,
 		turn_geopolitical_flows
 	)
+	_build_edge_flows(state, turn_geopolitical_flows)
+
+	var ctx := {
+		"initial_pop_by_deme": initial_pop_by_deme,
+		"effective_vec_by_deme": effective_vec_by_deme,
+		"hawk_penalty_by_deme": hawk_penalty_by_deme,
+		"extracted_energy_by_deme": extracted_energy_by_deme,
+		"turn_geopolitical_flows": turn_geopolitical_flows
+	}
+	state.set_meta("_step3_ctx", ctx)
+	return ctx
+
+
+static func run_demography_and_migration_step(state: EvoTypes.WorldState, lang: String = "es") -> void:
+	var initial_pop_by_deme: Dictionary = {}
+	var effective_vec_by_deme: Dictionary = {}
+	var hawk_penalty_by_deme: Dictionary = {}
+	var extracted_energy_by_deme: Dictionary = {}
+	var turn_geopolitical_flows: Array[EvoTypes.HexEdgeFlow] = []
+
+	if state.has_meta("_step3_ctx"):
+		var ctx: Dictionary = state.get_meta("_step3_ctx")
+		state.remove_meta("_step3_ctx")
+		initial_pop_by_deme = ctx["initial_pop_by_deme"]
+		effective_vec_by_deme = ctx["effective_vec_by_deme"]
+		hawk_penalty_by_deme = ctx["hawk_penalty_by_deme"]
+		extracted_energy_by_deme = ctx["extracted_energy_by_deme"]
+		turn_geopolitical_flows = ctx["turn_geopolitical_flows"]
+
+	for did in state.demes.keys():
+		var deme: EvoTypes.Deme = state.demes[did]
+		if not initial_pop_by_deme.has(deme.id):
+			initial_pop_by_deme[deme.id] = deme.population
+		if not hawk_penalty_by_deme.has(deme.id):
+			hawk_penalty_by_deme[deme.id] = 1.0
+		if not extracted_energy_by_deme.has(deme.id):
+			extracted_energy_by_deme[deme.id] = 0.0
+		if not effective_vec_by_deme.has(deme.id):
+			effective_vec_by_deme[deme.id] = compute_effective_vector(deme, state)
+
 	EvoDemographyMigration.run_demography_and_migration_phase(
 		state,
 		lang,
@@ -77,3 +117,8 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 		turn_geopolitical_flows
 	)
 	_build_edge_flows(state, turn_geopolitical_flows)
+
+
+static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es") -> void:
+	run_ecology_and_borders_step(state, lang)
+	run_demography_and_migration_step(state, lang)

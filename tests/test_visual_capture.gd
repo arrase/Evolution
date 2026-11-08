@@ -15,10 +15,10 @@ func _wait_and_save(main: EvoMainController, filename: String) -> void:
 	if main.hud._missing_models_modal != null:
 		main.hud._missing_models_modal.visible = false
 	main.world_renderer.refresh()
-	for _i in range(6):
-		await process_frame
-	RenderingServer.force_draw(false)
+	main.world_renderer._process(0.016)
 	await process_frame
+	await process_frame
+	RenderingServer.force_draw(false)
 	var img: Image = root.get_texture().get_image()
 	var full_path: String = "%s/%s" % [OUTPUT_DIR, filename]
 	var err: Error = img.save_png(full_path)
@@ -79,7 +79,7 @@ func _run_captures() -> void:
 	if main.hud._legend_panel.visible:
 		main.hud._on_legend_toggle_pressed()
 
-	# Advance Finite Island a few more turns and trigger a Baldwin & Speciation event so Chronicle and Lineage Tree are rich
+	# Advance Finite Island a few more turns and trigger a Baldwin & Innovation event so Chronicle and Lineage Tree are rich
 	for _g in range(4):
 		main.step_generation()
 	if not main.world_state.demes.is_empty():
@@ -102,8 +102,12 @@ func _run_captures() -> void:
 		var f_deme: EvoTypes.Deme = main.world_state.demes["deme-darwin-founder"]
 		if main.world_state.cells.has(f_deme.hex_id):
 			(main.world_state.cells[f_deme.hex_id] as EvoTypes.HexCell).deme_ids.erase(f_deme.id)
+		var target_cell: EvoTypes.HexCell = main.world_state.cells["0,-2"]
+		var prev_occ := target_cell.get_resident_deme_id()
+		if prev_occ != "" and prev_occ != f_deme.id and main.world_state.demes.has(prev_occ):
+			main.world_state.demes.erase(prev_occ)
 		f_deme.hex_id = "0,-2"
-		(main.world_state.cells["0,-2"] as EvoTypes.HexCell).deme_ids.append(f_deme.id)
+		target_cell.set_resident_deme_id(f_deme.id)
 		f_deme.isolation_turns = 10
 		EvoMilestonePhase.run_milestone_phase(main.world_state, main.lang)
 	main.hud.open_tree_modal()

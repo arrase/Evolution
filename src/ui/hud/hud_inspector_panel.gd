@@ -23,7 +23,7 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 	hud._inspector_frame.anchor_bottom = 0.0
 	hud._inspector_frame.offset_left = -356
 	hud._inspector_frame.offset_right = -10
-	hud._inspector_frame.offset_top = 132
+	hud._inspector_frame.offset_top = 158
 	hud._inspector_frame.offset_bottom = 865
 	hud._inspector_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
 	hud.add_child(hud._inspector_frame)

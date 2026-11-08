@@ -6,11 +6,11 @@ Rather than relying on random unstructured noise, the simulator ships with three
 
 ---
 
-## Hexagonal Grid Geometry (`HexMath`)
+## Hexagonal Grid Geometry & Sovereign Cell Invariant (`HexMath` & `EvoTypes.HexCell`)
 
 Every world is a pointy-top hexagonal spiral centered at axial coordinate $(q, r) = (0, 0)$ with cube constraint $s = -q - r$ ($q + r + s = 0$).
 
-### Coordinate System & Spiral Generation
+### Coordinate System, Spiral Generation & Single-Resident Deme Invariant
 
 * **Hex Cell Identifier**: Stored as `"%d,%d" % [q, r]` (e.g., `"0,0"`, `"-2,1"`, `"2,-1"`).
 * **Spiral Generation (`HexMath.generate_hex_spiral(radius)`)**: Iterates over $q \in [-R, +R]$ and $r \in [\max(-R, -q - R), \min(R, -q + R)]$. The total number of hexagonal cells for map radius $R$ is:
@@ -23,10 +23,8 @@ Every world is a pointy-top hexagonal spiral centered at axial coordinate $(q, r
   $$\big[(+1, 0),\ (+1, -1),\ (0, -1),\ (-1, 0),\ (-1, +1),\ (0, +1)\big]$$
 * **Pointy-Top World Plane Projection (`HexMath.axial_to_world`, $\text{HEX\_SIZE} = 240.0$)**:
   $$x = 240.0 \cdot \sqrt{3} \cdot (q + 0.5r), \qquad y = 240.0 \cdot 1.5 \cdot r$$
-* **Multi-Village Sector Offsets (`HexMath.compute_village_sector_offset`)**: Up to **3 demes** can cohabit a single hex cell simultaneously. When multiple demes occupy the same hex, their plazas are arranged symmetrically around the hex center:
-  * **1 Deme**: Center $(0, 0)$ at scale $1.00\times$.
-  * **2 Demes**: Opposite diagonal offsets $(\mp 0.45 \cdot \text{HEX\_SIZE},\ \mp 0.14 \cdot \text{HEX\_SIZE})$ at scale $0.86\times$.
-  * **3 Demes**: Radial triad at angles $\big[-90^\circ,\ +32.4^\circ,\ +147.6^\circ\big]$ and radius $0.48\text{–}0.52 \cdot \text{HEX\_SIZE}$ at scale $0.78\times$.
+* **Strictly 1 Resident Deme Per HexCell (`cell.deme_ids.size() <= 1`)**:
+  Each terrestrial `HexCell` hosts **at most 1 resident deme** (`cell.get_resident_deme_id() -> String`, `cell.set_resident_deme_id(deme_id: String)`). Every occupied cell renders a single sovereign **Concentric Morphological Settlement** centered at $(0, 0)$ on the hex plateau (`Ring 0` Core Plaza & Citadel, `Ring 1` Trait Crown, and `Ring 2` Defense Perimeter & Flora), and all inter-deme interactions occur across shared hex borders (`HexEdgeFlow`).
 
 ---
 
@@ -36,7 +34,7 @@ Each `HexCell` stores its active `biome`, `temperature` ($[-1.0, +1.0]$), `humid
 
 The baseline biophysical parameters defined in `EvoTypes.BIOME_CLIMATE_DEFAULTS` are:
 
-| Biome ID | Display Name (EN / ES) | Temp ($T$) | Humidity ($H$) | Altitude Range (`min`–`max`) | Seasonal Regen ($r_{\text{regen}}$) | Base $K_{\max}$ | Ecological Role & Flora Props |
+| Biome ID | Display Name (EN / ES) | Temp ($T$) | Humidity ($H$) | Altitude Range (`min`–`max`) | Seasonal Regen ($r_{\text{regen}}$) | Base $K_{\max}$ | Ecological Role & Procedural Vector Flora |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | `tropical_forest` | **Tropical Forest** / *Bosque Tropical* | `+0.45` | `0.85` | `0.28 – 0.65` | `0.28` | `600.0` | High-biomass, high-regeneration sanctuary that favors conservative foraging (`dec-conservative-forage`). |
 | `savanna` | **Savanna** / *Sabana* | `+0.50` | `0.40` | `0.28 – 0.65` | `0.18` | `420.0` | Intermediate seasonal mosaic; rewards food storage, cooperation, and selective migration during dry cycles. |
@@ -44,7 +42,7 @@ The baseline biophysical parameters defined in `EvoTypes.BIOME_CLIMATE_DEFAULTS`
 | `tundra` | **Tundra** / *Tundra* | `-0.55` | `0.35` | `0.35 – 0.74` | `0.10` | `240.0` | Sub-zero boreal habitat; imposes steep thermal metabolic costs unless buffered by high `spatial_mobility` / `bio-thermal-tolerance`. |
 | `high_mountain` | **High Mountain** / *Alta Montaña* | `-0.40` | `0.25` | `0.78 – 0.98` | `0.08` | `140.0` | Tectonic barrier ridge. Traversable only when $\text{altitude} \le 0.85$ and $(\text{altitude} - 0.50) \le v_{\text{eff}}.\text{spatial\_mobility}$. |
 | `coastal_shallows` | **Coastal Shallows** / *Bajíos Costeros* | `+0.20` | `0.70` | `0.14 – 0.24` | `0.20` | `260.0` | Intertidal land bridges (`alt = 0.18` in Darwin's Archipelago) that periodically emerge and flood with sea-level changes. |
-| `ocean` | **Ocean** / *Océano* | `+0.10` | `0.90` | `0.02 – 0.08` | `0.02` | `50.0` | Deep marine barrier ($R = 0.0$). Impassable to terrestrial demes; submergence displaces or extinguishes resident populations. |
+| `ocean` | **Ocean** / *Océano* | `+0.10` | `0.90` | `0.02 – 0.08` | `0.02` | `50.0` | Deep marine barrier ($R = 0.0$) shaded by `OCEAN_SHADER_CODE`. Impassable to terrestrial demes; submergence triggers the 3-step displacement cascade. |
 
 ### Passability & Barrier Traversal Formula
 
@@ -59,7 +57,7 @@ $$\text{Passable}(\text{ncell}, v_{\text{eff}}) \iff \text{ncell.biome} \neq \te
 
 ## Dynamic Environmental Cycles (`EvoEnvPhase`)
 
-At the start of every generation (`EvoEnvPhase.run_environmental_phase`), the physical world evolves through four deterministic environmental mechanisms:
+At the start of every generation (`EvoTurnEngine.step_phase_1_environment` / `EvoEnvPhase.run_environmental_phase`), the physical world evolves through four deterministic environmental mechanisms:
 
 ```mermaid
 flowchart TD
@@ -67,7 +65,7 @@ flowchart TD
     Glacial -- "Yes" --> SeaToggle["Toggle Sea Level:\n0.12 (Low Tide) ↔ 0.25 (High Tide)"]
     Glacial -- "No" --> FloodCheck["Evaluate Coastal Elevation vs. sea_level"]
     SeaToggle --> FloodCheck
-    FloodCheck --> Submerge["alt < sea_level → biome = 'ocean'\nDisplace Demes (−20% Reserves) or Drown"]
+    FloodCheck --> Submerge["alt < sea_level → biome = 'ocean'\n3-Step Displacement Cascade:\nEmpty Neighbor → Ally/Kin Merge → Extinction"]
     FloodCheck --> Emerge["alt >= sea_level (was ocean) → Emerge Land\ncoastal_shallows / savanna / steppe / mountain"]
     Submerge & Emerge --> Regen["Oscillate Cell Temp (±0.04) & Humidity (±0.05)\nRecover K (+5% or +0.5% if Collapsed)\nRegenerate Biomass R = min(K, R + K · r_regen · γ_season)"]
 ```
@@ -77,7 +75,7 @@ Every generation alternates between **Warm Spring (`wet_warm`)** and **Dry Winte
 
 * **Seasonal Biomass Multiplier ($\gamma_{\text{season}}$)**:
   $$\gamma_{\text{season}} = \begin{cases} 1.20 & \text{if } \text{season} = \text{"wet\_warm"} \\ 0.75 & \text{if } \text{season} = \text{"dry\_cold"} \end{cases}$$
-* **Thermal & Hydric Drift**: Every non-ocean hex shifts by $\Delta T = \pm 0.04$ (clamped to $[-1.0, +1.0]$) and $\Delta H = \pm 0.05$ (clamped to $[0.0, +1.0]$).
+* **GPU Shader Warmth & Thermal Drift**: Updates the `season_warmth` uniform on `TERRAIN_SHADER_CODE` (`1.0` in `wet_warm`, `0.0` in `dry_cold`), and shifts every non-ocean hex by $\Delta T = \pm 0.04$ (clamped to $[-1.0, +1.0]$) and $\Delta H = \pm 0.05$ (clamped to $[0.0, +1.0]$).
 
 ### 2. Glacial Sea-Level Cycles & Land Bridges
 When `state.glacial_sea_level_cycle == true` (active by default in `preset-darwin-archipelago`), global sea level oscillates every **8 generations**:
@@ -88,12 +86,12 @@ $$\text{sea\_level}(t) = \begin{cases} 0.12 \ (\text{Low Tide — Land Bridges E
 * **Generations `8–15`**: `sea_level = 0.25` — coastal shallows flood into `ocean`, isolating island populations for 8 consecutive turns.
 * **Generations `16–23`**: `sea_level = 0.12` — land bridges re-emerge as `coastal_shallows` with $K_{\max} = \max(160.0, K_{\max})$, $K = \max(\text{round}(0.88 \cdot K_{\max}), K)$, and $R = \max(R, \text{round}(0.35 \cdot K))$.
 
-### 3. Coastal Submergence & Deme Relocation
-Whenever a hex's `altitude` falls below `state.sea_level` (via glacial cycles or God-mode altitude/sea-level tools), it converts to `"ocean"` and any resident demes must evacuate immediately:
+### 3. Coastal Submergence & 3-Step Displacement Cascade (`evacuate_or_merge_displaced_deme`)
+Whenever a hex's `altitude` falls below `state.sea_level` (via glacial cycles or God-mode altitude/sea-level tools), it converts to `"ocean"` and any resident deme resolves via `EvoDemographyMigration.evacuate_or_merge_displaced_deme`:
 
-1. The engine scans all 6 adjacent neighbor hexes for valid refuges (`ncell.biome != "ocean"`, `ncell.deme_ids.size() < 3`, and `ncell.altitude <= 0.85`), sorted by highest `current_resources` ($R$).
-2. **Emergency Relocation**: If a refuge exists, the deme relocates to the best neighbor, suffers a **$20\%$ energy reserve penalty** ($E_{\text{reserves}} \leftarrow 0.80 \cdot E_{\text{reserves}}$), and generates a `"migration"` flow (`intensity = 0.80`).
-3. **Submergence Extinction**: If all surrounding hexes are ocean, impassable peaks (`altitude > 0.85`), or full ($3$ demes), the deme drowns—recording an `"extinction"` entry in the Chronicle and leaving behind sunken `ruins`.
+1. **Step 1 — Empty Passable Neighbor Evacuation**: Scans all 6 adjacent neighbor hexes for uninhabited passable refuges (`ncell.biome != "ocean"`, `ncell.deme_ids.is_empty()`, and `ncell.altitude <= 0.85`), relocating to the one with highest `current_resources` ($R$) with `defense_tier = 0`, a **$20\%$ energy reserve penalty** ($E_{\text{reserves}} \leftarrow 0.80 \cdot E_{\text{reserves}}$), and a `"migration"` flow (`intensity = 0.80`).
+2. **Step 2 — Allied or Kin Neighbor Refugee Merge**: If all passable neighbor hexes are already occupied, searches adjacent occupied passable hexes for an active Pact ally (`is_pact_active`) or compatible kin (`lineage_id == victim.lineage_id` or `compute_deme_divergence <= 0.35`), merging the displaced refugees into the largest refuge partner (`ally.population += victim.population`, `ally.merged_count += 1`) and spawning a `"merge"` flow.
+3. **Step 3 — Submergence Extinction**: If neither an empty neighbor nor an allied/kin refuge exists, the deme drowns—recording an `"extinction"` entry in the Chronicle and leaving behind sunken `ruins`.
 
 ### 4. Passive Carrying Capacity ($K$) & Biomass ($R$) Regeneration
 Each non-ocean cell recovers its carrying capacity $K$ toward $K_{\max}$ and replenishes available food $R$:
@@ -109,8 +107,6 @@ $$R_{t+1} = \min\Big(K_{t+1},\ R_t + K_{t+1} \cdot r_{\text{regen}} \cdot \gamma
 ## Deep-Dive: The 3 Scientific World Presets & 1v1 Strategy Matchups
 
 Every preset world (`EvoPresets.create_preset_world(preset_id, lang, strategy_a_id, strategy_b_id)`) initializes a balanced **1v1 Evolutionary Strategy Duel** between **Founder A (`state.strategy_a_id`)** and **Founder B (`state.strategy_b_id`)**. By default, `strategy_a_id` is `strat-cooperation` (🤝 Cooperative Alliance, `#10B981`) and `strategy_b_id` is `strat-war` (⚔️ Conquering Horde, `#EF4444`), and players can switch either slot to any of the 5 base archetypes or custom user strategies (`~/.config/Evolution/user_catalog.json`) via the Top HUD Matchup Bar at Generation 0.
-
-When a preset builds its founding subpopulations, `EvoCatalog.apply_strategy_to_deme(state, deme, strategy_id, lang)` assigns each founder's `strategy_id`, `color`, `biological_trait_ids`, and `cultural_trait_ids` (enforcing `deme_has_cultural_capacity`), and synchronizes its root `LineageNode`.
 
 ### 1. The Rift Valley (`preset-rift-savanna`)
 
@@ -132,9 +128,6 @@ When a preset builds its founding subpopulations, `EvoCatalog.apply_strategy_to_
   | :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
   | **Strategy A** | `deme-rift-west`<br>**Western Forest Hominids**<br>*Homínidos del Bosque Occidental* | `lineage-rift-west`<br>**Western Rift Lineage**<br>*Linaje Occidental del Rift* | `-2,1`<br>(`tropical_forest`) | `140` | `180.0` | `+12.0` | `state.strategy_a_id`<br>*(Default: `strat-cooperation` 🤝)* | `d3:4b` |
   | **Strategy B** | `deme-rift-east`<br>**Eastern Savanna Hominids**<br>*Homínidos de la Sabana Oriental* | `lineage-rift-east`<br>**Eastern Rift Lineage**<br>*Linaje Oriental del Rift* | `2,-1`<br>(`arid_steppe`) | `140` | `180.0` | `+8.0` | `state.strategy_b_id`<br>*(Default: `strat-war` ⚔️)* | `tev1:4b` |
-* **Evolutionary Dynamics**:
-  * **Western Forest Hominids (`-2,1`)** inhabit high-biomass `tropical_forest` ($R = 560, K = 600$), enabling steady demographic growth and western basin expansion.
-  * **Eastern Savanna Hominids (`2,-1`)** face lower humidity (`0.30`) and seasonal scarcity in the eastern mosaic, driving cooperation, storage, selective migration through the central pass `(0, 0)`, **Baldwin genetic assimilation** (`baldwin_counters >= 8`), **Cumulative Cultural Innovation**, and **Allopatric Speciation**.
 
 ---
 
@@ -160,16 +153,12 @@ When a preset builds its founding subpopulations, `EvoCatalog.apply_strategy_to_
   | :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
   | **Strategy A** | `deme-darwin-founder`<br>**Western Island Founders**<br>*Fundadores Insulares del Oeste* | `lineage-darwin-a`<br>**Western Archipelago Lineage**<br>*Linaje Occidental del Archipiélago* | `-1,0`<br>(`tropical_forest`) | `95` | `165.0` | `+12.0` | `state.strategy_a_id`<br>*(Default: `strat-cooperation` 🤝)* | `d3:4b` |
   | **Strategy B** | `deme-darwin-rival`<br>**Eastern Island Rivals**<br>*Rivales Insulares del Este* | `lineage-darwin-b`<br>**Eastern Archipelago Lineage**<br>*Linaje Oriental del Archipiélago* | `1,0`<br>(`tropical_forest`) | `95` | `165.0` | `+10.0` | `state.strategy_b_id`<br>*(Default: `strat-war` ⚔️)* | `tev1:4b` |
-* **Evolutionary Dynamics**:
-  * Both rival founders begin on symmetric high-ground island perches (`-1,0` and `1,0`, `K = 220`) flanking the central hub `(0, 0)`.
-  * During **Generations 1–7** (low tide, `sea_level = 0.12`), exposed coastal land bridges (`0,-1`, `0,1`, `2,0`) allow budding daughter demes from both strategies to race across the central hub onto the outer Tundra (`0,-2`, `0,-3`), Southern Tropical (`0,2`, `0,3`), and Eastern Arid Steppe (`3,0`, `3,-1`) islands.
-  * At **Generation 8**, `sea_level` rises to `0.25`, submerging the 3 land bridges (`altitude = 0.18 < 0.25`) into `ocean`. Any deme still standing on a bridge flees onto an adjacent island or drowns, and isolated island colonies accumulate `isolation_turns` until reaching $\ge 10$ turns and diverging via **Allopatric Speciation** into new child species in `lineage_tree` (while retaining their parent `strategy_id`).
 
 ---
 
 ### 3. The Finite Island (`preset-finite-island`)
 
-> **Scientific Hypothesis**: *The Tragedy of the Commons & Cultural Stewardship* — How two competing clans sharing a bounded island ecosystem with slow biomass regeneration ($r_{\text{regen}} = 0.08$) either exhaust their carrying capacity $K$ through intensive overexploitation and Hawk-Dove conflict, or stabilize via Communal Conservation Norms and Reciprocal Symbiosis.
+> **Scientific Hypothesis**: *The Tragedy of the Commons & Cultural Stewardship* — How two competing clans occupying neighboring territories on a bounded island ecosystem with slow biomass regeneration ($r_{\text{regen}} = 0.08$) either exhaust their carrying capacity $K$ through intensive overexploitation and inter-cell Hawk-Dove border conflict, or stabilize via Communal Conservation Norms and Inter-Cell Symbiosis.
 
 ![The Finite Island — Ecological Health Lens & Valley Legend](assets/img/screenshot_finite_island.png)
 
@@ -185,6 +174,3 @@ When a preset builds its founding subpopulations, `EvoCatalog.apply_strategy_to_
   | :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
   | **Strategy A** | `deme-island-1`<br>**Northern Quarry Clan**<br>*Clan de la Cantera Norte* | `lineage-island-1`<br>**Northern Quarry Lineage**<br>*Linaje de la Cantera Norte* | `-1,0`<br>(`savanna`) | `95` | `140.0` | `+8.0` | `state.strategy_a_id`<br>*(Default: `strat-cooperation` 🤝)* | `d3:4b` |
   | **Strategy B** | `deme-island-2`<br>**Southern Timber Clan**<br>*Clan Maderero del Sur* | `lineage-island-2`<br>**Southern Timber Lineage**<br>*Linaje Maderero del Sur* | `1,0`<br>(`savanna`) | `95` | `140.0` | `+8.0` | `state.strategy_b_id`<br>*(Default: `strat-war` ⚔️)* | `tev1:4b` |
-* **Evolutionary Dynamics**:
-  * **Northern Quarry Clan (`-1,0`, Strategy A)** and **Southern Timber Clan (`1,0`, Strategy B)** start on opposite sides of the fertile savanna core ($d \le 1$, where natural regeneration is constrained to $r_{\text{regen}} = 0.08$).
-  * When an extractive or martial strategy (`strat-war` ⚔️ or `strat-innovation` 🔬 carrying `cul-extraction-tools` without `cul-communal-conservation`) expands across the island, intensive harvesting degrades $K$ by $18\% \cdot \sum v_{\text{eff}}.\text{ecological\_impact}$ per turn until $K < 0.60 \cdot K_{\max}$ triggers the **Tragedy of the Commons**—whereas cooperative or mercantile strategies (`strat-cooperation` 🤝, `strat-trade` ⚖️) preserve $K$ and build symbiotic trade networks.

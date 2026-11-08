@@ -456,7 +456,7 @@ static func can_enqueue_jobs() -> bool:
 
 static func needs_prefetch() -> bool:
 	_mutex.lock()
-	var ok := _can_enqueue_locked() and (not _worker_running or _pending_jobs_by_sig.size() < 2)
+	var ok := _can_enqueue_locked() and (not _worker_running or _pending_jobs_by_sig.size() < 4)
 	_mutex.unlock()
 	return ok
 
@@ -510,13 +510,14 @@ static func sync_and_enqueue_batch(
 ) -> Dictionary:
 	var live_results: Dictionary = {}
 	var missing_sigs: Array[String] = []
+	var avail_slots: int = 0
 	if not buckets.is_empty():
 		_mutex.lock()
 		var can_enq := enqueue_missing and _can_enqueue_locked()
-		if not _worker_running:
-			for pending_sig in _pending_jobs_by_sig.keys():
-				if not buckets.has(pending_sig):
-					_pending_jobs_by_sig.erase(pending_sig)
+		for pending_sig in _pending_jobs_by_sig.keys():
+			if not buckets.has(pending_sig):
+				_pending_jobs_by_sig.erase(pending_sig)
+		avail_slots = maxi(0, 8 - _pending_jobs_by_sig.size())
 		for sig in buckets.keys():
 			if _live_signature_cache.has(sig):
 				live_results[sig] = (_live_signature_cache[sig] as Dictionary).duplicate(true)
@@ -526,7 +527,7 @@ static func sync_and_enqueue_batch(
 		_mutex.unlock()
 
 	var new_jobs: Array[Dictionary] = []
-	var max_new := mini(3, maxi(0, 8 - _pending_jobs_by_sig.size()))
+	var max_new := mini(4, avail_slots)
 	for i in range(mini(max_new, missing_sigs.size())):
 		var sig := missing_sigs[i]
 		var rep_deme: EvoTypes.Deme = buckets[sig]["representative"]
@@ -550,15 +551,16 @@ static func prefetch_for_reps(reps_by_sig: Dictionary, state: EvoTypes.WorldStat
 	var missing_sigs: Array[String] = []
 	_mutex.lock()
 	var can_enq := _can_enqueue_locked()
-	if not _worker_running:
-		for pending_sig in _pending_jobs_by_sig.keys():
-			if not reps_by_sig.has(pending_sig):
-				_pending_jobs_by_sig.erase(pending_sig)
-	if can_enq and _pending_jobs_by_sig.size() < 8:
+	for pending_sig in _pending_jobs_by_sig.keys():
+		if not reps_by_sig.has(pending_sig):
+			_pending_jobs_by_sig.erase(pending_sig)
+	var avail_slots := maxi(0, 8 - _pending_jobs_by_sig.size())
+	var max_prefetch := mini(4, avail_slots)
+	if can_enq and max_prefetch > 0:
 		for sig in reps_by_sig.keys():
 			if not _live_signature_cache.has(sig) and not _pending_jobs_by_sig.has(sig):
 				missing_sigs.append(str(sig))
-				if _pending_jobs_by_sig.size() + missing_sigs.size() >= 8 or missing_sigs.size() >= 2:
+				if missing_sigs.size() >= max_prefetch:
 					break
 	_mutex.unlock()
 

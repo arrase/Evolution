@@ -10,7 +10,7 @@ hide:
   </div>
   <h1>Evolution</h1>
   <p class="hero-subtitle">
-    An interactive bio-cultural and evolutionary population simulator built with Godot 4.7. Configure <strong>1v1 Evolutionary Strategy Duels (<code>Strategy A ⚔️ Strategy B</code>)</strong>, forge custom strategies and traits, and shape climates, terrain altitude, sea levels, and carrying capacity ($K$) on a handcrafted 2.5D isometric hexagonal ecosystem—while local subpopulations (<em>demes</em>) autonomously adapt, migrate, cooperate, innovate, or diverge into new species.
+    An interactive bio-cultural and evolutionary population simulator built with Godot 4.7. Configure <strong>1v1 Evolutionary Strategy Duels (<code>Strategy A ⚔️ Strategy B</code>)</strong>, forge custom strategies and traits, and shape climates, terrain altitude, sea levels, and carrying capacity ($K$) on a high-definition 2.5D procedural vector and GPU-shader hexagonal ecosystem with concentric morphological living settlements and a 3-tier semantic zoom lens—while sovereign local subpopulations (<em>demes</em>, strictly one per hex cell) autonomously adapt, migrate, cooperate, innovate, or diverge into new species across shared hexagonal borders.
   </p>
   <div class="hero-badges">
     <a href="https://github.com/arrase/Evolution/actions/workflows/ci.yml"><img src="https://github.com/arrase/Evolution/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -44,8 +44,8 @@ hide:
   <div class="feature-card">
     <div>
       <i class="fa-solid fa-brain feature-icon" aria-hidden="true"></i>
-      <h3>Dual-Model Cognitive Engine &amp; Memory</h3>
-      <p>Deterministically distributes rival factions across primary (<code>d3:4b</code>) and secondary (<code>tev1:4b</code>) Ollama System 1 models with a 6-generation historical memory digest, rich neighbor relational tags, and $75\%/25\%$ environmental blending.</p>
+      <h3>Dual-Model Cognitive Engine &amp; 4-Phase Playback</h3>
+      <p>Deterministically distributes rival factions across primary (<code>d3:4b</code>) and secondary (<code>tev1:4b</code>) Ollama System 1 models with <code>BorderCompetition</code> state prompts, 6-generation historical memory, $75\%/25\%$ environmental blending, and a 4-pip Turn Phase Bar (<code>1. Env</code>, <code>2. Mind</code>, <code>3. Clash</code>, <code>4. Lineage</code>).</p>
     </div>
   </div>
   <div class="feature-card">
@@ -58,15 +58,15 @@ hide:
   <div class="feature-card">
     <div>
       <i class="fa-solid fa-chess-knight feature-icon" aria-hidden="true"></i>
-      <h3>Fortifications, Diplomacy &amp; Synoecism</h3>
-      <p>Populations build 3-tier fortifications (<strong>Palisade</strong>, <strong>Stone Wall</strong>, <strong>Castle</strong>), forge <strong>Alliance Pacts</strong> &amp; <strong>Defensive Coalitions</strong>, harbor <strong>Vendettas</strong>, pay <strong>Tribute</strong>, repel <strong>Sieges</strong>, and unite into <strong>Tier 5 Metropolises</strong>.</p>
+      <h3>Sovereign Hex Borders, Fortifications &amp; Synoecism</h3>
+      <p>Each hex cell hosts at most 1 resident deme (<code>cell.deme_ids.size() <= 1</code>). Settlements build Concentric Morphological Settlements (Ring 0 Citadel, Ring 1 Trait Crown, Ring 2 Defense Perimeter), clash or trade across shared hex borders, resolve displacement via a 3-step cascade, and unite into <strong>Tier 5 Metropolises</strong>.</p>
     </div>
   </div>
   <div class="feature-card">
     <div>
       <i class="fa-solid fa-wand-magic-sparkles feature-icon" aria-hidden="true"></i>
-      <h3>God-Mode Selective Pressure</h3>
-      <p>Wield a 10-slot brush dock to sculpt biomes, raise tectonic ridges, flood glacial archipelagos, enrich carrying capacity $K$, or forge and inject custom strategies, traits, and decisions in the Evolutionary Laboratory.</p>
+      <h3>3-Tier Semantic Zoom &amp; God-Mode Tools</h3>
+      <p>Zoom seamlessly across <code>Macro</code> (`< 0.68`), <code>Meso</code> (`0.68–1.35`), and <code>Micro</code> (`>= 1.35`) semantic tiers while wielding a 10-slot brush dock to sculpt biomes, raise tectonic ridges, flood glacial archipelagos, or enrich carrying capacity $K$.</p>
     </div>
   </div>
 </div>
@@ -104,22 +104,21 @@ At Generation 0, every scenario sets up a head-to-head evolutionary experiment b
 
 ---
 
-## How the Generational Loop Works
+## How the Generational Loop & 4-Step Micro-Phase Playback Work
 
-Unlike traditional strategy games where players issue unit-level movement orders, **Evolution** strictly separates **behavioral intent** (probabilistic decision-making per deme) from **biophysical consequence** (deterministic laws of energy conservation, carrying capacity $K$, metabolic expenditure, and demography):
+Unlike traditional strategy games where players issue unit-level movement orders, **Evolution** strictly separates **behavioral intent** (probabilistic decision-making per deme) from **biophysical consequence** (deterministic laws of energy conservation, carrying capacity $K$, metabolic expenditure, and demography). At `1x` speed, each generation unfolds sequentially across **4 visual micro-phases** tracked in the top-right **4-pip Turn Phase Bar** (`1. Env`, `2. Mind`, `3. Clash`, `4. Lineage`), while `2x` speed and headless tests execute all 4 steps atomically via `EvoTurnEngine.advance_generation`:
 
 ```mermaid
 flowchart LR
-    Env["1. Environmental Phase\n• Flip Season (wet_warm / dry_cold)\n• Glacial Sea-Level Cycle (8 gen)\n• Flood / Emerge Coastal Hexes\n• Regenerate K & Biomass R"] --> Cog["2. Cognitive Phase\n• Coarsened 10-Part Signature\n• 6-Gen Memory & Neighbor Tags\n• System 1 Ollama (d3:4b / tev1:4b)\n• 75% LLM / 25% Env Blend"]
-    Cog --> Bio["3. Biophysical & Geopolitical Phase\n• Aggregate Effective Vector v_eff\n• Hawk-Dove, Trade (up to 1.35x) & Pacts\n• Vendettas, Tribute, Raids & 3-Tier Walls\n• Growth, Sieges, Wars & Synoecism (Merge)"]
-    Bio --> Mile["4. Milestone Phase\n• Allopatric Speciation (Prio 0)\n• Baldwin Assimilation (Prio 1)\n• Cultural Innovation (Prio 2)\n• Macro-Outcome Evaluation"]
-    Mile --> Prefetch["5. Async Prefetch\n• Pre-warm up to 8 Signatures\n• Non-Blocking Worker Pool"]
+    Env["1. Env (step_phase_1_environment)\n• Flip Season & Glacial Tides\n• 3-Step Submergence Cascade\n• Regenerate K & Biomass R\n• Phase 1 Ollama Prefetch"] --> Cog["2. Mind (step_phase_2_decisions)\n• BorderCompetition State Prompt\n• 6-Gen Memory & Neighbor Tags\n• System 1 Ollama (d3:4b / tev1:4b)\n• 75% LLM / 25% Env Blend"]
+    Cog --> Bio["3. Clash (step_phase_3_ecology_borders)\n• Aggregate Effective Vector v_eff\n• Inter-Cell Hawk-Dove & Trade\n• Pacts, Vendettas, Tribute & Raids\n• Ring 2 Defense Fortifications"]
+    Bio --> Mile["4. Lineage (step_phase_4_demography_milestones)\n• Metabolism, Growth & Invasions\n• Empty-Hex Fission & Synoecism\n• Speciation, Baldwin & Innovation\n• Next-Turn Lookahead Prefetch"]
 ```
 
-1. **Environmental Phase (`EvoEnvPhase`)**: Advances the generation counter, alternates seasonal climate between `wet_warm` ($\gamma = 1.20$) and `dry_cold` ($\gamma = 0.75$), oscillates sea level every 8 generations in glacial scenarios, relocates or drowns submerged demes, and regenerates hex carrying capacity $K$ and resources $R$.
-2. **Cognitive Decision Phase (`EvoDecisionModel`)**: Evaluates each deme via `/v1/systemone` with its intrinsic strategy traits prior (`strategy_traits_prior`), a **6-generation historical memory digest** (`war`, `raided`, `betrayal`, `pact`, `fortify`, `merge`, `tribute`, `siege`), active vendetta count, nearby martial horde detection (1–2 hexes), and **rich neighbor relational labels** (`kin`, `ally`, `rival`, `vendetta` + posture + strength + defense tier)—routing rival factions deterministically between primary (`d3:4b`) and secondary (`tev1:4b`) Ollama System 1 models and blending neural predictions (**$75\%$**) with environmental and geopolitical weights (**$25\%$**).
-3. **Biophysical & Geopolitical Consequence Phase (`EvoBiophysPhase`)**: Computes each deme's effective 6-axis vector $\mathbf{v}_{\text{eff}}$, resolves *Hawk-Dove* territorial conflicts, reciprocal symbiosis and **complementary inter-biome/cross-cultural trade** (up to $1.35\times$ caloric bonus and horizontal cultural transmission), **Alliance Pacts & Defensive Coalitions** ($+15\%$ mutual bonus, distress caloric aid, and up to $+1.10$ shared military defense), **Opportunistic Betrayals & Multi-Turn Vendettas** (`active_pacts < 0`), **Plunder Raids & Tribute Appeasement** ($18\%$ reserve tribute with zero casualties), **Multi-Tier Defense Fortifications** (`defense_tier: 0..3` from Palisade to Stone Wall to Castle with allied co-financing), habitat degradation (*Tragedy of the Commons* when $K < 0.60 \cdot K_{\max}$), metabolic expenditure & wall upkeep, demographic growth/starvation, **Territorial Wars & Fortified Sieges**, population fission, and **City Unification / Synoecism** (`merge` into a **Tier 5 Unified Metropolis**, expanding $K$ and reducing LLM inference calls per turn).
-4. **Milestone & Macro-Outcome Phase (`EvoMilestonePhase`)**: Synthesizes thermodynamically balanced emergent traits for *Allopatric Speciation*, *The Baldwin Effect*, or *Cumulative Cultural Innovation*, logs entries to the *Naturalist's Notebook*, and checks global macro-outcomes (*Total Extinction*, *Evolutionary Hegemony*, or *Ecological Equilibrium*).
+1. **`1. Env` — Environmental Phase (`step_phase_1_environment` / `EvoEnvPhase`)**: Advances the generation counter, alternates seasonal climate between `wet_warm` ($\gamma = 1.20$) and `dry_cold` ($\gamma = 0.75$), oscillates sea level every 8 generations in glacial scenarios, displaces submerged demes via the **3-step displacement cascade** (`evacuate_or_merge_displaced_deme`: empty passable neighbor evacuation $\to$ allied/kin refugee merge $\to$ extinction), regenerates hex carrying capacity $K$ and resources $R$ (visualized as expanding emerald/amber pulse rings), and triggers Phase 1 current-season Ollama signature prefetching (`prefetch_for_state(state, true)`).
+2. **`2. Mind` — Cognitive Decision Phase (`step_phase_2_decisions` / `EvoDecisionModel`)**: Evaluates each deme via `/v1/systemone` with `BorderCompetition: adjRivals, adjKin, pacts, vendettas`, its intrinsic strategy traits prior (`strategy_traits_prior`), a **6-generation historical memory digest**, and **rich neighbor relational labels**—routing rival factions deterministically between primary (`d3:4b`) and secondary (`tev1:4b`) Ollama System 1 models, blending neural predictions (**$75\%$**) with environmental and geopolitical weights (**$25\%$**), and displaying Decision Intent Crests with dashed golden intent tethers to occupied neighbor hexes.
+3. **`3. Clash` — Ecology & Inter-Cell Borders Phase (`step_phase_3_ecology_borders` / `EvoEcologyInteraction`)**: Computes each deme's effective 6-axis vector $\mathbf{v}_{\text{eff}}$, resolves **inter-cell Hawk-Dove border disputes**, reciprocal border symbiosis and **complementary inter-biome/cross-cultural trade** (`1.20x` to `1.35x` caloric bonus and horizontal cultural diffusion), **Alliance Pacts & Defensive Coalitions**, **Opportunistic Betrayals & Multi-Turn Vendettas**, **Plunder Raids & Tribute Appeasement**, **Ring 2 Multi-Tier Defense Fortifications** (`defense_tier: 0..3`), and habitat degradation (*Tragedy of the Commons* when $K < 0.60 \cdot K_{\max}$), highlighted by pulsing crimson/emerald clash rings at shared hex border midpoints.
+4. **`4. Lineage` — Demography, Mergers & Milestones Phase (`step_phase_4_demography_milestones` / `EvoDemographyMigration` & `EvoMilestonePhase`)**: Resolves metabolic expenditure & wall upkeep, demographic growth/starvation (with floating `+Pop / -Pop` badges), **Territorial Wars & Fortified Sieges** across borders, **empty-hex population fission** (or adjacent kin reinforcement), **inter-cell kin merges** (`divergence <= 0.25`) and **City Unification / Synoecism** (`merge` into a **Tier 5 Unified Metropolis**), synthesizes thermodynamically balanced emergent traits (*Allopatric Speciation*, *The Baldwin Effect*, *Cumulative Cultural Innovation*), checks global macro-outcomes, and prefetches next-turn lookahead Ollama signatures (`prefetch_for_state(state, false)`).
 
 ---
 
@@ -175,14 +174,14 @@ flowchart LR
 | <kbd>4</kbd> | **Desert Dust (`arid_steppe`)** | `10` | Transform target hexes into `arid_steppe` ($K_{\max} = 280$, `regen = 0.12`, $T = 0.65$, $H = 0.20$). |
 | <kbd>5</kbd> | **Boreal Crystal (`tundra`)** | `10` | Transform target hexes into `tundra` ($K_{\max} = 240$, `regen = 0.10`, $T = -0.55$, $H = 0.35$). |
 | <kbd>6</kbd> | **Peak Chisel (`raise`, `+0.18`)** | `15` | Elevate terrain altitude by $+0.18$; emerges ocean hexes into coastal land bridges or uplifts `high_mountain` ($\ge 0.78$). |
-| <kbd>7</kbd> | **Valley Pickaxe (`lower`, `-0.18`)** | `15` | Depress terrain altitude by $-0.18$; submerges hexes below `sea_level` into `ocean` and displaces resident demes. |
+| <kbd>7</kbd> | **Valley Pickaxe (`lower`, `-0.18`)** | `15` | Depress terrain altitude by $-0.18$; submerges hexes below `sea_level` into `ocean` and displaces resident demes via the 3-step cascade. |
 | <kbd>8</kbd> | **Golden Watering Can (`enrich`)** | `10` | Boost hex carrying capacity $K$ by $+25\%$ (up to $K_{\max}$) and replenish available biomass $R$. |
 | <kbd>9</kbd> | **Drought Sickle (`deplete`)** | `10` | Reduce hex carrying capacity $K$ and available biomass $R$ by $-25\%$ (inducing ecological stress). |
 | <kbd>0</kbd> | **Tidal Conch (`sea_level`)** | `25` / `10` | Open the Tidal Sub-Options Bar: adjust global `sea_level` by $\pm 5\%$ (`⚡25`) or paint `coastal_shallows`, `ocean`, and `high_mountain` (`⚡10`). |
-| <kbd>Space</kbd> | **Play / Pause** | — | Toggle automatic generational progression (`1x` = `1.50s/gen` or `2x` = `0.30s/gen`). |
+| <kbd>Space</kbd> | **Play / Pause** | — | Toggle automatic generational progression (`1x` = 4-step micro-phase playback at `0.375s/phase`, or `2x` = `0.30s/gen`). |
 | <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / **Middle Drag** | **Pan Camera** | — | Smoothly pan across the 2.5D isometric hexagonal valley (`820 px/s`). |
 | <kbd>Q</kbd><kbd>E</kbd> / <kbd>R</kbd><kbd>F</kbd> / **Right Drag** | **Orbit &amp; Tilt Camera** | — | Orbit yaw ($0^\circ\text{–}360^\circ$) and tilt pitch ($28^\circ\text{–}75^\circ$) around the valley. |
-| <kbd>Mouse Wheel</kbd> / <kbd>+</kbd><kbd>-</kbd> | **Zoom Camera** | — | Cursor-pivoted zoom between `0.28x` macro overview and `3.00x` settlement close-up. |
+| <kbd>Mouse Wheel</kbd> / <kbd>+</kbd><kbd>-</kbd> | **Zoom Camera** | — | Cursor-pivoted zoom (`0.28x` to `3.00x`) across `Macro` (`< 0.68`), `Meso` (`0.68–1.35`), and `Micro` (`>= 1.35`) semantic zoom tiers. |
 | <kbd>Escape</kbd> | **Close / Reset** | — | Close active modal/popup window or return active brush to `Naturalist's Loupe` (<kbd>1</kbd>). |
 
 ---
@@ -200,7 +199,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>Worlds, Biomes &amp; Presets</h3>
-      <p>Complete breakdown of axial hex geometry, the 7 biomes, seasonal &amp; glacial cycles, and the 3 scientific scenarios (<em>Rift Valley</em>, <em>Darwin's Archipelago</em>, <em>Finite Island</em>).</p>
+      <p>Complete breakdown of axial hex geometry, the 1-deme-per-hex territorial invariant, the 7 biomes, seasonal &amp; glacial cycles, and the 3 scientific scenarios.</p>
     </div>
   </a>
   <a href="thermodynamics_catalog/" class="feature-card">
@@ -220,7 +219,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>Generational Loop &amp; Dynamics</h3>
-      <p>Step-by-step equations for every turn phase: Hawk-Dove game theory, symbiosis, $K$ degradation, demography, fission migration, Baldwin assimilation, and speciation.</p>
+      <p>Step-by-step equations for the 4 micro-phases: inter-cell Hawk-Dove border disputes, symbiosis, $K$ degradation, demography, 3-step displacement cascade, and speciation.</p>
     </div>
   </a>
   <a href="cognitive_engine/" class="feature-card">
@@ -230,7 +229,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>Cognitive Engine &amp; Ollama AI</h3>
-      <p>System 1 multi-model routing (<code>d3:4b</code> &amp; <code>tev1:4b</code>), 10-part state signatures, compact 4-line state briefings, worker pools, and startup verification.</p>
+      <p>System 1 multi-model routing (<code>d3:4b</code> &amp; <code>tev1:4b</code>), <code>BorderCompetition</code> state prompts, 10-part state signatures, Phase 1 &amp; Phase 4 prefetching, and startup verification.</p>
     </div>
   </a>
   <a href="ui_tools_controls/" class="feature-card">
@@ -240,7 +239,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>HUD, Modals &amp; God-Mode Tools</h3>
-      <p>Master the Scroll Inspector, Map Lenses, Valley Legend, Naturalist's Notebook, Phylo-Cultural Lineage Tree, Trait &amp; Decision Forge, and God-mode brushes.</p>
+      <p>Master the 4-pip Turn Phase Bar, 3-Tier Semantic Zoom, Concentric Living Settlements, Scroll Inspector, Map Lenses, Naturalist's Notebook, Lineage Tree, and Forge.</p>
     </div>
   </a>
   <a href="architecture_developer/" class="feature-card">
@@ -250,7 +249,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>System Architecture &amp; Developer Guide</h3>
-      <p>2.5D isometric hex rendering pipeline, procedural pixel-art generators, organic road network lifecycle, i18n, automated test suite, and CI/CD workflows.</p>
+      <p>Procedural 2.5D GPU-shader hex rendering, Concentric Morphological Settlements (Ring 0/1/2), priority-ranked border flows, i18n, and automated test suite.</p>
     </div>
   </a>
 </div>

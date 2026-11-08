@@ -30,6 +30,7 @@ var is_fast: bool = false
 var quit_on_close_enabled: bool = true
 var _play_timer: float = 0.0
 var _last_model_revision: int = 0
+var _active_micro_phase: int = 0
 
 
 func _ready() -> void:
@@ -71,23 +72,28 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	if world_state == null:
 		return
-	var async_res := EvoDecisionModel.apply_completed_live_results(world_state, lang, _last_model_revision)
-	_last_model_revision = int(async_res["revision"])
-	if bool(async_res["updated"]):
-		hud.refresh(world_state)
-		world_renderer.refresh_village_decisions()
-		if bool(async_res.get("dom_changed", true)):
-			world_renderer.refresh()
+	if _active_micro_phase in [0, 2]:
+		var async_res := EvoDecisionModel.apply_completed_live_results(world_state, lang, _last_model_revision)
+		_last_model_revision = int(async_res["revision"])
+		if bool(async_res["updated"]):
+			hud.refresh(world_state)
+			if bool(async_res.get("dom_changed", true)):
+				world_renderer.refresh()
+			else:
+				world_renderer.refresh_village_decisions()
 
 	if not is_playing:
 		return
-	var interval: float = FAST_STEP_INTERVAL if is_fast else NORMAL_STEP_INTERVAL
+	var interval: float = FAST_STEP_INTERVAL if is_fast else (NORMAL_STEP_INTERVAL * 0.25)
 	_play_timer += delta
 	if _play_timer >= interval:
-		if EvoDecisionModel.has_pending_jobs():
+		if (is_fast or _active_micro_phase in [0, 1]) and EvoDecisionModel.has_pending_jobs():
 			return
 		_play_timer = 0.0
-		step_generation()
+		if is_fast:
+			step_generation()
+		else:
+			_step_micro_phase()
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -137,6 +143,7 @@ func _connect_signals() -> void:
 	hud.preset_selected.connect(func(pid: String) -> void: load_preset(pid))
 	hud.matchup_changed.connect(_on_matchup_changed)
 	hud.matchup_reset_requested.connect(reset_matchup)
+	hud.export_json_requested.connect(_on_export_json_requested)
 	hud.state_imported.connect(_on_state_imported)
 	hud.play_pause_toggled.connect(_on_play_pause_toggled)
 	hud.step_generation_requested.connect(step_generation)
@@ -165,6 +172,7 @@ func _connect_signals() -> void:
 func load_preset(preset_id: String, strategy_a_id: String = "", strategy_b_id: String = "") -> void:
 	is_playing = false
 	_play_timer = 0.0
+	_set_micro_phase_visuals(0)
 	EvoOllamaClient.clear_cache()
 
 	var preserved_traits: Dictionary = {}
@@ -327,13 +335,64 @@ func _sync_selection_after_world_mutation() -> void:
 		hud._selected_hex_id = world_renderer.selected_hex_id
 
 
+func _set_micro_phase_visuals(phase: int) -> void:
+	_active_micro_phase = clampi(phase, 0, 4)
+	if world_renderer != null:
+		world_renderer.set_active_micro_phase(_active_micro_phase)
+	if hud != null:
+		hud.set_active_micro_phase(_active_micro_phase)
+
+
+func _step_micro_phase() -> void:
+	if world_state == null:
+		return
+	if hud != null and (hud._ollama_startup_blocked or (hud._missing_models_modal != null and hud._missing_models_modal.visible)):
+		return
+	var next_phase: int = 1 if (_active_micro_phase <= 0 or _active_micro_phase >= 4) else (_active_micro_phase + 1)
+	if next_phase == 1:
+		EvoTurnEngine.step_phase_1_environment(world_state, lang)
+		_set_micro_phase_visuals(1)
+		hud.refresh(world_state)
+		world_renderer.refresh()
+	elif next_phase == 2:
+		EvoTurnEngine.step_phase_2_decisions(world_state, lang)
+		_set_micro_phase_visuals(2)
+		hud.refresh(world_state)
+		world_renderer.refresh()
+	elif next_phase == 3:
+		EvoTurnEngine.step_phase_3_ecology_borders(world_state, lang)
+		_set_micro_phase_visuals(3)
+		_sync_selection_after_world_mutation()
+		hud.refresh(world_state)
+		world_renderer.refresh()
+	elif next_phase == 4:
+		var res := EvoTurnEngine.step_phase_4_demography_milestones(world_state, lang)
+		_set_micro_phase_visuals(4)
+		hud.mark_generation_advanced()
+		_sync_selection_after_world_mutation()
+		if bool(res["has_macro_outcome"]) or (world_state.auto_pause_on_milestone and bool(res["has_milestone"])):
+			is_playing = false
+			hud.set_playing_state(false)
+		hud.refresh(world_state)
+		world_renderer.refresh()
+
+
 func step_generation() -> void:
 	_play_timer = 0.0
 	if world_state == null:
 		return
 	if hud != null and (hud._ollama_startup_blocked or (hud._missing_models_modal != null and hud._missing_models_modal.visible)):
 		return
-	var res := EvoTurnEngine.advance_generation(world_state, lang)
+	var res: Dictionary
+	if _active_micro_phase in [1, 2, 3]:
+		if _active_micro_phase < 2:
+			EvoTurnEngine.step_phase_2_decisions(world_state, lang)
+		if _active_micro_phase < 3:
+			EvoTurnEngine.step_phase_3_ecology_borders(world_state, lang)
+		res = EvoTurnEngine.step_phase_4_demography_milestones(world_state, lang)
+	else:
+		res = EvoTurnEngine.advance_generation(world_state, lang)
+	_set_micro_phase_visuals(0)
 	hud.mark_generation_advanced()
 	_sync_selection_after_world_mutation()
 
@@ -345,9 +404,27 @@ func step_generation() -> void:
 	world_renderer.refresh()
 
 
+func _finish_in_flight_micro_phases() -> void:
+	if world_state == null:
+		return
+	if world_state.has_meta("_in_flight_micro_phase") or world_state.has_meta("_step3_ctx") or world_state.has_meta("_turn_start_chronicle_count"):
+		EvoTurnEngine.complete_in_flight_turn(world_state, lang)
+		_sync_selection_after_world_mutation()
+	if _active_micro_phase != 0:
+		_set_micro_phase_visuals(0)
+
+
+func _on_export_json_requested(_file_path: String) -> void:
+	_finish_in_flight_micro_phases()
+	_sync_selection_after_world_mutation()
+	hud.refresh(world_state)
+	world_renderer.refresh()
+
+
 func _apply_brush_at_hex(hex_id: String) -> void:
 	if world_state == null or not world_state.cells.has(hex_id):
 		return
+	_finish_in_flight_micro_phases()
 	var tool_id := hud.get_active_tool()
 	var sub_mode := hud.get_active_sub_mode()
 	var rad := hud.get_brush_radius()
@@ -412,6 +489,7 @@ func _on_world_deme_clicked(deme_id: String, hex_id: String) -> void:
 func _on_state_imported(new_state: EvoTypes.WorldState) -> void:
 	is_playing = false
 	_play_timer = 0.0
+	_set_micro_phase_visuals(0)
 	world_state = new_state
 	hud.set_playing_state(false)
 	if hud._world_state != world_state:
@@ -484,7 +562,6 @@ func _on_settings_changed(auto_pause: bool, unlimited_pressure: bool, free_sandb
 
 func _on_decision_models_changed() -> void:
 	if world_renderer != null:
-		world_renderer.refresh_village_decisions()
 		world_renderer.refresh()
 
 
@@ -507,6 +584,7 @@ func _on_tool_changed(tool_id: String, _sub_mode: String, brush_radius: int) -> 
 func _on_sea_level_change_requested(delta: float) -> void:
 	if world_state == null:
 		return
+	_finish_in_flight_micro_phases()
 	if EvoTurnEngine.apply_adjust_sea_level(world_state, delta, lang):
 		EvoDecisionModel.invalidate_state_caches(world_state)
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
@@ -549,6 +627,7 @@ func _on_lineage_highlight_requested(lineage_id: String) -> void:
 
 func _on_inject_trait_requested(_deme_id: String, _trait_id: String) -> void:
 	if world_state != null:
+		_finish_in_flight_micro_phases()
 		EvoDecisionModel.invalidate_state_caches(world_state)
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 		EvoDecisionModel.prefetch_for_state(world_state)

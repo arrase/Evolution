@@ -87,7 +87,18 @@ static func blend_with_environmental_weights(
 	var env_weights: Dictionary = {}
 	var eligible_ids: Array[String] = []
 	if deme != null and cell != null and state != null:
-		var w_key := "%d|%s|%d|%.1f" % [state.generation, cell.id, deme.population, deme.energy_reserves]
+		var pacts_hash: int = state.active_pacts.hash() if not state.active_pacts.is_empty() else 0
+		var w_key := "%d|%s|%s|%d|%.1f|%d|%d|%d|%d" % [
+			state.generation,
+			state.season,
+			cell.id,
+			deme.population,
+			deme.energy_reserves,
+			int(cell.current_resources),
+			int(cell.carrying_capacity),
+			deme.defense_tier,
+			pacts_hash
+		]
 		if deme.has_meta("env_w_key") and str(deme.get_meta("env_w_key")) == w_key:
 			env_weights = deme.get_meta("env_w_val") as Dictionary
 		else:
@@ -244,7 +255,7 @@ static func evaluate_all_demes(
 			var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
 			EvoHeuristicScorer.modulate_deme_probabilities_for_turn(deme, cell, state)
 			var dom_p := float(deme.last_decision_probabilities.get(deme.last_dominant_decision_id, 0.5))
-			var just_key := "%s|%s|%.2f" % [lang, deme.last_dominant_decision_id, dom_p]
+			var just_key := "%d|%s|%s|%s|%.2f" % [state.generation, lang, deme.decision_model_tag, deme.last_dominant_decision_id, dom_p]
 			if deme.last_justification == "" or not deme.has_meta("just_key") or str(deme.get_meta("just_key")) != just_key:
 				deme.set_meta("just_key", just_key)
 				deme.last_justification = build_contextual_justification(
@@ -300,7 +311,7 @@ static func evaluate_all_demes(
 				)
 
 
-static func prefetch_for_state(state: EvoTypes.WorldState) -> void:
+static func prefetch_for_state(state: EvoTypes.WorldState, update_eval_sig: bool = true) -> void:
 	if state == null or state.demes.is_empty() or not EvoOllamaClient.needs_prefetch():
 		return
 	var reps_by_sig: Dictionary = {}
@@ -309,7 +320,8 @@ static func prefetch_for_state(state: EvoTypes.WorldState) -> void:
 		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2", "deme-darwin-rival"] and deme.decision_model_tag == EvoUserSettings.primary_model):
 			deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
 		var sig := compute_deme_evaluation_signature(deme, state)
-		deme.set_meta("eval_sig", sig)
+		if update_eval_sig:
+			deme.set_meta("eval_sig", sig)
 		if not reps_by_sig.has(sig):
 			reps_by_sig[sig] = deme
 			if reps_by_sig.size() >= 8:
