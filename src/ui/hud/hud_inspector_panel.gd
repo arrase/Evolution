@@ -389,7 +389,7 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	_add_sheet_kv(
 		m_vbox,
 		EvoUiStyle.tr_text(hud._lang, "👥 Población:", "👥 Population:"),
-		pop_fmt % [d.population, EvoUiStyle.get_village_tier_label(d.population, hud._lang, d.merged_count)]
+		pop_fmt % [d.population, EvoUiStyle.get_village_tier_label(d.population, hud._lang, d.merged_count, d.defense_tier, d.walled_union_id)]
 	)
 
 	_add_milestone_bar(
@@ -410,6 +410,11 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	)
 	_add_sheet_kv(
 		m_vbox,
+		EvoUiStyle.tr_text(hud._lang, "🏥 Salubridad:", "🏥 Salubrity:"),
+		"%d%%" % int(round(d.salubrity * 100.0))
+	)
+	_add_sheet_kv(
+		m_vbox,
 		"🏰 " + EvoI18n.t(hud._lang, "inspector_defense_label") + ":",
 		EvoI18n.t(hud._lang, "inspector_defense_%d" % clampi(d.defense_tier, 0, 3))
 	)
@@ -418,6 +423,12 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 			m_vbox,
 			"🏛️ " + EvoUiStyle.tr_text(hud._lang, "Unificación:", "Unification:"),
 			EvoI18n.t(hud._lang, "inspector_merged_city", {"count": str(d.merged_count + 1)})
+		)
+	if d.walled_union_id != "":
+		_add_sheet_kv(
+			m_vbox,
+			"🧱 " + EvoUiStyle.tr_text(hud._lang, "Unión Amurallada:", "Walled Union:"),
+			EvoUiStyle.tr_text(hud._lang, "Activa (%s)" % d.walled_union_id, "Active (%s)" % d.walled_union_id)
 		)
 	_add_sheet_kv(
 		m_vbox,
@@ -536,6 +547,25 @@ static func rebuild_hex_sheet(hud: Control) -> void:
 	_add_sheet_kv(hud._hex_sheet_vbox, EvoUiStyle.tr_text(hud._lang, "🌡️ Temperatura:", "🌡️ Temperature:"), "%+.2f" % cell.temperature)
 	_add_sheet_kv(hud._hex_sheet_vbox, EvoUiStyle.tr_text(hud._lang, "💧 Humedad:", "💧 Humidity:"), "%d%%" % int(round(cell.humidity * 100.0)))
 	_add_sheet_kv(hud._hex_sheet_vbox, EvoUiStyle.tr_text(hud._lang, "⛰️ Altitud:", "⛰️ Altitude:"), "%.2f" % cell.altitude)
+
+	if cell.land_use in ["crops", "pasture"] and cell.owner_deme_id != "":
+		var lu_label := EvoUiStyle.tr_text(hud._lang, "Tierras de cultivo", "Crop fields") if cell.land_use == "crops" else EvoUiStyle.tr_text(hud._lang, "Pastizales", "Pasturelands")
+		var owner_label := cell.owner_deme_id
+		if hud._world_state.demes.has(cell.owner_deme_id):
+			var owner_deme: EvoTypes.Deme = hud._world_state.demes[cell.owner_deme_id]
+			owner_label = _format_short_deme_label(owner_deme)
+		_add_sheet_kv(
+			hud._hex_sheet_vbox,
+			EvoUiStyle.tr_text(hud._lang, "🚜 Uso del suelo:", "🚜 Land use:"),
+			"%s · %s" % [lu_label, owner_label]
+		)
+
+	if cell.has_ruins:
+		_add_sheet_kv(
+			hud._hex_sheet_vbox,
+			EvoUiStyle.tr_text(hud._lang, "🏚️ Estado:", "🏚️ Status:"),
+			EvoUiStyle.tr_text(hud._lang, "Ruinas", "Ruins")
+		)
 
 	var r_ratio := clampf(cell.current_resources / maxf(1.0, cell.carrying_capacity), 0.0, 1.0)
 	_add_milestone_bar(

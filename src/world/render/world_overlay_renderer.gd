@@ -2,9 +2,25 @@ class_name EvoWorldOverlayRenderer
 extends RefCounted
 
 const C_SELECTION := Color("#fde047")
-const BADGE_W := 114.0
-const BADGE_H := 30.0
+const BADGE_W := 124.0
+const BADGE_H := 32.0
 const SHIELD_W := 26.0
+
+static var _unit_circle_16: PackedVector2Array = PackedVector2Array()
+static var _unit_circle_19: PackedVector2Array = PackedVector2Array()
+
+
+static func _ensure_unit_circles() -> void:
+	if not _unit_circle_16.is_empty():
+		return
+	_unit_circle_16.resize(16)
+	for i in range(16):
+		var a := TAU * float(i) / 16.0
+		_unit_circle_16[i] = Vector2(cos(a), sin(a))
+	_unit_circle_19.resize(19)
+	for i in range(19):
+		var a := TAU * float(i) / 18.0
+		_unit_circle_19[i] = Vector2(cos(a), sin(a))
 
 
 static func _resolve_deme_strategy_visuals(
@@ -38,7 +54,7 @@ static func draw_centered_sprite(
 	modulate_col: Color = Color.WHITE
 ) -> void:
 	var tex: ImageTexture = EvoPixelArtGen.get_texture(sprite_name)
-	var sz: Vector2 = tex.get_size() * scale_val
+	var sz: Vector2 = tex.get_size() * (scale_val * 0.25)
 	ci.draw_texture_rect(
 		tex,
 		Rect2(Vector2(center_pos.x - sz.x * 0.5, center_pos.y - sz.y * 0.78), sz),
@@ -48,10 +64,12 @@ static func draw_centered_sprite(
 
 
 static func draw_ellipse_filled(ci: CanvasItem, center: Vector2, rx: float, ry: float, col: Color) -> void:
+	_ensure_unit_circles()
 	var pts := PackedVector2Array()
+	pts.resize(16)
 	for i in range(16):
-		var a := TAU * float(i) / 16.0
-		pts.append(center + Vector2(cos(a) * rx, sin(a) * ry))
+		var u := _unit_circle_16[i]
+		pts[i] = Vector2(center.x + u.x * rx, center.y + u.y * ry)
 	ci.draw_colored_polygon(pts, col)
 
 
@@ -63,10 +81,12 @@ static func draw_ellipse_outline(
 	col: Color,
 	width: float
 ) -> void:
+	_ensure_unit_circles()
 	var pts := PackedVector2Array()
+	pts.resize(19)
 	for i in range(19):
-		var a := TAU * float(i) / 18.0
-		pts.append(center + Vector2(cos(a) * rx, sin(a) * ry))
+		var u := _unit_circle_19[i]
+		pts[i] = Vector2(center.x + u.x * rx, center.y + u.y * ry)
 	ci.draw_polyline(pts, col, width)
 
 
@@ -102,8 +122,32 @@ static func update_particles(r: Node2D, delta: float) -> void:
 static func draw_overlay(r: Node2D) -> void:
 	if r.world_state == null:
 		return
+	draw_brush_radius_overlay(r)
 	_draw_deme_billboards(r)
 	draw_seasonal_particles(r)
+
+
+static func draw_brush_radius_overlay(r: Node2D) -> void:
+	var ci: Node2D = r._overlay_layer
+	var to_screen: Transform2D = r._world_layer.transform
+	var brush_col := Color("#38bdf8") if r.active_tool == "inspect" else Color("#fb923c")
+	for hex_id in r._brush_hexes:
+		if hex_id == r.selected_hex_id or not r._hex_polys.has(hex_id):
+			continue
+		var top_pts: PackedVector2Array = r._hex_polys[hex_id]
+		var pts := PackedVector2Array()
+		pts.resize(7)
+		for i in range(7):
+			pts[i] = to_screen * top_pts[i % 6]
+		ci.draw_polyline(pts, brush_col, 2.6)
+
+	if r.selected_hex_id != "" and r._hex_polys.has(r.selected_hex_id):
+		var sel_pts: PackedVector2Array = r._hex_polys[r.selected_hex_id]
+		var pts := PackedVector2Array()
+		pts.resize(7)
+		for i in range(7):
+			pts[i] = to_screen * sel_pts[i % 6]
+		ci.draw_polyline(pts, C_SELECTION, 3.4)
 
 
 static func _draw_billboards(r: Node2D) -> void:
@@ -111,12 +155,15 @@ static func _draw_billboards(r: Node2D) -> void:
 
 
 static func _draw_deme_billboards(r: Node2D) -> void:
+	var ci: Node2D = r._overlay_layer
 	var to_screen: Transform2D = r._world_layer.transform
+	var zoom: float = r.camera.zoom_level if r.camera != null else 1.0
 	var vp_size := r.get_viewport_rect().size if r.is_inside_tree() else Vector2(1600.0, 960.0)
 	var screen_cull_rect := Rect2(Vector2(-240.0, -200.0), vp_size + Vector2(480.0, 400.0))
 
 	r._deme_hit_rects.clear()
-	var drawn_hex_rings: Dictionary = {}
+	_draw_rural_territory_overlays(r, to_screen, screen_cull_rect)
+
 	for village in r._villages:
 		var v_pos: Vector2 = village["pos"]
 		var screen_pos: Vector2 = to_screen * v_pos
@@ -127,20 +174,105 @@ static func _draw_deme_billboards(r: Node2D) -> void:
 		var sf: float = village["sf"]
 		var is_dimmed: bool = village["is_dimmed"]
 		var alpha := 0.48 if is_dimmed else 0.96
-		var strat_vis := _resolve_deme_strategy_visuals(r.world_state, deme, r.lang)
+		var strat_vis: Dictionary = village["strat_visuals"]
 		var strat_color: Color = strat_vis["color"]
 
-		if not drawn_hex_rings.has(hex_id):
-			drawn_hex_rings[hex_id] = true
-			_draw_hex_strategy_ring(r, hex_id, screen_pos, sf, strat_color, alpha)
+		_draw_hex_strategy_ring(r, hex_id, screen_pos, sf, strat_color, alpha)
+
+		var is_merged: bool = deme.merged_count > 0 or deme.walled_union_id != ""
+		var plinth_r: float = (58.0 if is_merged else 52.0) * sf * zoom
+		var plaza_screen: Vector2 = to_screen * (v_pos + Vector2(0.0, 8.0 * sf))
+		var modulate_col: Color = village["modulate"]
+		if bool(village.get("in_siege", false)):
+			var siege_pulse := 0.65 + 0.35 * sin(r._anim_time * 6.5)
+			var siege_r := plinth_r + 12.5 * sf * zoom
+			draw_ellipse_outline(
+				ci,
+				plaza_screen,
+				siege_r,
+				siege_r * 0.58,
+				Color(0.98, 0.32, 0.12, 0.85 * siege_pulse) * modulate_col,
+				3.2 * sf
+			)
+		if deme.id == r.selected_deme_id:
+			var sel_r := plinth_r + 11.0 * sf * zoom
+			draw_ellipse_outline(ci, plaza_screen, sel_r, sel_r * 0.58, C_SELECTION, 4.2)
+		elif deme.id == r.hovered_deme_id:
+			var hov_r := plinth_r + 9.5 * sf * zoom
+			draw_ellipse_outline(ci, plaza_screen, hov_r, hov_r * 0.58, Color(1.0, 0.92, 0.68, 0.88), 2.8)
 
 		r._deme_hit_rects.append({
 			"rect": to_screen * (village["hit_rect"] as Rect2),
 			"deme_id": deme.id,
 			"hex_id": hex_id
 		})
-		var crest_pos: Vector2 = (to_screen * (v_pos + Vector2(0.0, -54.0 * sf))) + Vector2(0.0, -16.0)
+		var crest_pos: Vector2 = (to_screen * (v_pos + Vector2(0.0, -68.0 * sf))) + Vector2(0.0, -16.0)
 		draw_village_billboard(r, village, crest_pos)
+
+
+static func _draw_rural_territory_overlays(r: Node2D, to_screen: Transform2D, screen_cull_rect: Rect2) -> void:
+	var ci: Node2D = r._overlay_layer
+	var state: EvoTypes.WorldState = r.world_state
+	var font := ThemeDB.fallback_font
+	for hex_id in r._rural_cell_ids:
+		if not state.cells.has(hex_id) or not r._hex_centers.has(hex_id) or not r._hex_polys.has(hex_id):
+			continue
+		var cell: EvoTypes.HexCell = state.cells[hex_id]
+		if not cell.deme_ids.is_empty() or not (cell.land_use in ["crops", "pasture"]) or cell.owner_deme_id == "":
+			continue
+		var center: Vector2 = r._hex_centers[hex_id]
+		var screen_pos: Vector2 = to_screen * center
+		if not screen_cull_rect.has_point(screen_pos):
+			continue
+		var owner_deme: EvoTypes.Deme
+		var strat_color: Color
+		if r._village_by_deme_id.has(cell.owner_deme_id):
+			var owner_village: Dictionary = r._village_by_deme_id[cell.owner_deme_id]
+			owner_deme = owner_village["deme"]
+			strat_color = owner_village["strat_color"]
+		elif state.demes.has(cell.owner_deme_id):
+			owner_deme = state.demes[cell.owner_deme_id]
+			strat_color = _resolve_deme_strategy_visuals(state, owner_deme, r.lang)["color"]
+		else:
+			continue
+		var top_pts: PackedVector2Array = r._hex_polys[hex_id]
+		var border_pts := PackedVector2Array()
+		border_pts.resize(7)
+		for i in range(7):
+			border_pts[i] = to_screen * center.lerp(top_pts[i % 6], 0.86)
+		var ring_col := strat_color
+		ring_col.a = 0.42
+		ci.draw_polyline(border_pts, ring_col, 1.8)
+
+		var show_label: bool = (
+			hex_id == r.selected_hex_id
+			or hex_id == r.hovered_hex_id
+			or owner_deme.id == r.selected_deme_id
+			or owner_deme.id == r.hovered_deme_id
+		)
+		if show_label:
+			var strat_vis := _resolve_deme_strategy_visuals(state, owner_deme, r.lang)
+			var short_name := str(strat_vis["name"]).split(" ")[0]
+			var slot_tag := str(strat_vis["slot_tag"])
+			var tag_str := ("%s·%s" % [slot_tag, short_name]) if slot_tag != "" else short_name
+			var icon_str := "🌾" if cell.land_use == "crops" else "🐑"
+			var label_str := "%s %s (%s)" % [icon_str, tag_str, owner_deme.hex_id]
+			if label_str.length() > 22:
+				label_str = label_str.substr(0, 21) + "…"
+			var pill_w := 130.0
+			var pill_h := 20.0
+			var pill_rect := Rect2(screen_pos.x - pill_w * 0.5, screen_pos.y - 34.0, pill_w, pill_h)
+			ci.draw_rect(pill_rect, Color(0.11, 0.07, 0.04, 0.88), true)
+			ci.draw_rect(pill_rect, strat_color, false, 1.5)
+			ci.draw_string(
+				font,
+				Vector2(pill_rect.position.x + 5.0, pill_rect.position.y + 14.0),
+				label_str,
+				HORIZONTAL_ALIGNMENT_CENTER,
+				pill_w - 10.0,
+				10,
+				Color("#fef3c7")
+			)
 
 
 static func _draw_hex_strategy_ring(
@@ -183,7 +315,7 @@ static func draw_village_billboard(r: Node2D, village: Dictionary, pos: Vector2)
 	var is_dimmed: bool = village["is_dimmed"]
 	var font := ThemeDB.fallback_font
 
-	var strat_vis := _resolve_deme_strategy_visuals(r.world_state, deme, r.lang)
+	var strat_vis: Dictionary = village["strat_visuals"]
 	var strat_color: Color = strat_vis["color"]
 	var strat_icon: String = strat_vis["icon"]
 	var strat_name: String = strat_vis["name"]
@@ -240,8 +372,8 @@ static func draw_village_billboard(r: Node2D, village: Dictionary, pos: Vector2)
 
 	var short_name := strat_name.split(" ")[0]
 	var top_text := ("%s · %s" % [slot_tag, short_name]) if slot_tag != "" else short_name
-	if top_text.length() > 13:
-		top_text = top_text.substr(0, 12) + "…"
+	if top_text.length() > 14:
+		top_text = top_text.substr(0, 13) + "…"
 	var top_col := strat_color.lightened(0.35)
 	top_col.a = alpha
 	ci.draw_string(
@@ -249,12 +381,13 @@ static func draw_village_billboard(r: Node2D, village: Dictionary, pos: Vector2)
 		Vector2(rect.position.x + SHIELD_W + 5.0, rect.position.y + 12.0),
 		top_text,
 		HORIZONTAL_ALIGNMENT_LEFT,
-		badge_w - SHIELD_W - 8.0,
+		badge_w - SHIELD_W - 16.0,
 		10,
 		top_col
 	)
 
-	var pop_text := ("%d pop" if r.lang == "en" else "%d hab") % deme.population
+	var roman_str := deme.get_village_roman()
+	var pop_text := ("%s · %d pop" if r.lang == "en" else "%s · %d hab") % [roman_str, deme.population]
 	var pop_col := Color("#fde047") if is_selected else Color("#fef3c7")
 	pop_col.a = alpha
 	ci.draw_string(
@@ -266,6 +399,16 @@ static func draw_village_billboard(r: Node2D, village: Dictionary, pos: Vector2)
 		10,
 		pop_col
 	)
+
+	if deme.salubrity < 0.75 or deme.get_village_tier() >= 3:
+		var sal_col := Color("#10b981") if deme.salubrity >= 0.75 else (Color("#f59e0b") if deme.salubrity >= 0.40 else Color("#ef4444"))
+		sal_col.a = alpha
+		var dot_pos := Vector2(rect.end.x - 9.0, rect.position.y + 7.5)
+		ci.draw_circle(dot_pos, 4.2, Color("#23150c") * Color(1, 1, 1, alpha))
+		ci.draw_circle(dot_pos, 3.0, sal_col)
+		var bar_bg := Rect2(rect.position.x + SHIELD_W + 5.0, rect.end.y - 3.5, badge_w - SHIELD_W - 26.0, 2.0)
+		ci.draw_rect(bar_bg, Color(0.0, 0.0, 0.0, 0.45 * alpha), true)
+		ci.draw_rect(Rect2(bar_bg.position, Vector2(bar_bg.size.x * clampf(deme.salubrity, 0.05, 1.0), bar_bg.size.y)), sal_col, true)
 
 	var archetype: String = village["archetype"]
 	var dec_tex: ImageTexture = EvoPixelArtGen.get_texture("icon_" + archetype)

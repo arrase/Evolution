@@ -10,9 +10,9 @@ const STATUS_COLORS: Dictionary = {
 	"starving": Color("#fb7185")
 }
 
-const NON_SWAYING_SPRITES: Array[String] = ["mossy_rock", "fallen_log", "rock_mountain", "tree_stump", "soil_crack"]
+const NON_SWAYING_SPRITES: Array[String] = ["mossy_rock", "fallen_log", "rock_mountain", "mountain_peak", "tree_stump", "soil_crack", "ruins_stone", "crop_field", "pasture_pen"]
 const VILLAGER_POSES: Array[String] = ["villager_idle", "villager_walk1", "villager_walk2"]
-const TRAVELER_ROAD_KINDS: Array[String] = ["collab", "bridge", "pact", "tribute", "merge"]
+const TRAVELER_ROAD_KINDS: Array[String] = ["collab", "bridge", "pact", "tribute", "merge", "rural_farm"]
 
 const BIOME_FLORA_PALETTES: Dictionary = {
 	"tropical_forest": [
@@ -34,8 +34,8 @@ const BIOME_FLORA_PALETTES: Dictionary = {
 		"rock_mountain", "tree_tundra_2", "fallen_log", "bush_berry"
 	],
 	"high_mountain": [
-		"rock_mountain", "mossy_rock", "tree_tundra", "rock_mountain",
-		"mossy_rock", "tree_tundra_2", "rock_mountain"
+		"mountain_peak", "rock_mountain", "mossy_rock", "tree_tundra",
+		"mountain_peak", "mossy_rock", "tree_tundra_2", "rock_mountain"
 	],
 	"coastal_shallows": [
 		"coastal_reeds", "wildflowers", "coastal_reeds", "tall_grass",
@@ -61,7 +61,9 @@ class Prop:
 
 	func _init(p_texture: Texture2D, scale: float, anchor_y: float, p_modulate: Color) -> void:
 		texture = p_texture
-		var size := p_texture.get_size() * scale
+		var tex_sz := p_texture.get_size()
+		var dpi_norm: float = 0.32 if tex_sz.x <= 64.0 else 0.24
+		var size := tex_sz * (scale * dpi_norm)
 		anchor_offset = Vector2(size.x * 0.5, size.y * anchor_y)
 		rect = Rect2(Vector2.ZERO, size)
 		modulate = p_modulate
@@ -97,6 +99,8 @@ static func get_villager_textures_for_color(r: Node2D, tunic_col: Color) -> Arra
 
 static func collect_villages(r: Node2D) -> Array[Dictionary]:
 	var villages: Array[Dictionary] = []
+	r._village_by_deme_id.clear()
+	r._rural_cell_ids.clear()
 	var state: EvoTypes.WorldState = r.world_state
 	var geo_by_deme := build_geopolitics_by_deme(state)
 	var hex_list: Array = r._sorted_hex_ids if not r._sorted_hex_ids.is_empty() else state.cells.keys()
@@ -104,64 +108,67 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 		var cell: EvoTypes.HexCell = state.cells[hex_id]
 		if r._is_water(cell):
 			continue
-		var count := cell.deme_ids.size()
-		var scale_factor := 1.0
-		if count == 2:
-			scale_factor = 0.86
-		elif count >= 3:
-			scale_factor = 0.78
+		if cell.deme_ids.is_empty():
+			if (cell.land_use in ["crops", "pasture"]) and cell.owner_deme_id != "":
+				r._rural_cell_ids.append(hex_id)
+			continue
+		var deme_id: String = cell.deme_ids[0]
+		if not state.demes.has(deme_id):
+			continue
+		var deme: EvoTypes.Deme = state.demes[deme_id]
 		var world_xy := HexMath.axial_to_world(cell.q, cell.r)
 		var top_z: float = r._get_cell_top_z(cell)
+		var v_world := world_xy + HexMath.compute_village_sector_offset(0, 1, HexMath.HEX_SIZE)
+		var scale_factor := 1.0
+		var is_dimmed: bool = r.highlighted_lineage_id != "" and deme.lineage_id != r.highlighted_lineage_id
+		var tier := deme.get_village_tier()
+		var strat_vis := EvoWorldOverlayRenderer._resolve_deme_strategy_visuals(state, deme, r.lang)
+		var strat_color: Color = strat_vis["color"]
 
-		for idx in range(count):
-			var deme_id: String = cell.deme_ids[idx]
-			if not state.demes.has(deme_id):
-				continue
-			var deme: EvoTypes.Deme = state.demes[deme_id]
-			var v_world := world_xy + HexMath.compute_village_sector_offset(idx, count, HexMath.HEX_SIZE)
-			var is_dimmed: bool = r.highlighted_lineage_id != "" and deme.lineage_id != r.highlighted_lineage_id
-			var tier := deme.get_village_tier()
-			var strat_color := resolve_deme_strategy_color(state, deme)
+		var bb_offset := Vector2(0.0, -68.0)
+		var sub_text := "%d pop" % deme.population if r.lang == "en" else "%d hab" % deme.population
+		var box_size := Vector2(124.0, 32.0)
+		var v_pos: Vector2 = r._project(v_world, top_z)
+		var vital_status := deme.get_vital_status()
+		var status_col: Color = STATUS_COLORS[vital_status] if STATUS_COLORS.has(vital_status) else Color("#38bdf8")
+		var geo: Dictionary = geo_by_deme[deme.id] if geo_by_deme.has(deme.id) else resolve_deme_geopolitics(state, deme)
 
-			var bb_offset := Vector2(0.0, -54.0)
-			var sub_text := "%d pop" % deme.population if r.lang == "en" else "%d hab" % deme.population
-			var box_size := Vector2(114.0, 30.0)
-			var v_pos: Vector2 = r._project(v_world, top_z)
-			var vital_status := deme.get_vital_status()
-			var status_col: Color = STATUS_COLORS[vital_status] if STATUS_COLORS.has(vital_status) else Color("#38bdf8")
-			var geo: Dictionary = geo_by_deme[deme.id] if geo_by_deme.has(deme.id) else resolve_deme_geopolitics(state, deme)
-
-			villages.append({
-				"deme": deme,
-				"deme_id": deme.id,
-				"hex_id": hex_id,
-				"world_xy": v_world,
-				"top_z": top_z,
-				"pos": v_pos,
-				"sf": scale_factor,
-				"modulate": Color(1, 1, 1, 0.42) if is_dimmed else Color.WHITE,
-				"is_dimmed": is_dimmed,
-				"tier": tier,
-				"archetype": get_deme_dominant_archetype(r, deme),
-				"has_pact": geo["has_pact"],
-				"in_war": geo["in_war"],
-				"in_raid": geo["in_raid"],
-				"in_betrayal": geo["in_betrayal"],
-				"in_tribute": geo["in_tribute"],
-				"in_siege": geo["in_siege"],
-				"in_merge": geo["in_merge"],
-				"geo_icons": geo["geo_icons"],
-				"status_col": status_col,
-				"strat_color": strat_color,
-				"villager_count": clampi(2 + tier + int(deme.population / 110), 3, 7),
-				"villager_textures": get_villager_textures_for_color(r, strat_color),
-				"bb_offset": bb_offset * scale_factor,
-				"sub_text": sub_text,
-				"label_text": sub_text,
-				"box_size": box_size,
-				"pill_w": box_size.x,
-				"hit_rect": Rect2(v_pos - Vector2(74, 76) * scale_factor, Vector2(148, 116) * scale_factor)
-			})
+		var v_entry := {
+			"deme": deme,
+			"deme_id": deme.id,
+			"hex_id": hex_id,
+			"world_xy": v_world,
+			"top_z": top_z,
+			"pos": v_pos,
+			"sf": scale_factor,
+			"modulate": Color(1, 1, 1, 0.42) if is_dimmed else Color.WHITE,
+			"is_dimmed": is_dimmed,
+			"tier": tier,
+			"salubrity": deme.salubrity,
+			"walled_union_id": deme.walled_union_id,
+			"archetype": get_deme_dominant_archetype(r, deme),
+			"has_pact": geo["has_pact"],
+			"in_war": geo["in_war"],
+			"in_raid": geo["in_raid"],
+			"in_betrayal": geo["in_betrayal"],
+			"in_tribute": geo["in_tribute"],
+			"in_siege": geo["in_siege"],
+			"in_merge": geo["in_merge"],
+			"geo_icons": geo["geo_icons"],
+			"status_col": status_col,
+			"strat_color": strat_color,
+			"strat_visuals": strat_vis,
+			"villager_count": clampi(3 + tier + int(deme.population / 95), 3, 9),
+			"villager_textures": get_villager_textures_for_color(r, strat_color),
+			"bb_offset": bb_offset,
+			"sub_text": sub_text,
+			"label_text": sub_text,
+			"box_size": box_size,
+			"pill_w": box_size.x,
+			"hit_rect": Rect2(v_pos - Vector2(104, 92), Vector2(208, 168))
+		}
+		villages.append(v_entry)
+		r._village_by_deme_id[deme.id] = v_entry
 	return villages
 
 
@@ -173,30 +180,63 @@ static func get_village_building_layout(
 	archetype: String
 ) -> Array[Dictionary]:
 	var items: Array[Dictionary] = []
+	var totem_sprite := "totem_innov"
+	if archetype in ["cooperate", "pact", "exchange"]:
+		totem_sprite = "totem_coop"
+	elif archetype in ["war", "raid", "dispute", "betrayal"]:
+		totem_sprite = "totem_aggro"
+
 	match tier:
 		1:
-			items.append({"sprite": "tier1_tent", "offset": Vector2(-48, -18) * sf, "scale": 2.50 * sf})
+			items.append({"sprite": "campfire", "offset": Vector2(0, 6) * sf, "scale": 2.35 * sf})
+			items.append({"sprite": "hut_thatch", "offset": Vector2(-68, -24) * sf, "scale": 2.48 * sf})
+			items.append({"sprite": "hut_thatch", "offset": Vector2(66, -20) * sf, "scale": 2.44 * sf})
+			items.append({"sprite": "hut_thatch", "offset": Vector2(-18, -54) * sf, "scale": 2.38 * sf})
 		2:
-			items.append({"sprite": "tier2_cottage", "offset": Vector2(-52, -25) * sf, "scale": 2.54 * sf})
-			items.append({"sprite": "tier2_barn", "offset": Vector2(52, -25) * sf, "scale": 2.38 * sf})
+			items.append({"sprite": "temple_totem" if has_culture else "campfire", "offset": Vector2(0, -20) * sf, "scale": 2.52 * sf})
+			items.append({"sprite": "house_clay", "offset": Vector2(-76, -28) * sf, "scale": 2.48 * sf})
+			items.append({"sprite": "house_clay", "offset": Vector2(76, -26) * sf, "scale": 2.46 * sf})
+			items.append({"sprite": "hut_thatch", "offset": Vector2(-92, 18) * sf, "scale": 2.36 * sf})
+			items.append({"sprite": "hut_thatch", "offset": Vector2(90, 20) * sf, "scale": 2.36 * sf})
+			items.append({"sprite": "hut_thatch", "offset": Vector2(0, -64) * sf, "scale": 2.38 * sf})
+			items.append({"sprite": "granary", "offset": Vector2(-48, 44) * sf, "scale": 2.40 * sf})
+			items.append({"sprite": "watchtower", "offset": Vector2(56, -56) * sf, "scale": 2.42 * sf})
 		3:
-			items.append({"sprite": "tier3_townhall", "offset": Vector2(0, -44) * sf, "scale": 2.58 * sf})
-			items.append({"sprite": "tier3_house", "offset": Vector2(-62, -10) * sf, "scale": 2.38 * sf})
-		4:
-			items.append({"sprite": "tier4_citadel", "offset": Vector2(0, -48) * sf, "scale": 2.65 * sf})
-			items.append({"sprite": "tier4_tower", "offset": Vector2(-66, -14) * sf, "scale": 2.38 * sf})
-			items.append({"sprite": "tier4_windmill", "offset": Vector2(66, -14) * sf, "scale": 2.38 * sf})
+			items.append({"sprite": "temple_totem", "offset": Vector2(0, -26) * sf, "scale": 2.60 * sf})
+			items.append({"sprite": "house_stone", "offset": Vector2(-64, -46) * sf, "scale": 2.48 * sf})
+			items.append({"sprite": "house_stone", "offset": Vector2(64, -46) * sf, "scale": 2.48 * sf})
+			items.append({"sprite": "house_stone", "offset": Vector2(0, -76) * sf, "scale": 2.44 * sf})
+			items.append({"sprite": "house_clay", "offset": Vector2(-106, -8) * sf, "scale": 2.42 * sf})
+			items.append({"sprite": "house_clay", "offset": Vector2(106, -8) * sf, "scale": 2.42 * sf})
+			items.append({"sprite": "house_clay", "offset": Vector2(-86, 34) * sf, "scale": 2.38 * sf})
+			items.append({"sprite": "house_clay", "offset": Vector2(86, 34) * sf, "scale": 2.38 * sf})
+			items.append({"sprite": "granary", "offset": Vector2(-46, 52) * sf, "scale": 2.45 * sf})
+			items.append({"sprite": "windmill", "offset": Vector2(110, -48) * sf, "scale": 2.52 * sf})
+			items.append({"sprite": "watchtower", "offset": Vector2(-112, -48) * sf, "scale": 2.48 * sf})
 		_:
-			items.append({"sprite": "tier5_metropolis", "offset": Vector2(0, -50) * sf, "scale": 2.68 * sf})
-			items.append({"sprite": "tier4_tower", "offset": Vector2(-68, -14) * sf, "scale": 2.40 * sf})
-			items.append({"sprite": "tier3_townhall", "offset": Vector2(68, -14) * sf, "scale": 2.38 * sf})
+			items.append({"sprite": "citadel_keep", "offset": Vector2(-24, -36) * sf, "scale": 2.72 * sf})
+			items.append({"sprite": "cathedral", "offset": Vector2(34, -32) * sf, "scale": 2.64 * sf})
+			items.append({"sprite": "house_stone", "offset": Vector2(0, -84) * sf, "scale": 2.48 * sf})
+			items.append({"sprite": "house_stone", "offset": Vector2(-74, -62) * sf, "scale": 2.46 * sf})
+			items.append({"sprite": "house_stone", "offset": Vector2(76, -62) * sf, "scale": 2.46 * sf})
+			items.append({"sprite": "house_stone", "offset": Vector2(-116, -16) * sf, "scale": 2.44 * sf})
+			items.append({"sprite": "house_stone", "offset": Vector2(116, -16) * sf, "scale": 2.44 * sf})
+			items.append({"sprite": "house_stone", "offset": Vector2(-62, 16) * sf, "scale": 2.40 * sf})
+			items.append({"sprite": "house_clay", "offset": Vector2(64, 16) * sf, "scale": 2.38 * sf})
+			items.append({"sprite": "house_clay", "offset": Vector2(-96, 34) * sf, "scale": 2.38 * sf})
+			items.append({"sprite": "house_clay", "offset": Vector2(96, 34) * sf, "scale": 2.38 * sf})
+			items.append({"sprite": "granary", "offset": Vector2(-48, 56) * sf, "scale": 2.48 * sf})
+			items.append({"sprite": "windmill", "offset": Vector2(122, -54) * sf, "scale": 2.55 * sf})
+			items.append({"sprite": "watchtower", "offset": Vector2(-124, -54) * sf, "scale": 2.52 * sf})
+			items.append({"sprite": "watchtower", "offset": Vector2(0, 68) * sf, "scale": 2.48 * sf})
 
 	if has_culture:
-		var totem_scale := (2.12 + mini(3, cultural_count) * 0.16) * sf
-		items.append({"sprite": "cultural_totem", "offset": Vector2(-52, 29) * sf, "scale": totem_scale})
+		var totem_scale := (2.18 + mini(3, cultural_count) * 0.14) * sf
+		var totem_off := Vector2(-58, 32) * sf if tier == 1 else Vector2(-34, 14) * sf
+		items.append({"sprite": totem_sprite, "offset": totem_off, "scale": totem_scale})
 
-	var act_offset := Vector2(48, -12) * sf if tier == 1 else (Vector2(62, -10) * sf if tier == 3 else Vector2(52, 29) * sf)
-	items.append({"sprite": "act_" + archetype, "offset": act_offset, "scale": 2.32 * sf})
+	var act_offset := Vector2(58, 28) * sf if tier == 1 else Vector2(48, 50) * sf
+	items.append({"sprite": "act_" + archetype, "offset": act_offset, "scale": 2.30 * sf})
 	return items
 
 
@@ -205,19 +245,22 @@ static func draw_village_plaza(r: Node2D, village: Dictionary) -> void:
 
 
 static func _draw_village(r: Node2D, village: Dictionary) -> void:
+	var v_pos: Vector2 = village["pos"]
+	if r._visible_world_rect.size != Vector2.ZERO and not r._visible_world_rect.grow(HexMath.HEX_SIZE * 1.5).has_point(v_pos):
+		return
 	var ci: Node2D = r._network_layer
 	var deme: EvoTypes.Deme = village["deme"]
 	var sf: float = village["sf"]
 	var modulate_col: Color = village["modulate"]
 	var status_col: Color = village["status_col"]
-	var v_pos: Vector2 = village["pos"]
 	var plaza_center: Vector2 = v_pos + Vector2(0, 8.0 * sf)
-	var strat_color := resolve_deme_strategy_color(r.world_state, deme)
+	var strat_color: Color = village["strat_color"]
 	var strat_hi := strat_color.lightened(0.25)
 
-	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, v_pos + Vector2(0, -4.0 * sf), 86.0 * sf, 50.0 * sf, Color(0.36, 0.25, 0.16, 0.34) * modulate_col)
+	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, v_pos + Vector2(0, -4.0 * sf), 132.0 * sf, 76.0 * sf, Color(0.36, 0.25, 0.16, 0.34) * modulate_col)
+	var eff_tier: int = 4 if (deme.merged_count >= 1 or deme.walled_union_id != "") else int(village["tier"])
 	var layout := get_village_building_layout(
-		int(village["tier"]),
+		eff_tier,
 		sf,
 		not deme.cultural_trait_ids.is_empty(),
 		deme.cultural_trait_ids.size(),
@@ -225,12 +268,11 @@ static func _draw_village(r: Node2D, village: Dictionary) -> void:
 	)
 	for b_item in layout:
 		var b_foot: Vector2 = v_pos + (b_item["offset"] as Vector2)
-		EvoWorldOverlayRenderer.draw_ellipse_filled(ci, b_foot + Vector2(0, -3.0 * sf), 26.0 * sf, 14.5 * sf, Color("#7c5c3b") * modulate_col)
-		EvoWorldOverlayRenderer.draw_ellipse_filled(ci, b_foot + Vector2(0, -3.0 * sf), 21.5 * sf, 11.5 * sf, Color("#cbb082") * modulate_col)
+		EvoWorldOverlayRenderer.draw_ellipse_filled(ci, b_foot + Vector2(0, -3.0 * sf), 28.0 * sf, 15.5 * sf, Color("#7c5c3b") * modulate_col)
+		EvoWorldOverlayRenderer.draw_ellipse_filled(ci, b_foot + Vector2(0, -3.0 * sf), 23.0 * sf, 12.5 * sf, Color("#cbb082") * modulate_col)
 
-	var def_tier: int = deme.defense_tier
-	var is_merged: bool = deme.merged_count > 0
-	var plinth_r := (54.5 if is_merged else 50.0) * sf
+	var is_merged: bool = deme.merged_count > 0 or deme.walled_union_id != ""
+	var plinth_r := (58.0 if is_merged else 52.0) * sf
 	var rim_r := plinth_r + 5.5 * sf
 	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, plaza_center, rim_r, rim_r * 0.58, Color("#5c4028") * modulate_col)
 	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, plaza_center, plinth_r, plinth_r * 0.58, Color("#c2a378") * modulate_col)
@@ -313,63 +355,8 @@ static func _draw_village(r: Node2D, village: Dictionary) -> void:
 		])
 		ci.draw_colored_polygon(sec_flag_pts, sec_col * modulate_col)
 
-	# Procedural Defense Perimeter Rings around plaza_center
-	var def_r := plinth_r + 3.2 * sf
-	if def_tier == 1:
-		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, def_r, def_r * 0.58, Color("#5c3317") * modulate_col, 3.5 * sf)
-		for s_i in range(22):
-			var ang := TAU * float(s_i) / 22.0
-			if absf(ang - PI * 0.5) < 0.24:
-				continue
-			var st_base := plaza_center + Vector2(cos(ang) * def_r, sin(ang) * def_r * 0.58)
-			var st_top := st_base + Vector2(0.0, -5.5 * sf)
-			ci.draw_line(st_base, st_top, Color("#78350f") * modulate_col, 2.4 * sf)
-			ci.draw_circle(st_top, 1.3 * sf, Color("#fde68a") * modulate_col)
-	elif def_tier == 2:
-		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, def_r, def_r * 0.58, Color("#475569") * modulate_col, 5.5 * sf)
-		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, def_r, def_r * 0.58, Color("#94a3b8") * modulate_col, 3.2 * sf)
-		for m_i in range(20):
-			var ang := TAU * float(m_i) / 20.0
-			if absf(ang - PI * 0.5) < 0.24:
-				continue
-			var m_pt := plaza_center + Vector2(cos(ang) * def_r, sin(ang) * def_r * 0.58) + Vector2(0.0, -2.2 * sf)
-			ci.draw_rect(Rect2(m_pt - Vector2(2.0 * sf, 2.0 * sf), Vector2(4.0 * sf, 3.5 * sf)), Color("#cbd5e1") * modulate_col, true)
-	elif def_tier >= 3:
-		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, def_r, def_r * 0.58, Color("#334155") * modulate_col, 7.0 * sf)
-		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, def_r, def_r * 0.58, Color("#94a3b8") * modulate_col, 4.2 * sf)
-		for m_i in range(20):
-			var ang := TAU * float(m_i) / 20.0
-			if absf(ang - PI * 0.5) < 0.24:
-				continue
-			var m_pt := plaza_center + Vector2(cos(ang) * def_r, sin(ang) * def_r * 0.58) + Vector2(0.0, -2.5 * sf)
-			ci.draw_rect(Rect2(m_pt - Vector2(2.2 * sf, 2.2 * sf), Vector2(4.4 * sf, 4.0 * sf)), Color("#e2e8f0") * modulate_col, true)
-		for b_ang in [PI * 0.25, PI * 0.75, PI * 1.25, PI * 1.75]:
-			var b_pt := plaza_center + Vector2(cos(b_ang) * def_r, sin(b_ang) * def_r * 0.58)
-			ci.draw_circle(b_pt, 6.2 * sf, Color("#64748b") * modulate_col)
-			ci.draw_circle(b_pt + Vector2(0.0, -2.2 * sf), 4.6 * sf, strat_color * modulate_col)
-			ci.draw_circle(b_pt + Vector2(0.0, -3.5 * sf), 1.8 * sf, Color("#fbbf24") * modulate_col)
-
-	var ring_r := plinth_r + (6.8 if def_tier > 0 else 4.5) * sf
+	var ring_r := plinth_r + 5.0 * sf
 	EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, ring_r, ring_r * 0.58, status_col * modulate_col, 3.4)
-
-	if bool(village.get("in_siege", false)):
-		var siege_pulse := 0.65 + 0.35 * sin(r._anim_time * 6.5)
-		var siege_r := plinth_r + 12.5 * sf
-		EvoWorldOverlayRenderer.draw_ellipse_outline(
-			ci,
-			plaza_center,
-			siege_r,
-			siege_r * 0.58,
-			Color(0.98, 0.32, 0.12, 0.85 * siege_pulse) * modulate_col,
-			3.2 * sf
-		)
-
-	if deme.id == r.selected_deme_id:
-		var sel_r := plinth_r + 11.0 * sf
-		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, sel_r, sel_r * 0.58, C_SELECTION, 4.2)
-	elif deme.id == r.hovered_deme_id:
-		var hov_r := plinth_r + 9.5 * sf
-		EvoWorldOverlayRenderer.draw_ellipse_outline(ci, plaza_center, hov_r, hov_r * 0.58, Color(1.0, 0.92, 0.68, 0.88), 2.8)
 
 
 static func compute_cell_flora_key(r: Node2D, cell: EvoTypes.HexCell, top_z: float) -> Array:
@@ -391,13 +378,14 @@ static func compute_cell_flora_key(r: Node2D, cell: EvoTypes.HexCell, top_z: flo
 	var k_band: int = 0 if k_ratio < 0.60 else (1 if k_ratio < 0.85 else 2)
 	var link_mask: int = 0
 	if v_count > 0:
-		var n_ids := HexMath.get_neighbor_ids(cell.q, cell.r, state.cells)
-		for n_idx in range(n_ids.size()):
-			var n_id := n_ids[n_idx]
-			var ncell: EvoTypes.HexCell = state.cells[n_id]
-			if not ncell.deme_ids.is_empty() or (ncell.biome == "coastal_shallows" and ncell.altitude >= state.sea_level):
-				link_mask |= (1 << n_idx)
-	return [cell.biome, top_z, prop_count, v_count, k_band, link_mask, r._built_yaw, r._built_pitch]
+		for dir_idx in range(6):
+			var n_id: String = r._neighbor_id(cell, dir_idx)
+			if state.cells.has(n_id):
+				var ncell: EvoTypes.HexCell = state.cells[n_id]
+				if not ncell.deme_ids.is_empty() or ncell.land_use != "wild" or (ncell.biome == "coastal_shallows" and ncell.altitude >= state.sea_level):
+					link_mask |= (1 << dir_idx)
+	var cell_hash: int = int(cell.altitude * 100.0) * 1000 + prop_count * 10 + cell.biome.hash() + cell.land_use.hash() * 31 + (17 if cell.has_ruins else 0)
+	return [cell_hash, cell.biome, cell.land_use, cell.has_ruins, top_z, prop_count, v_count, k_band, link_mask, r._built_yaw, r._built_pitch]
 
 
 static func collect_static_props(r: Node2D) -> Array[Prop]:
@@ -437,7 +425,7 @@ static func collect_static_props(r: Node2D) -> Array[Prop]:
 			r._cell_flora_cache[hex_id] = {"key": flora_key, "props": cell_props}
 
 	var flora_sorted: Array[Prop] = []
-	if full_flora_rebuild or changed_hexes.size() > 45:
+	if full_flora_rebuild or changed_hexes.size() > 95:
 		for hex_id in hex_list:
 			var cell: EvoTypes.HexCell = state.cells[hex_id]
 			if r._is_water(cell):
@@ -493,9 +481,9 @@ static func collect_static_props(r: Node2D) -> Array[Prop]:
 	for hex_id in state.recent_extinction_hexes:
 		if state.cells.has(hex_id):
 			var cell: EvoTypes.HexCell = state.cells[hex_id]
-			if not r._is_water(cell):
+			if not r._is_water(cell) and not cell.has_ruins:
 				var world_xy := HexMath.axial_to_world(cell.q, cell.r)
-				var r_prop := world_prop("ruins", world_xy + Vector2(0, 12), r._get_cell_top_z(cell), Vector2.ZERO, 2.20, Color.WHITE)
+				var r_prop := world_prop("ruins_stone", world_xy + Vector2(0, 12), r._get_cell_top_z(cell), Vector2.ZERO, 2.20, Color.WHITE)
 				r_prop.project(r._ground, r._lift)
 				dyn_props.append(r_prop)
 
@@ -538,6 +526,7 @@ static func collect_village_building_props(village: Dictionary, props: Array[Pro
 	var sf: float = village["sf"]
 	var m: Color = village["modulate"]
 	var tier := int(village["tier"])
+	var eff_tier: int = 4 if (deme.merged_count >= 1 or deme.walled_union_id != "") else tier
 	var c_count := deme.cultural_trait_ids.size()
 	var arch := str(village["archetype"])
 	var flags: int = (
@@ -549,13 +538,15 @@ static func collect_village_building_props(village: Dictionary, props: Array[Pro
 		| (32 if bool(village.get("in_siege", false)) else 0)
 	)
 	var vp_key: Array = [
-		tier,
+		eff_tier,
 		sf,
 		c_count,
 		arch,
 		flags,
 		deme.defense_tier,
 		deme.merged_count,
+		deme.walled_union_id,
+		snappedf(deme.salubrity, 0.05),
 		m,
 		v_pos
 	]
@@ -566,7 +557,7 @@ static func collect_village_building_props(village: Dictionary, props: Array[Pro
 	var v_props: Array[Prop] = []
 	var v_world: Vector2 = village["world_xy"]
 	var top_z: float = village["top_z"]
-	var layout := get_village_building_layout(tier, sf, c_count > 0, c_count, arch)
+	var layout := get_village_building_layout(eff_tier, sf, c_count > 0, c_count, arch)
 	for b_item in layout:
 		var off: Vector2 = b_item["offset"]
 		var p := world_prop(str(b_item["sprite"]), v_world, top_z, off, float(b_item["scale"]), m)
@@ -585,27 +576,12 @@ static func _draw_settlement_props(village: Dictionary, props: Array[Prop]) -> v
 	var top_z: float = village["top_z"]
 	var sf: float = village["sf"]
 	var m: Color = village["modulate"]
-	if deme.defense_tier == 1:
-		var off := Vector2(0, 38) * sf
-		var p := world_prop("prop_defense_palisade", v_world, top_z, off, 2.20 * sf, m)
-		p.set_foot(v_pos + off)
-		props.append(p)
-	elif deme.defense_tier == 2:
-		var off := Vector2(0, 38) * sf
-		var p := world_prop("prop_defense_wall", v_world, top_z, off, 2.25 * sf, m)
-		p.set_foot(v_pos + off)
-		props.append(p)
-	elif deme.defense_tier >= 3:
-		var off := Vector2(0, 39) * sf
-		var p := world_prop("prop_defense_fortress", v_world, top_z, off, 2.30 * sf, m)
-		p.set_foot(v_pos + off)
-		props.append(p)
 	if bool(village.get("has_pact", false)):
-		var off := (Vector2(-36, 30) if deme.defense_tier > 0 else Vector2(0, 34)) * sf
+		var off := Vector2(-36, 30) * sf
 		var p := world_prop("prop_pact_totem", v_world, top_z, off, 2.15 * sf, m)
 		p.set_foot(v_pos + off)
 		props.append(p)
-	if deme.merged_count > 0:
+	if deme.merged_count > 0 or deme.walled_union_id != "":
 		var off := Vector2(36, 30) * sf
 		var p := world_prop("prop_unity_monument", v_world, top_z, off, 2.15 * sf, m)
 		p.set_foot(v_pos + off)
@@ -781,7 +757,10 @@ static func get_cell_road_corridors_local(
 
 	var state: EvoTypes.WorldState = r.world_state
 	var cell_world := HexMath.axial_to_world(cell.q, cell.r)
-	for n_id in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
+	for dir_idx in range(6):
+		var n_id: String = r._neighbor_id(cell, dir_idx)
+		if not state.cells.has(n_id):
+			continue
 		var ncell: EvoTypes.HexCell = state.cells[n_id]
 		var has_link := not ncell.deme_ids.is_empty() or (ncell.biome == "coastal_shallows" and ncell.altitude >= state.sea_level)
 		if has_link:
@@ -805,6 +784,38 @@ static func collect_cell_flora_props(
 	props: Array[Prop]
 ) -> void:
 	var k_ratio: float = clampf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
+	var base_seed: int = cell.q * 73856093 ^ cell.r * 19349663
+	var palette_sprites: Array = BIOME_FLORA_PALETTES[cell.biome] if BIOME_FLORA_PALETTES.has(cell.biome) else DEFAULT_FLORA_PALETTE
+
+	if cell.has_ruins:
+		var r1 := world_prop("ruins_stone", world_xy + Vector2(-34.0, 10.0), top_z, Vector2.ZERO, 2.25, Color.WHITE)
+		props.append(r1)
+		if absi(base_seed) % 2 == 0:
+			var r2 := world_prop("ruins_stone", world_xy + Vector2(38.0, -16.0), top_z, Vector2.ZERO, 2.05, Color.WHITE)
+			props.append(r2)
+
+	var v_count := cell.deme_ids.size()
+	if v_count == 0 and cell.land_use in ["crops", "pasture"]:
+		if cell.land_use == "crops":
+			props.append(world_prop("crop_field", world_xy + Vector2(-62.0, -28.0), top_z, Vector2.ZERO, 2.40, Color.WHITE))
+			props.append(world_prop("crop_field", world_xy + Vector2(58.0, -24.0), top_z, Vector2.ZERO, 2.40, Color.WHITE))
+			props.append(world_prop("windmill", world_xy + Vector2(0.0, -68.0), top_z, Vector2.ZERO, 2.52, Color.WHITE))
+			props.append(world_prop("granary", world_xy + Vector2(52.0, 34.0), top_z, Vector2.ZERO, 2.38, Color.WHITE))
+		else:
+			props.append(world_prop("pasture_pen", world_xy + Vector2(-60.0, -24.0), top_z, Vector2.ZERO, 2.42, Color.WHITE))
+			props.append(world_prop("pasture_pen", world_xy + Vector2(56.0, -20.0), top_z, Vector2.ZERO, 2.42, Color.WHITE))
+			var shed_sprite := "granary" if absi(base_seed) % 2 == 0 else "house_clay"
+			props.append(world_prop(shed_sprite, world_xy + Vector2(0.0, -64.0), top_z, Vector2.ZERO, 2.38, Color.WHITE))
+		for p_i in range(4):
+			var p_ang := (TAU * float(p_i) / 4.0) + 0.35
+			var p_rad := HexMath.HEX_SIZE * (0.74 + float((absi(base_seed) + p_i * 7) % 10) * 0.01)
+			var p_off := Vector2(cos(p_ang), sin(p_ang)) * p_rad
+			var periph_sprite: String = palette_sprites[p_i % palette_sprites.size()]
+			var p_prop := world_prop(periph_sprite, world_xy + p_off, top_z, Vector2.ZERO, 1.35, Color.WHITE)
+			p_prop.sways = not NON_SWAYING_SPRITES.has(periph_sprite)
+			p_prop.sway_phase = float(p_i) * 0.8 + float(cell.q)
+			props.append(p_prop)
+		return
 
 	var base_count := 8
 	if cell.biome == "tropical_forest":
@@ -819,7 +830,6 @@ static func collect_cell_flora_props(
 	var prop_count: int = clampi(int(round(float(base_count) * (0.55 + 0.45 * k_ratio))), 6, 13)
 
 	var village_local_centers: Array[Vector2] = []
-	var v_count := cell.deme_ids.size()
 	for v_idx in range(v_count):
 		village_local_centers.append(HexMath.compute_village_sector_offset(v_idx, v_count, HexMath.HEX_SIZE))
 
@@ -827,15 +837,13 @@ static func collect_cell_flora_props(
 		prop_count = clampi(prop_count - v_count, 5, 10)
 
 	var road_corridors := get_cell_road_corridors_local(r, cell, village_local_centers)
-	var palette_sprites: Array = BIOME_FLORA_PALETTES[cell.biome] if BIOME_FLORA_PALETTES.has(cell.biome) else DEFAULT_FLORA_PALETTE
 	var placed_offsets: Array[Vector2] = []
-	var village_clear_r := 118.0 if v_count == 1 else 88.0
+	var village_clear_r := 138.0 if v_count == 1 else 88.0
 	var village_clear_r_sq := village_clear_r * village_clear_r
 	var village_clear_r2_sq := (village_clear_r - 2.0) * (village_clear_r - 2.0)
-	var max_rad_sq := (HexMath.HEX_SIZE * 0.82) * (HexMath.HEX_SIZE * 0.82)
+	var max_rad_sq := (HexMath.HEX_SIZE * 0.84) * (HexMath.HEX_SIZE * 0.84)
 	var inner_count: int = 0 if v_count > 0 else maxi(2, prop_count / 3)
 	var outer_count: int = prop_count - inner_count
-	var base_seed: int = cell.q * 73856093 ^ cell.r * 19349663
 
 	for idx in range(prop_count):
 		var s1: int = absi(base_seed ^ ((idx * 13 + 1) * 83492791))
@@ -849,7 +857,7 @@ static func collect_cell_flora_props(
 			var o_idx := idx - inner_count
 			angle = (TAU * float(o_idx) / float(maxi(1, outer_count))) + 0.32 + float(s1 % 31 - 15) * 0.032
 			if v_count > 0:
-				rad_norm = 0.62 + float(s2 % 20) * 0.01
+				rad_norm = 0.66 + float(s2 % 18) * 0.01
 			else:
 				rad_norm = 0.50 + float(s2 % 28) * 0.01
 
@@ -865,8 +873,6 @@ static func collect_cell_flora_props(
 					valid_spot = false
 				break
 		if not valid_spot:
-			continue
-		if v_count >= 2 and local_off.length_squared() < 5476.0:
 			continue
 		for vc in village_local_centers:
 			if local_off.distance_squared_to(vc) < village_clear_r2_sq:
@@ -906,7 +912,7 @@ static func collect_cell_flora_props(
 			can_sway = false
 			sprite_key = "tree_stump" if idx % 4 == 1 else ("soil_crack" if idx % 4 == 3 else "dry_scrub")
 
-		var prop := world_prop(sprite_key, world_xy + local_off, top_z, Vector2.ZERO, 1.12 + float(s1 % 20) * 0.015, Color.WHITE)
+		var prop := world_prop(sprite_key, world_xy + local_off, top_z, Vector2.ZERO, 1.45 + float(s1 % 20) * 0.015, Color.WHITE)
 		prop.sways = can_sway and not NON_SWAYING_SPRITES.has(sprite_key)
 		prop.sway_phase = float(idx) * 0.9 + float(cell.q)
 		props.append(prop)
@@ -985,7 +991,9 @@ static func acquire_moving_prop(
 		r._moving_prop_pool.append(prop)
 	r._moving_prop_count += 1
 	prop.texture = tex
-	var sz: Vector2 = tex.get_size() * scale_val
+	var tex_sz := tex.get_size()
+	var dpi_norm: float = 0.32 if tex_sz.x <= 64.0 else 0.24
+	var sz: Vector2 = tex_sz * (scale_val * dpi_norm)
 	prop.anchor_offset = Vector2(sz.x * 0.5, sz.y * anchor_y_ratio)
 	prop.rect = Rect2(foot - prop.anchor_offset, sz)
 	prop.y = foot.y
@@ -1005,23 +1013,22 @@ static func collect_moving_props(r: Node2D) -> Array[Prop]:
 		var v_pos: Vector2 = village["pos"]
 		if not vis_rect.has_point(v_pos):
 			continue
-		var deme: EvoTypes.Deme = village["deme"]
 		var sf: float = village["sf"]
 		var m: Color = village["modulate"]
-		var strat_color := resolve_deme_strategy_color(r.world_state, deme)
+		var strat_color: Color = village["strat_color"]
 		var cape_trim := strat_color.lightened(0.25) * m
 		if int(village["tier"]) == 1:
 			var fire_sprite := "tier1_campfire" if int(anim_time * 5.0) % 2 == 0 else "tier1_campfire_2"
-			props.append(acquire_moving_prop(r, EvoPixelArtGen.get_texture(fire_sprite), v_pos + Vector2(4, 8) * sf, 2.42 * sf, 0.78, m))
+			props.append(acquire_moving_prop(r, EvoPixelArtGen.get_texture(fire_sprite), v_pos + Vector2(0, 6) * sf, 2.35 * sf, 0.78, m))
 
 		var villager_count: int = village["villager_count"]
-		var v_textures: Array[ImageTexture] = get_villager_textures_for_color(r, strat_color)
+		var v_textures: Array = village.get("villager_textures", [])
 		for v_idx in range(villager_count):
-			var orbit_angle := anim_time * (0.95 + float(v_idx % 3) * 0.22) + float(v_idx) * (TAU / float(villager_count))
-			var orbit_r := (28.0 + float(v_idx % 3) * 9.0) * sf
+			var orbit_angle := anim_time * (0.90 + float(v_idx % 3) * 0.20) + float(v_idx) * (TAU / float(villager_count))
+			var orbit_r := (34.0 + float(v_idx % 4) * 14.0) * sf
 			var foot := v_pos + Vector2(cos(orbit_angle) * orbit_r, sin(orbit_angle) * (orbit_r * 0.56) + 9.0 * sf)
 			var frame := int((anim_time * 6.0) + float(v_idx)) % 3
-			var v_prop := acquire_moving_prop(r, v_textures[frame], foot, 2.60 * sf, 0.85, m)
+			var v_prop := acquire_moving_prop(r, v_textures[frame] as ImageTexture, foot, 2.55 * sf, 0.85, m)
 			v_prop.trim_color = cape_trim
 			props.append(v_prop)
 
@@ -1035,6 +1042,11 @@ static func collect_moving_props(r: Node2D) -> Array[Prop]:
 			continue
 		var curve_f: float = float(road["curve_factor"])
 		var r_textures: Array[ImageTexture] = road["villager_textures"]
+		if road["kind"] == "rural_farm":
+			var raw_wagon := fposmod(anim_time * 0.22 + float(r_idx) * 0.37, 1.0)
+			var t_wagon := lerpf(0.22, 0.82, raw_wagon)
+			var w_foot := EvoRoadNetworkRenderer.sample_road_curve(p_a, p_b, t_wagon, 1.0, curve_f)
+			props.append(acquire_moving_prop(r, EvoPixelArtGen.get_texture("covered_wagon"), w_foot, 1.85, 0.82, Color.WHITE))
 		for traveler_i in range(2):
 			var raw_walk := fposmod(anim_time * 0.24 + float(r_idx) * 0.31 + float(traveler_i) * 0.48, 1.0)
 			if traveler_i == 1:
@@ -1042,7 +1054,7 @@ static func collect_moving_props(r: Node2D) -> Array[Prop]:
 			var t_walk := lerpf(0.24, 0.76, raw_walk)
 			var foot := EvoRoadNetworkRenderer.sample_road_curve(p_a, p_b, t_walk, 1.0, curve_f)
 			var frame := int((anim_time * 6.5) + float(traveler_i + r_idx)) % 3
-			props.append(acquire_moving_prop(r, r_textures[frame], foot, 2.55, 0.85, Color.WHITE))
+			props.append(acquire_moving_prop(r, r_textures[frame], foot, 2.50, 0.85, Color.WHITE))
 	return props
 
 

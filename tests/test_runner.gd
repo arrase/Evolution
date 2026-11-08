@@ -80,18 +80,18 @@ func _test_thermodynamics() -> void:
 func _test_catalog_and_presets() -> void:
 	print("-- Testing Catalog & Scientific Presets --")
 	var rift := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
-	_assert(rift.cells.size() == 91, "Rift Savanna radius 5 has 91 cells")
+	_assert(rift.cells.size() == 169, "Rift Savanna radius 7 has 169 cells")
 	_assert(rift.demes.size() == 2, "Rift Savanna starts with 2 demes")
 	_assert(rift.traits_catalog.size() == 11, "Base catalog has 11 traits (6 bio + 5 cul)")
 	_assert(rift.decisions_catalog.size() == 7, "Base catalog has 7 decisions")
 
 	var darwin := EvoCatalog.create_preset_world("preset-darwin-archipelago", "en")
-	_assert(darwin.cells.size() == 91, "Darwin Archipelago radius 5 has 91 cells")
+	_assert(darwin.cells.size() == 169, "Darwin Archipelago radius 7 has 169 cells")
 	_assert(darwin.demes.size() == 2 and darwin.demes.has("deme-darwin-founder") and darwin.demes.has("deme-darwin-rival"), "Darwin Archipelago starts with 2 rival founder demes (1v1)")
 	_assert(darwin.glacial_sea_level_cycle, "Darwin Archipelago has glacial sea level cycle enabled")
 
 	var island := EvoCatalog.create_preset_world("preset-finite-island", "es")
-	_assert(island.cells.size() == 61, "Finite Island radius 4 has 61 cells")
+	_assert(island.cells.size() == 169, "Finite Island radius 7 has 169 cells")
 	_assert(island.demes.size() == 2 and island.demes.has("deme-island-1") and island.demes.has("deme-island-2"), "Finite Island starts with 2 rival clans (1v1)")
 
 	var west: EvoTypes.Deme = rift.demes["deme-rift-west"]
@@ -304,12 +304,13 @@ func _test_hawk_dove_and_symbiosis() -> void:
 	var d1: EvoTypes.Deme = state.demes["deme-island-1"]
 	var d2: EvoTypes.Deme = state.demes["deme-island-2"]
 
-	# Place both rival clans in center cell 0,0 for direct intra-hex interaction
+	# Place both rival clans on adjacent hexes 0,0 and 1,0 under 1-deme-per-hex invariant
 	(state.cells[d1.hex_id] as EvoTypes.HexCell).deme_ids.erase(d1.id)
 	(state.cells[d2.hex_id] as EvoTypes.HexCell).deme_ids.erase(d2.id)
 	d1.hex_id = "0,0"
-	d2.hex_id = "0,0"
-	(state.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([d1.id, d2.id])
+	d2.hex_id = "1,0"
+	(state.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([d1.id])
+	(state.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([d2.id])
 	var init_pop_1 := d1.population
 	var init_pop_2 := d2.population
 
@@ -701,12 +702,12 @@ func _test_main_scene_and_ui_integration() -> void:
 	# Preset switching
 	main.load_preset("preset-darwin-archipelago")
 	_assert(main.world_state.preset_id == "preset-darwin-archipelago", "Switched to preset-darwin-archipelago")
-	_assert(main.world_state.cells.size() == 91, "Darwin preset has 91 cells in main")
+	_assert(main.world_state.cells.size() == 169, "Darwin preset has 169 cells in main")
 	main.step_generation()
 
 	main.load_preset("preset-finite-island")
 	_assert(main.world_state.preset_id == "preset-finite-island", "Switched to preset-finite-island")
-	_assert(main.world_state.cells.size() == 61, "Finite Island preset has 61 cells in main")
+	_assert(main.world_state.cells.size() == 169, "Finite Island preset has 169 cells in main")
 	main.step_generation()
 
 	# Language switching
@@ -773,11 +774,12 @@ func _test_main_scene_and_ui_integration() -> void:
 	(life_state.cells[ld1.hex_id] as EvoTypes.HexCell).deme_ids.erase(ld1.id)
 	(life_state.cells[ld2.hex_id] as EvoTypes.HexCell).deme_ids.erase(ld2.id)
 	ld1.hex_id = "0,0"
-	ld2.hex_id = "0,0"
-	(life_state.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([ld1.id, ld2.id])
+	ld2.hex_id = "1,0"
+	(life_state.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([ld1.id])
+	(life_state.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([ld2.id])
 	var coop_fl := EvoTypes.HexEdgeFlow.new()
 	coop_fl.from_hex_id = "0,0"
-	coop_fl.to_hex_id = "0,0"
+	coop_fl.to_hex_id = "1,0"
 	coop_fl.flow_type = "cooperate"
 	coop_fl.from_deme_id = "deme-island-1"
 	coop_fl.to_deme_id = "deme-island-2"
@@ -791,7 +793,7 @@ func _test_main_scene_and_ui_integration() -> void:
 	_assert(life_state.disused_connections.size() == 1 and int(life_state.disused_connections[0].get("age", 0)) == 1, "Severed friendly flow ages to 1 in biophys_phase")
 	main.hud.set_world_state(life_state)
 	var rel_lines := main.hud._build_deme_relations_lines(ld1)
-	_assert(rel_lines.size() >= 2, "HUD inspector preserves both active/severed paths and cohabiting village relations without information loss")
+	_assert(rel_lines.size() >= 1, "HUD inspector preserves active/severed inter-hex relations without information loss")
 
 	# Verify Right Inspector Village Selector & Cycling
 	_assert(main.hud._village_selector_opt != null and main.hud._village_selector_opt.item_count == life_state.demes.size(), "Right Inspector village selector populated with all demes")
@@ -864,6 +866,7 @@ func _test_nonblocking_async_decision_and_smooth_panning() -> void:
 	_assert(eval_ms < 15.0, "evaluate_all_demes with 16 demes & live models enabled is non-blocking (took %.3f ms)" % eval_ms)
 
 	# Simulate 6 generations of continuous camera panning + turn progression + rendering rebuilds
+	main.world_renderer.refresh()
 	main.world_renderer._process(0.016)
 	_assert(not main.world_renderer._column_state_cache.is_empty(), "WorldRenderer column visual state cache populated")
 	_assert(not main.world_renderer._cell_flora_cache.is_empty(), "WorldRenderer static flora prop cache populated")
@@ -1215,6 +1218,148 @@ func _test_bugfix_regressions() -> void:
 	_assert((lab.strategy_trait_checks["bio-thermal-tolerance"] as CheckBox).button_pressed and (lab.strategy_trait_checks["bio-social-instinct"] as CheckBox).button_pressed, "EvoLabModal.refresh() preserves checked strategy traits in strategy_trait_checks")
 	lab.free()
 
+	# 6. EvoUiStyle.get_village_tier_label matches Deme.get_village_tier() across all 4 tiers (I..IV)
+	var tier_cases := [
+		{"pop": 65, "merged": 0, "def": 0, "union": "", "tier": 1, "es": "I · Campamento", "en": "I · Camp"},
+		{"pop": 90, "merged": 0, "def": 1, "union": "", "tier": 2, "es": "II · Aldea", "en": "II · Village"},
+		{"pop": 140, "merged": 0, "def": 0, "union": "", "tier": 2, "es": "II · Aldea", "en": "II · Village"},
+		{"pop": 185, "merged": 0, "def": 1, "union": "", "tier": 3, "es": "III · Villa", "en": "III · Town"},
+		{"pop": 255, "merged": 0, "def": 0, "union": "", "tier": 3, "es": "III · Villa", "en": "III · Town"},
+		{"pop": 295, "merged": 0, "def": 0, "union": "union-a-b", "tier": 4, "es": "IV · Metrópolis", "en": "IV · Metropolis"},
+		{"pop": 395, "merged": 0, "def": 0, "union": "", "tier": 4, "es": "IV · Metrópolis", "en": "IV · Metropolis"}
+	]
+	for tc in tier_cases:
+		var td := EvoTypes.Deme.new()
+		td.population = int(tc["pop"])
+		td.merged_count = int(tc["merged"])
+		td.defense_tier = int(tc["def"])
+		td.walled_union_id = str(tc["union"])
+		var lbl_es := EvoUiStyle.get_village_tier_label(td.population, "es", td.merged_count, td.defense_tier, td.walled_union_id)
+		var lbl_en := EvoUiStyle.get_village_tier_label(td.population, "en", td.merged_count, td.defense_tier, td.walled_union_id)
+		_assert(
+			td.get_village_tier() == int(tc["tier"]) and lbl_es == str(tc["es"]) and lbl_en == str(tc["en"]) and lbl_es.begins_with(td.get_village_roman() + " · "),
+			"EvoUiStyle.get_village_tier_label matches Deme.get_village_tier() for tier %d (pop=%d, def=%d, union=%s)" % [int(tc["tier"]), td.population, td.defense_tier, td.walled_union_id]
+		)
+
+	# 7. max_rural quota enforcement releases excess rural hexes when a deme drops in tier
+	var state_quota := EvoPresets.create_preset_world("preset-rift-savanna", "en")
+	var q_deme: EvoTypes.Deme = state_quota.demes["deme-rift-west"]
+	var q_other: EvoTypes.Deme = state_quota.demes["deme-rift-east"]
+	(state_quota.cells[q_deme.hex_id] as EvoTypes.HexCell).deme_ids.erase(q_deme.id)
+	(state_quota.cells[q_other.hex_id] as EvoTypes.HexCell).deme_ids.erase(q_other.id)
+	q_deme.hex_id = "0,0"
+	q_other.hex_id = "0,4"
+	(state_quota.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([q_deme.id])
+	(state_quota.cells["0,4"] as EvoTypes.HexCell).deme_ids.assign([q_other.id])
+	q_deme.population = 400
+	q_deme.defense_tier = 2
+	for nid in HexMath.get_neighbor_ids(0, 0, state_quota.cells):
+		var nc: EvoTypes.HexCell = state_quota.cells[nid]
+		nc.biome = "savanna"
+		nc.altitude = 0.45
+		nc.current_resources = 500.0
+	var q_vecs := {
+		q_deme.id: EvoEcologyInteraction.compute_effective_vector(q_deme, state_quota),
+		q_other.id: EvoEcologyInteraction.compute_effective_vector(q_other, state_quota)
+	}
+	var q_ext := {q_deme.id: 50.0, q_other.id: 50.0}
+	EvoEcologyInteraction._update_and_harvest_rural_hinterlands(state_quota, q_vecs, q_ext)
+	var count_t4 := 0
+	for nid in HexMath.get_neighbor_ids(0, 0, state_quota.cells):
+		if (state_quota.cells[nid] as EvoTypes.HexCell).owner_deme_id == q_deme.id:
+			count_t4 += 1
+	_assert(count_t4 == 4, "Tier 4 deme claims 4 rural hinterland hexes")
+
+	q_deme.population = 180
+	q_deme.defense_tier = 1
+	EvoEcologyInteraction._update_and_harvest_rural_hinterlands(state_quota, q_vecs, q_ext)
+	var count_t3 := 0
+	for nid in HexMath.get_neighbor_ids(0, 0, state_quota.cells):
+		if (state_quota.cells[nid] as EvoTypes.HexCell).owner_deme_id == q_deme.id:
+			count_t3 += 1
+	_assert(q_deme.get_village_tier() == 3 and count_t3 == 2, "Dropping to Tier 3 releases excess rural hexes down to max_rural == 2")
+
+	q_deme.population = 70
+	q_deme.defense_tier = 0
+	EvoEcologyInteraction._update_and_harvest_rural_hinterlands(state_quota, q_vecs, q_ext)
+	var count_t1 := 0
+	for nid in HexMath.get_neighbor_ids(0, 0, state_quota.cells):
+		if (state_quota.cells[nid] as EvoTypes.HexCell).owner_deme_id == q_deme.id:
+			count_t1 += 1
+	_assert(q_deme.get_village_tier() == 1 and count_t1 == 0, "Dropping to Tier 1 releases all rural hexes (max_rural == 0)")
+
+	# 8. Flood/mountain relocation clears non-adjacent rural hexes and revalidates walled_union_id
+	var state_reloc := EvoPresets.create_preset_world("preset-rift-savanna", "en")
+	state_reloc.unlimited_pressure_mode = true
+	var r_d1: EvoTypes.Deme = state_reloc.demes["deme-rift-west"]
+	var r_d2: EvoTypes.Deme = state_reloc.demes["deme-rift-east"]
+	(state_reloc.cells[r_d1.hex_id] as EvoTypes.HexCell).deme_ids.erase(r_d1.id)
+	(state_reloc.cells[r_d2.hex_id] as EvoTypes.HexCell).deme_ids.erase(r_d2.id)
+	r_d1.hex_id = "0,0"
+	r_d2.hex_id = "1,0"
+	(state_reloc.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([r_d1.id])
+	(state_reloc.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([r_d2.id])
+	r_d1.population = 180
+	r_d2.population = 180
+	r_d1.defense_tier = 1
+	r_d2.defense_tier = 1
+	r_d1.walled_union_id = "union-reloc-test"
+	r_d2.walled_union_id = "union-reloc-test"
+	state_reloc.active_pacts[EvoTypes.make_pair_key(r_d1.id, r_d2.id)] = 4
+	for nid in HexMath.get_neighbor_ids(0, 0, state_reloc.cells):
+		if nid != "1,0":
+			var nc: EvoTypes.HexCell = state_reloc.cells[nid]
+			nc.biome = "ocean"
+			nc.altitude = 0.05
+	var escape_cell: EvoTypes.HexCell = state_reloc.cells["-1,0"]
+	escape_cell.biome = "savanna"
+	escape_cell.altitude = 0.45
+	escape_cell.current_resources = 500.0
+	var far_rural_cell: EvoTypes.HexCell = state_reloc.cells["0,1"]
+	far_rural_cell.biome = "savanna"
+	far_rural_cell.altitude = 0.45
+	far_rural_cell.current_resources = 10.0
+	far_rural_cell.owner_deme_id = r_d1.id
+	far_rural_cell.land_use = "crops"
+	EvoTurnEngine.apply_set_biome(state_reloc, ["0,0"], "high_mountain", "en")
+	_assert(r_d1.hex_id == "-1,0", "Displaced deme relocates from high_mountain (0,0) to richest passable neighbor (-1,0)")
+	_assert(far_rural_cell.owner_deme_id == "" and far_rural_cell.land_use == "wild", "Relocation clears rural hex (0,1) that is no longer at hex_distance == 1 from (-1,0)")
+	_assert(r_d1.walled_union_id == "" and r_d2.walled_union_id == "", "Relocation out of adjacency dissolves walled_union_id on both partners")
+
+	# 9. EvoDecisionModel.prefetch_for_state warms cache keys matching post-EvoEnvPhase signatures on next generation
+	var state_pf := EvoPresets.create_preset_world("preset-rift-savanna", "es")
+	var pf_gen_before := state_pf.generation
+	var pf_season_before := state_pf.season
+	var pf_west: EvoTypes.Deme = state_pf.demes["deme-rift-west"]
+	var pf_cell: EvoTypes.HexCell = state_pf.cells[pf_west.hex_id]
+	var pf_k_before := pf_cell.carrying_capacity
+	var pf_r_before := pf_cell.current_resources
+	var pf_t_before := pf_cell.temperature
+	var pf_h_before := pf_cell.humidity
+
+	var state_sim_next := EvoTypes.WorldState.from_dict(state_pf.to_dict())
+	EvoEnvPhase.run_environmental_phase(state_sim_next, "es")
+	var sim_next_west: EvoTypes.Deme = state_sim_next.demes["deme-rift-west"]
+	var expected_next_sig := EvoDecisionModel.compute_deme_evaluation_signature(sim_next_west, state_sim_next)
+
+	# Simulate prefetch_for_state signature computation and verify state restoration
+	EvoDecisionModel.prefetch_for_state(state_pf)
+	_assert(
+		state_pf.generation == pf_gen_before and state_pf.season == pf_season_before and is_equal_approx(pf_cell.carrying_capacity, pf_k_before) and is_equal_approx(pf_cell.current_resources, pf_r_before) and is_equal_approx(pf_cell.temperature, pf_t_before) and is_equal_approx(pf_cell.humidity, pf_h_before),
+		"EvoDecisionModel.prefetch_for_state restores generation, season, and cell climate/resources after next-turn projection"
+	)
+	EvoOllamaClient.seed_signature_cache(expected_next_sig, {
+		"probabilities": {"dec-cooperate-store": 0.80, "dec-conservative-forage": 0.20},
+		"dominant_decision_id": "dec-cooperate-store",
+		"confidence": 0.93
+	})
+	EvoEnvPhase.run_environmental_phase(state_pf, "es")
+	var actual_next_sig := EvoDecisionModel.compute_deme_evaluation_signature(pf_west, state_pf)
+	_assert(actual_next_sig == expected_next_sig, "Projected next-turn signature in prefetch_for_state matches actual post-EvoEnvPhase signature")
+	EvoDecisionModel.evaluate_all_demes(state_pf, "es", false)
+	_assert(pf_west.last_confidence == 0.93 and pf_west.last_dominant_decision_id == "dec-cooperate-store", "evaluate_all_demes hits prefetched post-EvoEnvPhase signature cache on next generation")
+	EvoOllamaClient.clear_cache()
+
 
 func _test_social_memory_defense_tribute_and_synoecism() -> void:
 	print("-- Testing Social Memory, Multi-Tier Defense, Vendettas, Tribute, Synoecism & New Sprites --")
@@ -1439,8 +1584,8 @@ func _test_social_memory_defense_tribute_and_synoecism() -> void:
 	)
 	_assert(int(state_trib.active_pacts.get(trib_pk, 0)) == -4 and EvoTypes.is_vendetta_active(state_trib, t_raider.id, t_trader.id), "Betrayal sets active_pacts to -4 (deep vendetta)")
 
-	# 4. City Unification (Synoecism) & LLM Request Reduction (Same Hex & Adjacent Hexes)
-	# 4a. Same-hex synoecism with active_pacts >= 3
+	# 4. City Unification (Synoecism), Asymmetric Absorption & Multi-Hex Walled Unions
+	# 4a. Same-hex safety-net synoecism with active_pacts >= 3
 	var state_syn1 := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-trade")
 	var s1_a: EvoTypes.Deme = state_syn1.demes["deme-rift-west"]
 	var s1_b: EvoTypes.Deme = state_syn1.demes["deme-rift-east"]
@@ -1449,8 +1594,9 @@ func _test_social_memory_defense_tribute_and_synoecism() -> void:
 	s1_a.hex_id = "0,0"
 	s1_b.hex_id = "0,0"
 	(state_syn1.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([s1_a.id, s1_b.id])
-	s1_a.population = 125
-	s1_b.population = 115
+	s1_a.population = 185
+	s1_b.population = 125
+	s1_a.defense_tier = 2
 	s1_a.energy_reserves = 120.0
 	s1_b.energy_reserves = 110.0
 	s1_a.last_decision_probabilities = {"dec-cooperate-store": 0.70, "dec-conservative-forage": 0.30}
@@ -1462,19 +1608,19 @@ func _test_social_memory_defense_tribute_and_synoecism() -> void:
 		s1_a.id: EvoEcologyInteraction.compute_effective_vector(s1_a, state_syn1),
 		s1_b.id: EvoEcologyInteraction.compute_effective_vector(s1_b, state_syn1)
 	}
-	var s1_ext := {s1_a.id: 80.0, s1_b.id: 75.0}
+	var s1_ext := {s1_a.id: 95.0, s1_b.id: 75.0}
 	EvoDemographyMigration.run_demography_and_migration_phase(state_syn1, "en", s1_init_pops, s1_vecs, {}, s1_ext)
 	_assert(state_syn1.demes.size() == 1, "Same-hex synoecism (active_pacts >= 3) merges 2 allied demes into 1 unified city")
 	_assert(s1_a.merged_count >= 1, "Unified city increments merged_count (%d)" % s1_a.merged_count)
-	_assert(s1_a.population > 200, "Unified city combines populations (%d)" % s1_a.population)
+	_assert(s1_a.population > 280, "Unified city combines populations (%d)" % s1_a.population)
 	_assert(s1_a.secondary_color == s1_b_color and s1_a.secondary_color != "", "Unified city records partner secondary_color (%s)" % s1_a.secondary_color)
-	_assert(s1_a.get_village_tier() == 5 and s1_a.get_village_roman() == "V", "Unified metropolis reaches Tier 5 ('V')")
+	_assert(s1_a.get_village_tier() == 4 and s1_a.get_village_roman() == "IV", "Unified citadel/metropolis reaches Tier 4 ('IV')")
 	_assert(
-		EvoUiStyle.get_village_tier_label(s1_a.population, "es", s1_a.merged_count) == "V · Metrópolis" and EvoUiStyle.get_village_tier_label(s1_a.population, "en", s1_a.merged_count) == "V · Metropolis",
-		"EvoUiStyle.get_village_tier_label returns Tier V Metropolis label in ES and EN"
+		EvoUiStyle.get_village_tier_label(s1_a.population, "es", s1_a.merged_count, s1_a.defense_tier, s1_a.walled_union_id) == "IV · Metrópolis" and EvoUiStyle.get_village_tier_label(s1_a.population, "en", s1_a.merged_count, s1_a.defense_tier, s1_a.walled_union_id) == "IV · Metropolis",
+		"EvoUiStyle.get_village_tier_label returns Metropolis label in ES and EN"
 	)
 
-	# 4b. Adjacent-hex synoecism with active_pacts >= 4
+	# 4b. Asymmetric Category Absorption (tier_a != tier_b) converts vacated hex into rural hinterland owned by host city
 	var state_syn2 := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-innovation")
 	var s2_a: EvoTypes.Deme = state_syn2.demes["deme-rift-west"]
 	var s2_b: EvoTypes.Deme = state_syn2.demes["deme-rift-east"]
@@ -1484,8 +1630,10 @@ func _test_social_memory_defense_tribute_and_synoecism() -> void:
 	s2_b.hex_id = "1,0"
 	(state_syn2.cells["0,0"] as EvoTypes.HexCell).deme_ids.append(s2_a.id)
 	(state_syn2.cells["1,0"] as EvoTypes.HexCell).deme_ids.append(s2_b.id)
-	s2_a.population = 105
-	s2_b.population = 85
+	s2_a.population = 180
+	s2_a.defense_tier = 1
+	s2_b.population = 70
+	s2_b.defense_tier = 0
 	s2_a.energy_reserves = 110.0
 	s2_b.energy_reserves = 95.0
 	s2_a.last_decision_probabilities = {"dec-cooperate-store": 0.65, "dec-exchange-symbiosis": 0.25, "dec-conservative-forage": 0.10}
@@ -1497,17 +1645,22 @@ func _test_social_memory_defense_tribute_and_synoecism() -> void:
 		s2_a.id: EvoEcologyInteraction.compute_effective_vector(s2_a, state_syn2),
 		s2_b.id: EvoEcologyInteraction.compute_effective_vector(s2_b, state_syn2)
 	}
-	var s2_ext := {s2_a.id: 70.0, s2_b.id: 60.0}
+	var s2_ext := {s2_a.id: 95.0, s2_b.id: 50.0}
 	EvoDemographyMigration.run_demography_and_migration_phase(state_syn2, "en", s2_init_pops, s2_vecs, {}, s2_ext)
-	_assert(state_syn2.demes.size() == 1, "Adjacent-hex synoecism (active_pacts >= 4) merges 2 neighboring allied demes into 1 city")
-	_assert(s2_a.merged_count == 1 and s2_a.secondary_color == s2_b_color, "Adjacent-hex unified city sets merged_count == 1 and secondary_color")
-	_assert(s2_a.defense_tier >= 2, "Synoecism elevates unified city defense_tier (%d)" % s2_a.defense_tier)
+	_assert(state_syn2.demes.size() == 1, "Asymmetric Category Absorption (tier_a != tier_b, active_pacts >= 4) absorbs lower-tier neighbor into host city")
+	_assert(s2_a.merged_count == 1 and s2_a.secondary_color == s2_b_color, "Host city sets merged_count == 1 and secondary_color")
+	_assert(s2_a.defense_tier >= 2, "Asymmetric absorption elevates host city defense_tier (%d)" % s2_a.defense_tier)
+	var vacated_cell: EvoTypes.HexCell = state_syn2.cells["1,0"]
+	_assert(
+		vacated_cell.deme_ids.is_empty() and vacated_cell.owner_deme_id == s2_a.id and vacated_cell.land_use in ["crops", "pasture"],
+		"Asymmetric absorption converts vacated neighbor hex into rural hinterland (%s) owned by host city" % vacated_cell.land_use
+	)
 	var has_merge_flow := false
 	for fl in state_syn2.active_flows:
 		if fl.flow_type == "merge" and fl.from_hex_id == "1,0" and fl.to_hex_id == "0,0":
 			has_merge_flow = true
 			break
-	_assert(has_merge_flow, "Adjacent-hex synoecism emits inter-hex 'merge' HexEdgeFlow")
+	_assert(has_merge_flow, "Asymmetric absorption emits inter-hex 'merge' HexEdgeFlow")
 	var has_merge_chronicle := false
 	for e in state_syn2.chronicle:
 		if e.event_type == "merge":
@@ -1516,6 +1669,158 @@ func _test_social_memory_defense_tribute_and_synoecism() -> void:
 	_assert(has_merge_chronicle, "Synoecism logs 'merge' ChronicleEntry")
 	EvoMilestonePhase.run_milestone_phase(state_syn2, "en")
 	_assert(state_syn2.macro_outcome_type != "single_survivor", "Peaceful city unification does not falsely trigger single_survivor extinction outcome")
+
+	# 4c. Same-Category Multi-Hex Walled Union (tier_a == tier_b >= 2)
+	var state_union := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-trade")
+	var u_a: EvoTypes.Deme = state_union.demes["deme-rift-west"]
+	var u_b: EvoTypes.Deme = state_union.demes["deme-rift-east"]
+	(state_union.cells[u_a.hex_id] as EvoTypes.HexCell).deme_ids.erase(u_a.id)
+	(state_union.cells[u_b.hex_id] as EvoTypes.HexCell).deme_ids.erase(u_b.id)
+	u_a.hex_id = "0,0"
+	u_b.hex_id = "1,0"
+	(state_union.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([u_a.id])
+	(state_union.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([u_b.id])
+	u_a.population = 135
+	u_b.population = 135
+	u_a.defense_tier = 1
+	u_b.defense_tier = 1
+	u_a.energy_reserves = 120.0
+	u_b.energy_reserves = 120.0
+	u_a.last_decision_probabilities = {"dec-cooperate-store": 0.65, "dec-exchange-symbiosis": 0.25, "dec-conservative-forage": 0.10}
+	u_b.last_decision_probabilities = {"dec-exchange-symbiosis": 0.60, "dec-cooperate-store": 0.30, "dec-conservative-forage": 0.10}
+	state_union.active_pacts[EvoTypes.make_pair_key(u_a.id, u_b.id)] = 4
+	var u_init_pops := {u_a.id: u_a.population, u_b.id: u_b.population}
+	var u_vecs := {
+		u_a.id: EvoEcologyInteraction.compute_effective_vector(u_a, state_union),
+		u_b.id: EvoEcologyInteraction.compute_effective_vector(u_b, state_union)
+	}
+	var u_ext := {u_a.id: 85.0, u_b.id: 85.0}
+	EvoDemographyMigration.run_demography_and_migration_phase(state_union, "en", u_init_pops, u_vecs, {}, u_ext)
+	_assert(state_union.demes.size() == 2, "Same-category Multi-Hex Walled Union keeps both demes on their own hexes")
+	_assert(
+		u_a.walled_union_id != "" and u_a.walled_union_id == u_b.walled_union_id,
+		"Same-category Multi-Hex Walled Union assigns shared walled_union_id (%s)" % u_a.walled_union_id
+	)
+	var solo_u := u_a.duplicate_deme()
+	solo_u.walled_union_id = ""
+	var dummy_att := EvoTypes.Deme.new()
+	dummy_att.id = "att-test"
+	dummy_att.lineage_id = "lin-att"
+	dummy_att.population = 100
+	var union_forces := EvoDemographyMigration._compute_combat_forces(dummy_att, 50, u_a, state_union)
+	var solo_forces := EvoDemographyMigration._compute_combat_forces(dummy_att, 50, solo_u, state_union)
+	_assert(union_forces.y > solo_forces.y * 1.25, "Walled union partner pools garrison population and fortification defense bonus (%.1f vs %.1f)" % [union_forces.y, solo_forces.y])
+
+	# 4d. Rural Hinterlands (crops & pasture claiming, caloric harvest bonus, and raid/siege pillaging)
+	var state_rural := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-war")
+	var r_city: EvoTypes.Deme = state_rural.demes["deme-rift-west"]
+	var r_raider: EvoTypes.Deme = state_rural.demes["deme-rift-east"]
+	(state_rural.cells[r_city.hex_id] as EvoTypes.HexCell).deme_ids.erase(r_city.id)
+	(state_rural.cells[r_raider.hex_id] as EvoTypes.HexCell).deme_ids.erase(r_raider.id)
+	r_city.hex_id = "0,0"
+	r_raider.hex_id = "0,3"
+	(state_rural.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([r_city.id])
+	(state_rural.cells["0,3"] as EvoTypes.HexCell).deme_ids.assign([r_raider.id])
+	(state_rural.cells["0,0"] as EvoTypes.HexCell).biome = "savanna"
+	(state_rural.cells["0,0"] as EvoTypes.HexCell).altitude = 0.45
+	(state_rural.cells["1,0"] as EvoTypes.HexCell).biome = "savanna"
+	(state_rural.cells["1,0"] as EvoTypes.HexCell).altitude = 0.45
+	(state_rural.cells["1,0"] as EvoTypes.HexCell).current_resources = 900.0
+	(state_rural.cells["0,1"] as EvoTypes.HexCell).biome = "arid_steppe"
+	(state_rural.cells["0,1"] as EvoTypes.HexCell).altitude = 0.45
+	(state_rural.cells["0,1"] as EvoTypes.HexCell).current_resources = 850.0
+	r_city.population = 200
+	r_city.defense_tier = 1 # Tier 3 city -> claims up to 2 rural hexes
+	var r_vecs := {
+		r_city.id: EvoEcologyInteraction.compute_effective_vector(r_city, state_rural),
+		r_raider.id: EvoEcologyInteraction.compute_effective_vector(r_raider, state_rural)
+	}
+	var r_ext := {r_city.id: 40.0, r_raider.id: 40.0}
+	EvoEcologyInteraction._update_and_harvest_rural_hinterlands(state_rural, r_vecs, r_ext)
+	var claimed_crops := 0
+	var claimed_pasture := 0
+	for cid in HexMath.get_neighbor_ids(0, 0, state_rural.cells):
+		var nc: EvoTypes.HexCell = state_rural.cells[cid]
+		if nc.owner_deme_id == r_city.id:
+			if nc.land_use == "crops":
+				claimed_crops += 1
+			elif nc.land_use == "pasture":
+				claimed_pasture += 1
+	_assert(claimed_crops + claimed_pasture == 2 and claimed_crops >= 1 and claimed_pasture >= 1, "Tier 3 city claims both 'crops' and 'pasture' adjacent rural hinterlands")
+	_assert(float(r_ext[r_city.id]) > 40.0, "Rural hinterlands provide caloric harvest yield bonus to owning city (%.1f)" % float(r_ext[r_city.id]))
+
+	# Raid pillages an owned rural hinterland hex into wild + has_ruins
+	r_raider.population = 190
+	r_raider.cultural_trait_ids.assign(["cul-warrior-expansion"])
+	r_raider.last_decision_probabilities = {"dec-territorial-dispute": 0.70, "dec-intensive-overexploit": 0.30}
+	r_city.population = 80
+	r_city.defense_tier = 0
+	r_city.energy_reserves = 45.0
+	r_city.last_decision_probabilities = {"dec-conservative-forage": 1.0}
+	var raid_flows: Array[EvoTypes.HexEdgeFlow] = []
+	var raid_ok := EvoEcologyInteraction._execute_raid_if_successful(
+		r_raider,
+		r_city,
+		state_rural.cells["0,3"],
+		state_rural.cells["0,0"],
+		state_rural,
+		"en",
+		EvoEcologyInteraction.compute_effective_vector(r_raider, state_rural),
+		EvoEcologyInteraction.compute_effective_vector(r_city, state_rural),
+		r_ext,
+		raid_flows
+	)
+	var pillaged_ruins := false
+	for cid in HexMath.get_neighbor_ids(0, 0, state_rural.cells):
+		var nc: EvoTypes.HexCell = state_rural.cells[cid]
+		if nc.has_ruins and nc.land_use == "wild" and nc.owner_deme_id == "":
+			pillaged_ruins = true
+			break
+	_assert(raid_ok and pillaged_ruins, "Successful raid pillages an owned rural hinterland hex (land_use='wild', has_ruins=true)")
+
+	# 4e. Urban Salubrity & Epidemic Outbreak (salubrity < 0.35 and population >= 130)
+	var state_epi := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-expansion", "strat-cooperation")
+	var e_deme: EvoTypes.Deme = state_epi.demes["deme-rift-west"]
+	var e_cell: EvoTypes.HexCell = state_epi.cells[e_deme.hex_id]
+	e_cell.carrying_capacity = 40.0
+	e_cell.humidity = 0.0
+	e_deme.biological_trait_ids.erase("bio-k-strategy")
+	e_deme.cultural_trait_ids.erase("cul-communal-conservation")
+	e_deme.population = 220
+	e_deme.salubrity = 0.20
+	e_deme.energy_reserves = 150.0
+	var epi_init_pops := {}
+	var epi_vecs := {}
+	var epi_ext := {}
+	for did in state_epi.demes.keys():
+		var d: EvoTypes.Deme = state_epi.demes[did]
+		epi_init_pops[did] = d.population
+		epi_vecs[did] = EvoEcologyInteraction.compute_effective_vector(d, state_epi)
+		epi_ext[did] = float(d.population) * 0.50
+	EvoDemographyMigration.run_demography_and_migration_phase(state_epi, "en", epi_init_pops, epi_vecs, {}, epi_ext)
+	var has_epidemic_entry := false
+	for entry in state_epi.chronicle:
+		if entry.event_type == "epidemic" and entry.deme_id == e_deme.id:
+			has_epidemic_entry = true
+			break
+	_assert(has_epidemic_entry and e_deme.population < 200, "Overcrowded unsanitary city (salubrity < 0.35, pop >= 130) triggers 'epidemic' outbreak and casualties")
+
+	# 4f. Strict 1-Deme-Per-Hex Invariant across multi-gen simulation, flood relocation, warband invasion & budding, plus Camera Yaw Lock & Sector Offset
+	var cam := EvoCameraController.new()
+	cam.rotate_by(35.0)
+	_assert(is_equal_approx(cam.yaw_deg, 0.0), "EvoCameraController locks yaw_deg to 0.0 under rotate_by()")
+	cam.free()
+	_assert(HexMath.compute_village_sector_offset(0, 2, 100.0) == Vector2.ZERO, "HexMath.compute_village_sector_offset returns Vector2.ZERO for single-deme centered hexes")
+
+	var inv_state := EvoPresets.create_preset_world("preset-darwin-archipelago", "en", "strat-expansion", "strat-war")
+	var max_demes_per_cell := 0
+	for _step in range(10):
+		EvoTurnEngine.advance_generation(inv_state, "en")
+		for cid in inv_state.cells.keys():
+			var c: EvoTypes.HexCell = inv_state.cells[cid]
+			if c.deme_ids.size() > max_demes_per_cell:
+				max_demes_per_cell = c.deme_ids.size()
+	_assert(max_demes_per_cell <= 1, "Strict 1-deme-per-hex invariant (cell.deme_ids.size() <= 1) holds across 10 generations of expansion, war, and sea-level changes")
 
 	# 5. All 11 New Procedural Sprite Assets & UI Icons
 	EvoPixelArtGen.ensure_all_assets(true)

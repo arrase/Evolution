@@ -97,20 +97,26 @@ static func compute_pact_defense_bonus(
 	victim: EvoTypes.Deme,
 	state: EvoTypes.WorldState
 ) -> float:
-	if state.active_pacts.is_empty() or not state.cells.has(victim.hex_id):
+	if (state.active_pacts.is_empty() and victim.walled_union_id == "") or not state.cells.has(victim.hex_id):
 		return 0.0
 	var v_cell: EvoTypes.HexCell = state.cells[victim.hex_id]
 	var bonus: float = 0.0
 	for ally_id in v_cell.deme_ids:
-		if ally_id != victim.id and state.demes.has(ally_id) and EvoTypes.is_pact_active(state, victim.id, ally_id):
+		if ally_id != victim.id and state.demes.has(ally_id):
 			var ally: EvoTypes.Deme = state.demes[ally_id]
-			bonus += 0.25 * clampf(float(ally.population) / maxf(20.0, float(victim.population)), 0.4, 1.5) + 0.08 * float(ally.defense_tier)
+			var in_union := victim.walled_union_id != "" and ally.walled_union_id == victim.walled_union_id
+			if in_union or EvoTypes.is_pact_active(state, victim.id, ally_id):
+				bonus += 0.25 * clampf(float(ally.population) / maxf(20.0, float(victim.population)), 0.4, 1.5) + 0.08 * float(ally.defense_tier)
 	for nid in HexMath.get_neighbor_ids(v_cell.q, v_cell.r, state.cells):
 		var a_cell: EvoTypes.HexCell = state.cells[nid]
 		for ally_id in a_cell.deme_ids:
-			if ally_id != victim.id and state.demes.has(ally_id) and EvoTypes.is_pact_active(state, victim.id, ally_id):
+			if ally_id != victim.id and state.demes.has(ally_id):
 				var ally: EvoTypes.Deme = state.demes[ally_id]
-				bonus += 0.25 * clampf(float(ally.population) / maxf(20.0, float(victim.population)), 0.4, 1.5) + 0.08 * float(ally.defense_tier)
+				var in_union := victim.walled_union_id != "" and ally.walled_union_id == victim.walled_union_id
+				if in_union or EvoTypes.is_pact_active(state, victim.id, ally_id):
+					bonus += 0.25 * clampf(float(ally.population) / maxf(20.0, float(victim.population)), 0.4, 1.5) + 0.08 * float(ally.defense_tier)
+					if in_union:
+						bonus += 0.20
 	return clampf(bonus, 0.0, 1.10)
 
 
@@ -545,8 +551,12 @@ static func _has_recent_raid_chronicle(
 ) -> bool:
 	var suffix_ab := "-%s-%s" % [raider_id, victim_id]
 	var suffix_ba := "-%s-%s" % [victim_id, raider_id]
-	for entry in state.chronicle:
-		if entry.event_type == "raid" and entry.generation >= state.generation - 2:
+	var cutoff := state.generation - 2
+	for i in range(state.chronicle.size() - 1, -1, -1):
+		var entry := state.chronicle[i]
+		if entry.generation < cutoff:
+			break
+		if entry.event_type == "raid":
 			if entry.id.ends_with(suffix_ab) or entry.id.ends_with(suffix_ba):
 				return true
 	return false
@@ -649,6 +659,18 @@ static func _execute_raid_if_successful(
 	raider.population = maxi(10, raider.population - r_loss)
 	victim.population = maxi(8, victim.population - v_loss)
 
+	for rcid in HexMath.get_neighbor_ids(c_victim.q, c_victim.r, state.cells):
+		var r_cell: EvoTypes.HexCell = state.cells[rcid]
+		if r_cell.owner_deme_id == victim.id:
+			var r_plunder := snappedf(minf(r_cell.current_resources, 18.0), 0.01)
+			r_cell.current_resources = maxf(0.0, snappedf(r_cell.current_resources - r_plunder, 0.01))
+			r_cell.owner_deme_id = ""
+			r_cell.land_use = "wild"
+			r_cell.has_ruins = true
+			raider.energy_reserves = minf(220.0, snappedf(raider.energy_reserves + r_plunder, 0.01))
+			loot = snappedf(loot + r_plunder, 0.01)
+			break
+
 	var pk := EvoTypes.make_pair_key(raider.id, victim.id)
 	if int(state.active_pacts.get(pk, 0)) < 2:
 		state.active_pacts[pk] = mini(-2, int(state.active_pacts.get(pk, 0)))
@@ -733,6 +755,100 @@ static func _run_raids(
 				raided_pairs[pair_key] = true
 
 
+static func enforce_rural_hinterland_quotas(state: EvoTypes.WorldState) -> void:
+	for cid in state.cells.keys():
+		var cell: EvoTypes.HexCell = state.cells[cid]
+		if not cell.deme_ids.is_empty() or cell.biome in ["ocean", "high_mountain"] or cell.altitude > 0.85:
+			cell.land_use = "wild"
+			cell.owner_deme_id = ""
+			if not cell.deme_ids.is_empty() or cell.biome == "ocean":
+				cell.has_ruins = false
+		elif cell.owner_deme_id != "":
+			if not state.demes.has(cell.owner_deme_id):
+				cell.land_use = "wild"
+				cell.owner_deme_id = ""
+			else:
+				var owner: EvoTypes.Deme = state.demes[cell.owner_deme_id]
+				if not state.cells.has(owner.hex_id):
+					cell.land_use = "wild"
+					cell.owner_deme_id = ""
+				else:
+					var ocell: EvoTypes.HexCell = state.cells[owner.hex_id]
+					if HexMath.hex_distance(cell.q, cell.r, ocell.q, ocell.r) != 1:
+						cell.land_use = "wild"
+						cell.owner_deme_id = ""
+
+	for did in state.demes.keys():
+		var deme: EvoTypes.Deme = state.demes[did]
+		if not state.cells.has(deme.hex_id):
+			continue
+		var dcell: EvoTypes.HexCell = state.cells[deme.hex_id]
+		var tier := deme.get_village_tier()
+		var max_rural: int = 0 if tier < 2 else (1 if tier == 2 else (2 if tier == 3 else 4))
+		if dcell.biome in ["ocean", "high_mountain"] or dcell.altitude > 0.85:
+			max_rural = 0
+
+		var owned_neighbors: Array[EvoTypes.HexCell] = []
+		for nid in HexMath.get_neighbor_ids(dcell.q, dcell.r, state.cells):
+			var ncell: EvoTypes.HexCell = state.cells[nid]
+			if ncell.owner_deme_id == deme.id:
+				owned_neighbors.append(ncell)
+
+		if owned_neighbors.size() > max_rural:
+			owned_neighbors.sort_custom(func(a: EvoTypes.HexCell, b: EvoTypes.HexCell) -> bool:
+				return a.current_resources < b.current_resources
+			)
+			while owned_neighbors.size() > max_rural:
+				var rel_cell: EvoTypes.HexCell = owned_neighbors.pop_front()
+				rel_cell.owner_deme_id = ""
+				rel_cell.land_use = "wild"
+
+
+static func _update_and_harvest_rural_hinterlands(
+	state: EvoTypes.WorldState,
+	_effective_vec_by_deme: Dictionary,
+	extracted_energy_by_deme: Dictionary
+) -> void:
+	enforce_rural_hinterland_quotas(state)
+
+	for did in state.demes.keys():
+		var deme: EvoTypes.Deme = state.demes[did]
+		if not state.cells.has(deme.hex_id):
+			continue
+		var dcell: EvoTypes.HexCell = state.cells[deme.hex_id]
+		var tier := deme.get_village_tier()
+		var max_rural: int = 0 if tier < 2 else (1 if tier == 2 else (2 if tier == 3 else 4))
+		if dcell.biome in ["ocean", "high_mountain"] or dcell.altitude > 0.85:
+			max_rural = 0
+
+		var owned_neighbors: Array[EvoTypes.HexCell] = []
+		var unclaimed_neighbors: Array[EvoTypes.HexCell] = []
+		for nid in HexMath.get_neighbor_ids(dcell.q, dcell.r, state.cells):
+			var ncell: EvoTypes.HexCell = state.cells[nid]
+			if ncell.owner_deme_id == deme.id:
+				owned_neighbors.append(ncell)
+			elif max_rural > 0 and ncell.deme_ids.is_empty() and ncell.owner_deme_id == "" and ncell.biome not in ["ocean", "high_mountain"] and ncell.altitude <= 0.85:
+				unclaimed_neighbors.append(ncell)
+
+		if owned_neighbors.size() < max_rural and not unclaimed_neighbors.is_empty():
+			unclaimed_neighbors.sort_custom(func(a: EvoTypes.HexCell, b: EvoTypes.HexCell) -> bool:
+				return a.current_resources > b.current_resources
+			)
+			for ncell in unclaimed_neighbors:
+				if owned_neighbors.size() >= max_rural:
+					break
+				ncell.owner_deme_id = deme.id
+				ncell.has_ruins = false
+				ncell.land_use = "pasture" if ncell.biome in ["arid_steppe", "tundra"] else "crops"
+				owned_neighbors.append(ncell)
+
+		for ncell in owned_neighbors:
+			var harvest := snappedf(minf(ncell.current_resources, float(deme.population) * 0.35) * 0.70, 0.01)
+			if harvest > 0.0:
+				ncell.current_resources = maxf(0.0, snappedf(ncell.current_resources - harvest, 0.01))
+				extracted_energy_by_deme[deme.id] = snappedf(float(extracted_energy_by_deme.get(deme.id, 0.0)) + harvest, 0.0001)
+
+
 static func run_resource_and_symbiosis_phase(
 	state: EvoTypes.WorldState,
 	lang: String,
@@ -773,7 +889,8 @@ static func run_resource_and_symbiosis_phase(
 			valid_cells.append(state.cells[d.hex_id])
 
 	var tragedy_hexes: Dictionary = {}
-	for entry in state.chronicle:
+	for i in range(state.chronicle.size() - 1, -1, -1):
+		var entry := state.chronicle[i]
 		if entry.event_type == "tragedy_of_commons":
 			tragedy_hexes[entry.hex_id] = true
 
@@ -790,9 +907,11 @@ static func run_resource_and_symbiosis_phase(
 		var demand_by_deme: Dictionary = {}
 		for deme in resident_demes:
 			var v_eff: EvoTypes.BiophysicalVector = effective_vec_by_deme[deme.id]
+			var tier := deme.get_village_tier()
+			var urban_forage_mult: float = 1.0 if tier <= 2 else (0.55 if tier == 3 else 0.30)
 			demand_by_deme[deme.id] = maxf(
 				0.0,
-				float(deme.population) * 0.50 * (1.0 + 0.60 * v_eff.extraction_efficiency)
+				float(deme.population) * 0.50 * (1.0 + 0.60 * v_eff.extraction_efficiency) * urban_forage_mult
 			)
 
 		var lineages_in_hex: Dictionary = {}
@@ -831,9 +950,11 @@ static func run_resource_and_symbiosis_phase(
 					hawk.population = maxi(10, int(floor(float(hawk.population) * 0.85)))
 					hawk_penalty_by_deme[hawk.id] = 1.25
 					var v_eff: EvoTypes.BiophysicalVector = effective_vec_by_deme[hawk.id]
+					var tier := hawk.get_village_tier()
+					var urban_forage_mult: float = 1.0 if tier <= 2 else (0.55 if tier == 3 else 0.30)
 					demand_by_deme[hawk.id] = maxf(
 						0.0,
-						float(hawk.population) * 0.50 * (1.0 + 0.60 * v_eff.extraction_efficiency)
+						float(hawk.population) * 0.50 * (1.0 + 0.60 * v_eff.extraction_efficiency) * urban_forage_mult
 					)
 					var flow := EvoTypes.HexEdgeFlow.new()
 					flow.from_hex_id = cell.id
@@ -989,6 +1110,76 @@ static func run_resource_and_symbiosis_phase(
 				0.01
 			)
 
+	_update_and_harvest_rural_hinterlands(state, effective_vec_by_deme, extracted_energy_by_deme)
+
+	var adjacent_pairs: Array = []
+	var v_count := valid_demes.size()
+	for i in range(v_count):
+		var d1 := valid_demes[i]
+		var c1 := valid_cells[i]
+		var q1 := c1.q
+		var r1 := c1.r
+		var bad1 := c1.biome == "ocean" or c1.altitude > 0.85
+		for j in range(i + 1, v_count):
+			var c2 := valid_cells[j]
+			var dq := q1 - c2.q
+			var dr := r1 - c2.r
+			if absi(dq) > 1 or absi(dr) > 1 or absi(dq + dr) > 1:
+				continue
+			if (dq != 0 or dr != 0) and (bad1 or c2.biome == "ocean" or c2.altitude > 0.85):
+				continue
+			var d2 := valid_demes[j]
+			var pk := (d1.id + "__" + d2.id) if d1.id < d2.id else (d2.id + "__" + d1.id)
+			adjacent_pairs.append([d1, c1, d2, c2, pk])
+
+	for pair in adjacent_pairs:
+		var d1: EvoTypes.Deme = pair[0]
+		var c1: EvoTypes.HexCell = pair[1]
+		var d2: EvoTypes.Deme = pair[2]
+		var c2: EvoTypes.HexCell = pair[3]
+		var pk: String = pair[4]
+		if c1.id == c2.id:
+			continue
+		if d1.lineage_id == d2.lineage_id or int(state.active_pacts.get(pk, 0)) >= 2:
+			continue
+		var p_disp_1 := float((arch_probs[d1.id] as Array)[2])
+		var p_disp_2 := float((arch_probs[d2.id] as Array)[2])
+		if p_disp_1 < 0.25 and p_disp_2 < 0.25:
+			continue
+		if p_disp_1 >= 0.25 and p_disp_2 >= 0.25:
+			d1.population = maxi(10, int(floor(float(d1.population) * 0.88)))
+			d2.population = maxi(10, int(floor(float(d2.population) * 0.88)))
+			hawk_penalty_by_deme[d1.id] = 1.25
+			hawk_penalty_by_deme[d2.id] = 1.25
+			var flow := EvoTypes.HexEdgeFlow.new()
+			flow.from_hex_id = c1.id
+			flow.to_hex_id = c2.id
+			flow.flow_type = "dispute"
+			flow.intensity = 0.75
+			flow.from_deme_id = d1.id
+			flow.to_deme_id = d2.id
+			state.active_flows.append(flow)
+		else:
+			var hawk := d1 if p_disp_1 >= 0.25 else d2
+			var dove := d2 if p_disp_1 >= 0.25 else d1
+			var c_hawk := c1 if p_disp_1 >= 0.25 else c2
+			var c_dove := c2 if p_disp_1 >= 0.25 else c1
+			var hawk_social := (effective_vec_by_deme[hawk.id] as EvoTypes.BiophysicalVector).social_cohesion
+			var dove_social := (effective_vec_by_deme[dove.id] as EvoTypes.BiophysicalVector).social_cohesion
+			var capture_mult := 0.22 * (1.0 + maxf(0.0, hawk_social - dove_social))
+			var dove_ext := float(extracted_energy_by_deme.get(dove.id, 0.0))
+			var captured := snappedf(dove_ext * capture_mult, 0.0001)
+			extracted_energy_by_deme[hawk.id] = snappedf(float(extracted_energy_by_deme.get(hawk.id, 0.0)) + captured, 0.0001)
+			extracted_energy_by_deme[dove.id] = maxf(0.0, snappedf(dove_ext - captured, 0.0001))
+			var flow := EvoTypes.HexEdgeFlow.new()
+			flow.from_hex_id = c_hawk.id
+			flow.to_hex_id = c_dove.id
+			flow.flow_type = "dispute"
+			flow.intensity = 0.65
+			flow.from_deme_id = hawk.id
+			flow.to_deme_id = dove.id
+			state.active_flows.append(flow)
+
 	var exchange_flow_pairs: Dictionary = {}
 	for donor_id in state.demes.keys():
 		var donor: EvoTypes.Deme = state.demes[donor_id]
@@ -1060,26 +1251,6 @@ static func run_resource_and_symbiosis_phase(
 							entry.lineage_id = receiver.lineage_id
 							entry.trait_id = tid
 							state.chronicle.append(entry)
-
-	var adjacent_pairs: Array = []
-	var v_count := valid_demes.size()
-	for i in range(v_count):
-		var d1 := valid_demes[i]
-		var c1 := valid_cells[i]
-		var q1 := c1.q
-		var r1 := c1.r
-		var bad1 := c1.biome == "ocean" or c1.altitude > 0.85
-		for j in range(i + 1, v_count):
-			var c2 := valid_cells[j]
-			var dq := q1 - c2.q
-			var dr := r1 - c2.r
-			if absi(dq) > 1 or absi(dr) > 1 or absi(dq + dr) > 1:
-				continue
-			if (dq != 0 or dr != 0) and (bad1 or c2.biome == "ocean" or c2.altitude > 0.85):
-				continue
-			var d2 := valid_demes[j]
-			var pk := (d1.id + "__" + d2.id) if d1.id < d2.id else (d2.id + "__" + d1.id)
-			adjacent_pairs.append([d1, c1, d2, c2, pk])
 
 	var betrayed_pairs_this_turn: Dictionary = {}
 	_run_pacts_and_betrayals(

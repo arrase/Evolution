@@ -10,7 +10,7 @@ hide:
   </div>
   <h1>Evolution</h1>
   <p class="hero-subtitle">
-    An interactive bio-cultural and evolutionary population simulator built with Godot 4.7. Configure <strong>1v1 Evolutionary Strategy Duels (<code>Strategy A ⚔️ Strategy B</code>)</strong>, forge custom strategies and traits, and shape climates, terrain altitude, sea levels, and carrying capacity ($K$) on a handcrafted 2.5D isometric hexagonal ecosystem—while local subpopulations (<em>demes</em>) autonomously adapt, migrate, cooperate, innovate, or diverge into new species.
+    An interactive bio-cultural and evolutionary population simulator built with Godot 4.7. Configure <strong>1v1 Evolutionary Strategy Duels (<code>Strategy A ⚔️ Strategy B</code>)</strong>, forge custom strategies and traits, and shape climates, terrain altitude, sea levels, and carrying capacity ($K$) across a <strong><code>169</code>-hex (<code>map_radius = 7</code>) high-DPI 2.5D illustrated hexagonal ecosystem</strong> powered by GPU shaders—while single-deme-per-hex subpopulations (<em>demes</em>) autonomously adapt, cultivate adjacent rural hinterlands (<code>crops</code> &amp; <code>pasture</code>), manage urban salubrity, erect hex-edge perimeter walls, unite into continuous multi-hex walled conurbations (<code>walled_union_id</code>), innovate, or diverge into new species.
   </p>
   <div class="hero-badges">
     <a href="https://github.com/arrase/Evolution/actions/workflows/ci.yml"><img src="https://github.com/arrase/Evolution/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
@@ -23,7 +23,7 @@ hide:
 
 <div class="section-header">
   <h2>Key Features</h2>
-  <span>Authentic evolutionary biology meets local multi-model AI cognition</span>
+  <span>Authentic evolutionary biology meets local multi-model AI cognition &amp; 2.5D illustrated urban ecology</span>
 </div>
 
 <div class="projects-grid">
@@ -31,7 +31,7 @@ hide:
     <div>
       <i class="fa-solid fa-shield-halved feature-icon" aria-hidden="true"></i>
       <h3>1v1 Evolutionary Strategy Duels</h3>
-      <p>Before pressing Play at Generation 0, pit any two evolutionary strategies (<code>Strategy A ⚔️ Strategy B</code>) against each other—or craft custom strategies in the Forge and persist them to <code>~/.config/Evolution/user_catalog.json</code>.</p>
+      <p>Before pressing Play at Generation 0, pit any two evolutionary strategies (<code>Strategy A ⚔️ Strategy B</code>) against each other across a <code>169</code>-hex world—or craft custom strategies in the Forge and persist them to <code>~/.config/Evolution/user_catalog.json</code>.</p>
     </div>
   </div>
   <div class="feature-card">
@@ -50,23 +50,23 @@ hide:
   </div>
   <div class="feature-card">
     <div>
-      <i class="fa-solid fa-frog feature-icon" aria-hidden="true"></i>
-      <h3>Baldwin Effect &amp; Speciation</h3>
-      <p>Sustained behavioral plasticity (8+ turns) assimilates into heritable biological traits derived from the dominant decision, while geographic isolation across ridges or flooded land bridges triggers allopatric speciation.</p>
+      <i class="fa-solid fa-wheat-awn feature-icon" aria-hidden="true"></i>
+      <h3>4-Tier Urbanism, Hinterlands &amp; Salubrity</h3>
+      <p>Single-deme-per-hex settlements progress across 4 urban tiers (<code>I · Camp</code> to <code>IV · Metropolis</code>), cultivating up to 1, 2, or 4 adjacent rural hexes as <code>crops</code> or <code>pasture</code> while balancing urban crowding, <code>salubrity</code>, and epidemics.</p>
     </div>
   </div>
   <div class="feature-card">
     <div>
-      <i class="fa-solid fa-chess-knight feature-icon" aria-hidden="true"></i>
-      <h3>Fortifications, Diplomacy &amp; Synoecism</h3>
-      <p>Populations build 3-tier fortifications (<strong>Palisade</strong>, <strong>Stone Wall</strong>, <strong>Castle</strong>), forge <strong>Alliance Pacts</strong> &amp; <strong>Defensive Coalitions</strong>, harbor <strong>Vendettas</strong>, pay <strong>Tribute</strong>, repel <strong>Sieges</strong>, and unite into <strong>Tier 5 Metropolises</strong>.</p>
+      <i class="fa-solid fa-chess-rook feature-icon" aria-hidden="true"></i>
+      <h3>Perimeter Walls &amp; Dual Synoecism</h3>
+      <p>Settlements erect 3-tier hex-edge fortifications, absorb lower-tier allies into rural hinterlands (<em>Asymmetric Category Absorption</em>), or unite same-tier cities into <strong>Continuous Multi-Hex Walled Unions (<code>walled_union_id</code>)</strong> with culled internal walls.</p>
     </div>
   </div>
   <div class="feature-card">
     <div>
       <i class="fa-solid fa-wand-magic-sparkles feature-icon" aria-hidden="true"></i>
-      <h3>God-Mode Selective Pressure</h3>
-      <p>Wield a 10-slot brush dock to sculpt biomes, raise tectonic ridges, flood glacial archipelagos, enrich carrying capacity $K$, or forge and inject custom strategies, traits, and decisions in the Evolutionary Laboratory.</p>
+      <h3>2.5D Illustrated Shaders &amp; God-Mode Tools</h3>
+      <p>High-DPI <code>256x224</code> tiles and <code>128x128</code>–<code>160x160</code> sprites with <code>#23150c</code> ink outlines, GPU ocean &amp; foliage shaders, and a 10-slot brush dock to sculpt biomes, altitude, sea levels, and carrying capacity $K$.</p>
     </div>
   </div>
 </div>
@@ -79,46 +79,51 @@ At Generation 0, every scenario sets up a head-to-head evolutionary experiment b
 
 | Strategy ID | Emblem & Name (EN / ES) | Hex Color | Included Traits (`biological_trait_ids` + `cultural_trait_ids`) | Evolutionary Philosophy |
 | :--- | :--- | :---: | :--- | :--- |
-| `strat-cooperation` | 🤝 **Cooperative Alliance**<br>*Alianza Cooperativa* | `#10B981` | `bio-k-strategy`, `bio-social-instinct` + `cul-communal-conservation` | Fosters social cohesion, communal habitat conservation, and resource buffering. |
+| `strat-cooperation` | 🤝 **Cooperative Alliance**<br>*Alianza Cooperativa* | `#10B981` | `bio-k-strategy`, `bio-social-instinct` + `cul-communal-conservation` | Fosters social cohesion, communal habitat conservation, urban sanitation, and resource buffering. |
 | `strat-expansion` | 🧭 **Expansionist Pioneers**<br>*Pioneros Expansionistas* | `#3B82F6` | `bio-r-strategy`, `bio-thermal-tolerance`, `bio-social-instinct` + `cul-fire-processing` | Fast reproduction, high mobility, and thermal tolerance to colonize new territories. |
 | `strat-trade` | ⚖️ **Merchant League**<br>*Liga Mercantil* | `#F59E0B` | `bio-k-strategy`, `bio-encephalization` + `cul-interdeme-barter` | Drives inter-village barter, commercial symbiosis, and horizontal cultural diffusion. |
-| `strat-war` | ⚔️ **Conquering Horde**<br>*Horda Conquistadora* | `#EF4444` | `bio-r-strategy`, `bio-social-instinct` + `cul-warrior-expansion`, `cul-extraction-tools` | Aggressive martial expansion and intensive extraction to dominate rival territories. |
+| `strat-war` | ⚔️ **Conquering Horde**<br>*Horda Conquistadora* | `#EF4444` | `bio-r-strategy`, `bio-social-instinct` + `cul-warrior-expansion`, `cul-extraction-tools` | Aggressive martial expansion, rural hinterland pillaging, and intensive extraction to dominate rival territories. |
 | `strat-innovation` | 🔬 **Innovator Technocrats**<br>*Tecnócratas Innovadores* | `#A855F7` | `bio-encephalization`, `bio-digestive-spec` + `cul-fire-processing`, `cul-extraction-tools` | High encephalization, thermal food processing, and specialized extraction toolkits. |
 
 ---
 
 ## Visual Tour & 1v1 Scenario Gallery
 
-![The Rift Valley — Isometric Hexagonal Ecosystem & HUD](assets/img/screenshot_rift_savanna.png)
-*The Rift Valley (`preset-rift-savanna`): Western Forest Hominids (`(-2, 1)`, Strategy A) vs. Eastern Savanna Hominids (`(2, -1)`, Strategy B) separated by a high-mountain tectonic ridge (`q = 0`).*
+![The Rift Valley — 169-Hex 2.5D Illustrated Ecosystem & HUD](assets/img/screenshot_rift_savanna.png)
+*The Rift Valley (`preset-rift-savanna`, `169` hexes, `map_radius = 7`): Western Forest Hominids (`(-2, 1)`, Strategy A) vs. Eastern Savanna Hominids (`(2, -1)`, Strategy B) separated by a high-mountain tectonic ridge (`q = 0`), with the Scroll Inspector displaying urban salubrity, stone wall fortifications, and rural hinterlands.*
+
+| Settlement Tiers I–III & Rural Hinterlands | Continuous Multi-Hex Walled Union (`Tier IV`) |
+| :---: | :---: |
+| ![Settlement Tiers I–III, Perimeter Walls & Cultivated Rural Hinterlands](assets/img/screenshot_settlement_tiers_hinterlands.png) | ![Continuous Multi-Hex Walled Union & Hinterlands](assets/img/screenshot_late_simulation.png) |
+| *Close-up of 1-deme-per-hex progression: Tier I `Camp` (`-1,0`), Tier II `Village` (`0,0`, Lv.1 Palisade + pasture at `0,-1`), and Tier III `Town` (`1,0`, Lv.2 Stone Wall + golden wheat `crops` at `1,-1` & `pasture` at `2,0` linked by `covered_wagon` farm tracks)* | *Two allied Tier IV Metropolises (`(0,0)` & `(1,0)`) united in a Continuous Multi-Hex Walled Union (`walled_union_id`) with their shared internal wall edge culled, a central union boulevard, and 6 surrounding rural hinterlands* |
 
 | Darwin's Archipelago (`preset-darwin-archipelago`) | The Finite Island (`preset-finite-island`) |
 | :---: | :---: |
 | ![Darwin's Archipelago — Insular Dispersal & Land Bridges](assets/img/screenshot_darwin_archipelago.png) | ![The Finite Island — Ecological Health Lens & Valley Legend](assets/img/screenshot_finite_island.png) |
-| *Symmetric 1v1 insular duel between Western Island Founders (`(-1, 0)`, Strategy A) and Eastern Island Rivals (`(1, 0)`, Strategy B) connected by tidal `coastal_shallows` land bridges (`0,-1`, `0,1`, `2,0`) that flood and emerge every 8 generations* | *1v1 resource stewardship duel between Northern Quarry Clan (`(-1, 0)`, Strategy A) and Southern Timber Clan (`(1, 0)`, Strategy B) on a bounded island viewed through the Ecological Health Lens ($K / K_{\max}$) with the Valley Legend open* |
+| *169-hex volcanic archipelago with GPU ocean waves (`ocean_waves.gdshader`), multi-ring coastal foam, 2.5D island cliffs, and 7 tidal `coastal_shallows` land bridges that flood and emerge every 8 generations* | *169-hex bounded island duel between Northern Quarry Clan (`(-1, 0)`, Strategy A) and Southern Timber Clan (`(1, 0)`, Strategy B) viewed through the Ecological Health Lens ($K / K_{\max}$) with the Valley Legend open* |
 
 | Naturalist's Notebook (Chronicle) | Phylo-Cultural Lineage Tree | Strategy, Trait & Decision Forge (Lab) |
 | :---: | :---: | :---: |
 | ![Naturalist's Notebook Modal](assets/img/screenshot_notebook_modal.png) | ![Phylo-Cultural Lineage Tree Modal](assets/img/screenshot_tree_modal.png) | ![Trait & Decision Forge Modal](assets/img/screenshot_lab_modal.png) |
-| *Chronological log of speciation, Baldwin assimilation, cultural innovation, symbiosis, and extinctions with 1-click hex jump* | *Interactive phylogenetic hierarchy tracking ancestral and diverged lineages, strategy emblems, traits, and active village counts* | *4-tab catalog editor (`🧬`, `🔥`, `⚖️`, `🛡️`) with live Thermodynamic Balance Meter, strategy builder, and `~/.config/Evolution/user_catalog.json` persistence* |
+| *19-filter chronological log of urban epidemics, multi-hex walled unions, category absorptions, speciation, Baldwin assimilation, and wars with 1-click hex jump* | *Interactive phylogenetic hierarchy tracking ancestral and diverged lineages, strategy emblems, traits, and active settlement counts (`I–IV`)* | *4-tab catalog editor (`🛡️`, `🧬`, `🔥`, `⚖️`) with live Thermodynamic Balance Meter, strategy builder, and `~/.config/Evolution/user_catalog.json` persistence* |
 
 ---
 
 ## How the Generational Loop Works
 
-Unlike traditional strategy games where players issue unit-level movement orders, **Evolution** strictly separates **behavioral intent** (probabilistic decision-making per deme) from **biophysical consequence** (deterministic laws of energy conservation, carrying capacity $K$, metabolic expenditure, and demography):
+Unlike traditional strategy games where players issue unit-level movement orders, **Evolution** strictly separates **behavioral intent** (probabilistic decision-making per deme) from **biophysical consequence** (deterministic laws of energy conservation, carrying capacity $K$, rural hinterland cultivation, urban salubrity, and demography):
 
 ```mermaid
 flowchart LR
     Env["1. Environmental Phase\n• Flip Season (wet_warm / dry_cold)\n• Glacial Sea-Level Cycle (8 gen)\n• Flood / Emerge Coastal Hexes\n• Regenerate K & Biomass R"] --> Cog["2. Cognitive Phase\n• Coarsened 10-Part Signature\n• 6-Gen Memory & Neighbor Tags\n• System 1 Ollama (d3:4b / tev1:4b)\n• 75% LLM / 25% Env Blend"]
-    Cog --> Bio["3. Biophysical & Geopolitical Phase\n• Aggregate Effective Vector v_eff\n• Hawk-Dove, Trade (up to 1.35x) & Pacts\n• Vendettas, Tribute, Raids & 3-Tier Walls\n• Growth, Sieges, Wars & Synoecism (Merge)"]
+    Cog --> Bio["3. Biophysical & Geopolitical Phase\n• Urban Foraging & Rural Hinterlands (crops/pasture)\n• Inter-Hex Hawk-Dove, Trade (up to 1.35x) & Pacts\n• Raids, Rural Pillaging (ruins) & 3-Tier Walls\n• Salubrity & Epidemics, Wars, Dual Synoecism"]
     Bio --> Mile["4. Milestone Phase\n• Allopatric Speciation (Prio 0)\n• Baldwin Assimilation (Prio 1)\n• Cultural Innovation (Prio 2)\n• Macro-Outcome Evaluation"]
     Mile --> Prefetch["5. Async Prefetch\n• Pre-warm up to 8 Signatures\n• Non-Blocking Worker Pool"]
 ```
 
-1. **Environmental Phase (`EvoEnvPhase`)**: Advances the generation counter, alternates seasonal climate between `wet_warm` ($\gamma = 1.20$) and `dry_cold` ($\gamma = 0.75$), oscillates sea level every 8 generations in glacial scenarios, relocates or drowns submerged demes, and regenerates hex carrying capacity $K$ and resources $R$.
+1. **Environmental Phase (`EvoEnvPhase`)**: Advances the generation counter, alternates seasonal climate between `wet_warm` ($\gamma = 1.20$) and `dry_cold` ($\gamma = 0.75$), oscillates sea level every 8 generations in glacial scenarios, relocates submerged demes to empty passable neighbor hexes (or drowns them into `has_ruins = true`), and regenerates hex carrying capacity $K$ and resources $R$.
 2. **Cognitive Decision Phase (`EvoDecisionModel`)**: Evaluates each deme via `/v1/systemone` with its intrinsic strategy traits prior (`strategy_traits_prior`), a **6-generation historical memory digest** (`war`, `raided`, `betrayal`, `pact`, `fortify`, `merge`, `tribute`, `siege`), active vendetta count, nearby martial horde detection (1–2 hexes), and **rich neighbor relational labels** (`kin`, `ally`, `rival`, `vendetta` + posture + strength + defense tier)—routing rival factions deterministically between primary (`d3:4b`) and secondary (`tev1:4b`) Ollama System 1 models and blending neural predictions (**$75\%$**) with environmental and geopolitical weights (**$25\%$**).
-3. **Biophysical & Geopolitical Consequence Phase (`EvoBiophysPhase`)**: Computes each deme's effective 6-axis vector $\mathbf{v}_{\text{eff}}$, resolves *Hawk-Dove* territorial conflicts, reciprocal symbiosis and **complementary inter-biome/cross-cultural trade** (up to $1.35\times$ caloric bonus and horizontal cultural transmission), **Alliance Pacts & Defensive Coalitions** ($+15\%$ mutual bonus, distress caloric aid, and up to $+1.10$ shared military defense), **Opportunistic Betrayals & Multi-Turn Vendettas** (`active_pacts < 0`), **Plunder Raids & Tribute Appeasement** ($18\%$ reserve tribute with zero casualties), **Multi-Tier Defense Fortifications** (`defense_tier: 0..3` from Palisade to Stone Wall to Castle with allied co-financing), habitat degradation (*Tragedy of the Commons* when $K < 0.60 \cdot K_{\max}$), metabolic expenditure & wall upkeep, demographic growth/starvation, **Territorial Wars & Fortified Sieges**, population fission, and **City Unification / Synoecism** (`merge` into a **Tier 5 Unified Metropolis**, expanding $K$ and reducing LLM inference calls per turn).
+3. **Biophysical, Urban & Geopolitical Consequence Phase (`EvoBiophysPhase`)**: Computes each deme's effective 6-axis vector $\mathbf{v}_{\text{eff}}$, applies urban wild-foraging multipliers (`0.55` at Tier III, `0.30` at Tier IV), claims and harvests **adjacent rural hinterlands (`crops` and `pasture`, up to `1`/`2`/`4` hexes for Tier II/III/IV)**, resolves inter-hex *Hawk-Dove* conflicts, reciprocal symbiosis and **complementary inter-biome/cross-cultural trade** (up to $1.35\times$), **Alliance Pacts & Defensive Coalitions**, **Opportunistic Betrayals & Multi-Turn Vendettas**, **Plunder Raids (with rural hinterland pillaging into `has_ruins = true`) & Tribute Appeasement**, **Hex-Edge Perimeter Fortifications** (`defense_tier: 0..3`), habitat degradation (*Tragedy of the Commons*), metabolic expenditure & wall upkeep, **Urban Salubrity (`salubrity`) & Epidemic Outbreaks (`"epidemic"`)**, demographic growth, **Territorial Wars (with 1-deme-per-hex retreat/absorption & pooled union defense) & Fortified Sieges**, empty-hex colonist budding, and **Dual Synoecism** (*Asymmetric Category Absorption* converting vacated hexes to rural hinterlands, and *Continuous Multi-Hex Walled Unions* `walled_union_id` culling shared internal walls).
 4. **Milestone & Macro-Outcome Phase (`EvoMilestonePhase`)**: Synthesizes thermodynamically balanced emergent traits for *Allopatric Speciation*, *The Baldwin Effect*, or *Cumulative Cultural Innovation*, logs entries to the *Naturalist's Notebook*, and checks global macro-outcomes (*Total Extinction*, *Evolutionary Hegemony*, or *Ecological Equilibrium*).
 
 ---
@@ -159,7 +164,7 @@ flowchart LR
 === "Regenerate Screenshots"
 
     ```bash
-    # Capture all 7 English documentation screenshots into gh-pages/assets/img/
+    # Capture all documentation screenshots into gh-pages/assets/img/
     godot --path . --script res://tests/test_visual_capture.gd
     ```
 
@@ -169,7 +174,7 @@ flowchart LR
 
 | Input / Shortcut | Slot / Control | Cost (⚡) | Effect in Simulation |
 | :--- | :--- | :---: | :--- |
-| <kbd>1</kbd> / **Left Click** | **Naturalist's Loupe (`inspect`)** | `0` | Select a village or hexagon to inspect its demography, relations, traits, and 6-axis profile in the Scroll Inspector. |
+| <kbd>1</kbd> / **Left Click** | **Naturalist's Loupe (`inspect`)** | `0` | Select a settlement or hexagon to inspect its demography, salubrity, rural hinterlands, walled union, relations, traits, and 6-axis profile in the Scroll Inspector. |
 | <kbd>2</kbd> | **Jungle Seeds (`tropical_forest`)** | `10` | Transform target hexes into `tropical_forest` ($K_{\max} = 600$, `regen = 0.28`, $T = 0.45$, $H = 0.85$). |
 | <kbd>3</kbd> | **Savanna Seeds (`savanna`)** | `10` | Transform target hexes into `savanna` ($K_{\max} = 420$, `regen = 0.18`, $T = 0.50$, $H = 0.40$). |
 | <kbd>4</kbd> | **Desert Dust (`arid_steppe`)** | `10` | Transform target hexes into `arid_steppe` ($K_{\max} = 280$, `regen = 0.12`, $T = 0.65$, $H = 0.20$). |
@@ -180,16 +185,16 @@ flowchart LR
 | <kbd>9</kbd> | **Drought Sickle (`deplete`)** | `10` | Reduce hex carrying capacity $K$ and available biomass $R$ by $-25\%$ (inducing ecological stress). |
 | <kbd>0</kbd> | **Tidal Conch (`sea_level`)** | `25` / `10` | Open the Tidal Sub-Options Bar: adjust global `sea_level` by $\pm 5\%$ (`⚡25`) or paint `coastal_shallows`, `ocean`, and `high_mountain` (`⚡10`). |
 | <kbd>Space</kbd> | **Play / Pause** | — | Toggle automatic generational progression (`1x` = `1.50s/gen` or `2x` = `0.30s/gen`). |
-| <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / **Middle Drag** | **Pan Camera** | — | Smoothly pan across the 2.5D isometric hexagonal valley (`820 px/s`). |
-| <kbd>Q</kbd><kbd>E</kbd> / <kbd>R</kbd><kbd>F</kbd> / **Right Drag** | **Orbit &amp; Tilt Camera** | — | Orbit yaw ($0^\circ\text{–}360^\circ$) and tilt pitch ($28^\circ\text{–}75^\circ$) around the valley. |
-| <kbd>Mouse Wheel</kbd> / <kbd>+</kbd><kbd>-</kbd> | **Zoom Camera** | — | Cursor-pivoted zoom between `0.28x` macro overview and `3.00x` settlement close-up. |
+| <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / **Middle Drag** | **Pan Camera** | — | Smoothly pan across the `169`-hex 2.5D isometric hexagonal valley (`820 px/s`, `MAX_PAN_RADIUS = 2800.0`). |
+| <kbd>R</kbd><kbd>F</kbd> / **Right Drag** | **Tilt Camera Pitch** | — | Tilt vertical pitch ($32^\circ\text{–}68^\circ$, default $48^\circ$) with horizontal yaw locked to $0^\circ$ so 2.5D illustrated facades remain oriented toward the viewer. |
+| <kbd>Mouse Wheel</kbd> / <kbd>+</kbd><kbd>-</kbd> | **Zoom Camera** | — | Cursor-pivoted zoom between `0.18x` macro archipelago overview and `2.80x` settlement close-up. |
 | <kbd>Escape</kbd> | **Close / Reset** | — | Close active modal/popup window or return active brush to `Naturalist's Loupe` (<kbd>1</kbd>). |
 
 ---
 
 <div class="section-header">
   <h2>Documentation</h2>
-  <span>Deep-dive into worlds, 6-axis thermodynamics, turn mechanics, cognitive AI &amp; architecture</span>
+  <span>Deep-dive into 169-hex worlds, 6-axis thermodynamics, urban hinterlands, dual synoecism, cognitive AI &amp; 2.5D shader architecture</span>
 </div>
 
 <div class="projects-grid">
@@ -200,7 +205,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>Worlds, Biomes &amp; Presets</h3>
-      <p>Complete breakdown of axial hex geometry, the 7 biomes, seasonal &amp; glacial cycles, and the 3 scientific scenarios (<em>Rift Valley</em>, <em>Darwin's Archipelago</em>, <em>Finite Island</em>).</p>
+      <p>Complete breakdown of <code>169</code>-hex axial geometry (<code>map_radius = 7</code>), 1-deme-per-hex exclusivity, the 7 biomes, glacial cycles, and the 3 scientific scenarios.</p>
     </div>
   </a>
   <a href="thermodynamics_catalog/" class="feature-card">
@@ -210,7 +215,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>6-Axis Thermodynamics &amp; Catalog</h3>
-      <p>Mathematical laws of the 6-axis biophysical vector, auto-balancing equations, and complete reference tables for all biological traits, cultural traditions, and decisions.</p>
+      <p>Mathematical laws of the 6-axis biophysical vector, auto-balancing equations, and complete reference tables for all strategies, biological traits, cultural traditions, and decisions.</p>
     </div>
   </a>
   <a href="turn_iterations_mechanics/" class="feature-card">
@@ -220,7 +225,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>Generational Loop &amp; Dynamics</h3>
-      <p>Step-by-step equations for every turn phase: Hawk-Dove game theory, symbiosis, $K$ degradation, demography, fission migration, Baldwin assimilation, and speciation.</p>
+      <p>Step-by-step equations for rural hinterlands (<code>crops</code>/<code>pasture</code>), pillaging (<code>has_ruins</code>), urban <code>salubrity</code> &amp; epidemics, 3-tier hex walls, and dual synoecism (<code>walled_union_id</code>).</p>
     </div>
   </a>
   <a href="cognitive_engine/" class="feature-card">
@@ -230,7 +235,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>Cognitive Engine &amp; Ollama AI</h3>
-      <p>System 1 multi-model routing (<code>d3:4b</code> &amp; <code>tev1:4b</code>), 10-part state signatures, compact 4-line state briefings, worker pools, and startup verification.</p>
+      <p>System 1 multi-model routing (<code>d3:4b</code> &amp; <code>tev1:4b</code>), 10-part state signatures, 6-generation historical memory, compact 4-line state briefings, and worker pools.</p>
     </div>
   </a>
   <a href="ui_tools_controls/" class="feature-card">
@@ -240,7 +245,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>HUD, Modals &amp; God-Mode Tools</h3>
-      <p>Master the Scroll Inspector, Map Lenses, Valley Legend, Naturalist's Notebook, Phylo-Cultural Lineage Tree, Trait &amp; Decision Forge, and God-mode brushes.</p>
+      <p>Master the Scroll Inspector (salubrity, walled unions &amp; rural land-use), Map Lenses, Valley Legend, 19-filter Naturalist's Notebook, Lineage Tree, and Forge.</p>
     </div>
   </a>
   <a href="architecture_developer/" class="feature-card">
@@ -250,7 +255,7 @@ flowchart LR
         <span class="card-badge">Read →</span>
       </div>
       <h3>System Architecture &amp; Developer Guide</h3>
-      <p>2.5D isometric hex rendering pipeline, procedural pixel-art generators, organic road network lifecycle, i18n, automated test suite, and CI/CD workflows.</p>
+      <p>2.5D high-DPI illustrated rendering pipeline, GPU shaders, procedural <code>256x224</code> / <code>128x128</code>–<code>160x160</code> sprite cache, hex-edge perimeter walls, and automated test suite.</p>
     </div>
   </a>
 </div>

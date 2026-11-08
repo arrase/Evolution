@@ -40,10 +40,9 @@ const STRINGS: Dictionary = {
 		"status.struggling": "En apuros",
 		"status.starving": "En hambruna",
 		"tier.1": "Campamento",
-		"tier.2": "Caserío",
-		"tier.3": "Aldea Consolidada",
-		"tier.4": "Poblado Complejo",
-		"tier.5": "Metrópolis Unificada",
+		"tier.2": "Aldea",
+		"tier.3": "Villa",
+		"tier.4": "Metrópolis",
 		"tool.inspect": "Observar",
 		"tool.set_biome": "Clima / Bioma",
 		"tool.adjust_altitude": "Relieve / Altitud",
@@ -159,6 +158,7 @@ const STRINGS: Dictionary = {
 		"chronicle.type.merge": "Unión de Poblaciones",
 		"chronicle.type.tribute": "Pago de Tributo",
 		"chronicle.type.siege": "Asedio a Fortaleza",
+		"chronicle.type.epidemic": "Epidemia Urbana",
 		"filter_war": "Guerra",
 		"filter_raid": "Saqueo",
 		"filter_pact": "Pactos",
@@ -210,6 +210,10 @@ const STRINGS: Dictionary = {
 		"chronicle_tribute_desc": "{victim} entregó {loot} reservas como tributo a {raider} en ({hex}), evitando bajas y sellando una tregua.",
 		"chronicle_siege_title": "Asedio Repelido en ({hex})",
 		"chronicle_siege_desc": "Las fortificaciones de {defender} en ({hex}) resistieron el asedio de {attacker}, causando {casualties} bajas a los asaltantes.",
+		"chronicle_epidemic_title": "Epidemia Urbana en ({hex})",
+		"chronicle_epidemic_desc": "El hacinamiento y baja salubridad en ({hex}) desataron una epidemia en {deme}, causando {casualties} bajas.",
+		"chronicle_walled_union_title": "Unión Amurallada en ({hex})",
+		"chronicle_walled_union_desc": "{deme_a} y {deme_b} unificaron sus murallas perimetrales en una ciudad multi-hexágono ({hex}).",
 		"strategy.strat-cooperation.name": "Alianza Cooperativa",
 		"strategy.strat-cooperation.desc": "Fomenta la cohesión social, la conservación comunal del hábitat y el almacenamiento.",
 		"strategy.strat-expansion.name": "Pioneros Expansionistas",
@@ -321,7 +325,11 @@ const STRINGS: Dictionary = {
 			"chronicle_tribute_title": "Tributo de Paz en ({hex})",
 			"chronicle_tribute_desc": "{victim} entregó {loot} reservas como tributo a {raider} en ({hex}), evitando bajas y sellando una tregua.",
 			"chronicle_siege_title": "Asedio Repelido en ({hex})",
-			"chronicle_siege_desc": "Las fortificaciones de {defender} en ({hex}) resistieron el asedio de {attacker}, causando {casualties} bajas a los asaltantes."
+			"chronicle_siege_desc": "Las fortificaciones de {defender} en ({hex}) resistieron el asedio de {attacker}, causando {casualties} bajas a los asaltantes.",
+			"chronicle_epidemic_title": "Epidemia Urbana en ({hex})",
+			"chronicle_epidemic_desc": "El hacinamiento y baja salubridad en ({hex}) desataron una epidemia en {deme}, causando {casualties} bajas.",
+			"chronicle_walled_union_title": "Unión Amurallada en ({hex})",
+			"chronicle_walled_union_desc": "{deme_a} y {deme_b} unificaron sus murallas perimetrales en una ciudad multi-hexágono ({hex})."
 		}
 	},
 	"en": {
@@ -362,10 +370,9 @@ const STRINGS: Dictionary = {
 		"status.struggling": "Struggling",
 		"status.starving": "Starving",
 		"tier.1": "Camp",
-		"tier.2": "Hamlet",
-		"tier.3": "Consolidated Village",
-		"tier.4": "Complex Settlement",
-		"tier.5": "Unified Metropolis",
+		"tier.2": "Village",
+		"tier.3": "Town",
+		"tier.4": "Metropolis",
 		"tool.inspect": "Observe",
 		"tool.set_biome": "Climate / Biome",
 		"tool.adjust_altitude": "Terrain / Altitude",
@@ -481,6 +488,7 @@ const STRINGS: Dictionary = {
 		"chronicle.type.merge": "Settlement Unification",
 		"chronicle.type.tribute": "Tribute Payment",
 		"chronicle.type.siege": "Fortress Siege",
+		"chronicle.type.epidemic": "Urban Epidemic",
 		"filter_war": "War",
 		"filter_raid": "Raid",
 		"filter_pact": "Pacts",
@@ -532,6 +540,10 @@ const STRINGS: Dictionary = {
 		"chronicle_tribute_desc": "{victim} paid {loot} reserves as tribute to {raider} at ({hex}), avoiding casualties and sealing a truce.",
 		"chronicle_siege_title": "Siege Repelled at ({hex})",
 		"chronicle_siege_desc": "The fortifications of {defender} at ({hex}) withstood the siege by {attacker}, inflicting {casualties} casualties on the assailants.",
+		"chronicle_epidemic_title": "Urban Epidemic at ({hex})",
+		"chronicle_epidemic_desc": "Crowding and poor sanitation at ({hex}) triggered an epidemic in {deme}, causing {casualties} casualties.",
+		"chronicle_walled_union_title": "Walled Union at ({hex})",
+		"chronicle_walled_union_desc": "{deme_a} and {deme_b} joined their perimeter walls into a multi-hex city ({hex}).",
 		"strategy.strat-cooperation.name": "Cooperative Alliance",
 		"strategy.strat-cooperation.desc": "Fosters social cohesion, communal habitat conservation, and resource buffering.",
 		"strategy.strat-expansion.name": "Expansionist Pioneers",
@@ -643,7 +655,11 @@ const STRINGS: Dictionary = {
 			"chronicle_tribute_title": "Peace Tribute at ({hex})",
 			"chronicle_tribute_desc": "{victim} paid {loot} reserves as tribute to {raider} at ({hex}), avoiding casualties and sealing a truce.",
 			"chronicle_siege_title": "Siege Repelled at ({hex})",
-			"chronicle_siege_desc": "The fortifications of {defender} at ({hex}) withstood the siege by {attacker}, inflicting {casualties} casualties on the assailants."
+			"chronicle_siege_desc": "The fortifications of {defender} at ({hex}) withstood the siege by {attacker}, inflicting {casualties} casualties on the assailants.",
+			"chronicle_epidemic_title": "Urban Epidemic at ({hex})",
+			"chronicle_epidemic_desc": "Crowding and poor sanitation at ({hex}) triggered an epidemic in {deme}, causing {casualties} casualties.",
+			"chronicle_walled_union_title": "Walled Union at ({hex})",
+			"chronicle_walled_union_desc": "{deme_a} and {deme_b} joined their perimeter walls into a multi-hex city ({hex})."
 		}
 	}
 }
@@ -840,7 +856,7 @@ static func status_name(lang: String, status: String) -> String:
 
 
 static func village_tier_name(lang: String, tier: int) -> String:
-	return t(lang, "tier." + str(clampi(tier, 1, 5)))
+	return t(lang, "tier." + str(clampi(tier, 1, 4)))
 
 
 static func preset_title(lang: String, preset_id: String) -> String:

@@ -3,6 +3,7 @@ extends Node2D
 
 const PixelArtGen = preload("res://src/world/pixel_art_gen.gd")
 const CameraController = preload("res://src/world/camera_controller.gd")
+const OceanWavesShader = preload("res://src/world/shaders/ocean_waves.gdshader")
 const Prop = EvoPropFloraRenderer.Prop
 
 signal hex_clicked(hex_id: String, button_index: int)
@@ -71,7 +72,7 @@ const BIOME_PALETTE: Dictionary = {
 }
 
 const C_ROCK_CRACK := Color("#23150c")
-const C_CLIFF_OUTLINE := Color("#26160c")
+const C_CLIFF_OUTLINE := Color("#23150c")
 const C_SAND := Color("#ebd294")
 const C_SURF := Color(0.95, 0.99, 1.0, 0.85)
 const C_RIPPLE := Color(0.90, 0.98, 1.0, 0.60)
@@ -89,6 +90,8 @@ var hovered_hex_id: String = ""
 var hovered_deme_id: String = ""
 var brush_radius: int = 1
 
+var _backdrop_rect := ColorRect.new()
+var _ocean_shader_mat := ShaderMaterial.new()
 var _world_layer := Node2D.new()
 var _terrain_layer := Node2D.new()
 var _network_layer := Node2D.new()
@@ -118,11 +121,15 @@ var _ocean_ids: Array[String] = []
 var _brush_hexes: Array[String] = []
 var _roads: Array[Dictionary] = []
 var _villages: Array[Dictionary] = []
+var _village_by_deme_id: Dictionary = {}
+var _rural_cell_ids: Array[String] = []
 var _static_props: Array[Prop] = []
 var _deme_hit_rects: Array[Dictionary] = []
 var _column_state_cache: Dictionary = {}
 var _last_sort_signature: Array = []
 var _cell_flora_cache: Dictionary = {}
+var _last_season: String = ""
+var _last_network_cull_rect: Rect2 = Rect2()
 
 var _press_pos: Vector2 = Vector2.ZERO
 var _is_left_down: bool = false
@@ -136,7 +143,20 @@ var _villager_tex_sets: Dictionary = {}
 
 
 func _init() -> void:
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_world_layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_terrain_layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_network_layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_anim_layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	_overlay_layer.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+
+	_ocean_shader_mat.shader = OceanWavesShader
+	_backdrop_rect.material = _ocean_shader_mat
+	_backdrop_rect.color = Color("#0e3352")
+	_backdrop_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_backdrop_rect.show_behind_parent = true
+	add_child(_backdrop_rect)
+
 	for i in range(6):
 		var rad := deg_to_rad(60.0 * float(i) - 30.0)
 		_hex_uvs.append(Vector2(0.5 + cos(rad) * 0.46, 0.5 + sin(rad) * 0.46))
@@ -171,6 +191,9 @@ func _process(delta: float) -> void:
 	var vp_size := get_viewport_rect().size if is_inside_tree() else Vector2(1600.0, 960.0)
 	var vp_changed := vp_size != _last_vp_size
 	_last_vp_size = vp_size
+	_backdrop_rect.size = vp_size
+	if world_state.season != _last_season:
+		_update_ocean_shader_season()
 	_world_layer.position = vp_size * 0.5 + camera.pan_offset
 	_world_layer.scale = Vector2(camera.zoom_level, camera.zoom_level)
 
@@ -181,6 +204,8 @@ func _process(delta: float) -> void:
 
 	if is_inside_tree() and _world_layer.transform != _last_world_transform:
 		_last_world_transform = _world_layer.transform
+		if _last_network_cull_rect.size == Vector2.ZERO or not _last_network_cull_rect.encloses(_visible_world_rect):
+			_network_layer.queue_redraw()
 		var mouse_pos := get_viewport().get_mouse_position()
 		var hit_hex := _pick_hex_at(mouse_pos)
 		if hit_hex != hovered_hex_id:
@@ -190,7 +215,6 @@ func _process(delta: float) -> void:
 		var new_hov_deme := str(hit_deme.get("deme_id", ""))
 		if new_hov_deme != hovered_deme_id:
 			hovered_deme_id = new_hov_deme
-			_network_layer.queue_redraw()
 
 	_fx_accum += delta
 	var step_fx := false
@@ -203,7 +227,6 @@ func _process(delta: float) -> void:
 		for hex_id in _animated_fx_ids:
 			if _visible_world_rect.has_point(_hex_centers[hex_id]):
 				_water_fx[hex_id].queue_redraw()
-		queue_redraw()
 	_anim_layer.queue_redraw()
 	_overlay_layer.queue_redraw()
 
@@ -221,6 +244,21 @@ func set_camera(p_camera: CameraController) -> void:
 
 func refresh() -> void:
 	_dirty = true
+
+
+func set_selected_hex(p_hex_id: String) -> void:
+	if selected_hex_id != p_hex_id:
+		selected_hex_id = p_hex_id
+		_overlay_layer.queue_redraw()
+
+
+func _update_ocean_shader_season() -> void:
+	if world_state == null:
+		return
+	_last_season = world_state.season
+	var is_wet := _last_season == "wet_warm"
+	_ocean_shader_mat.set_shader_parameter("deep_color", Vector4(0.055, 0.20, 0.32, 1.0) if is_wet else Vector4(0.043, 0.157, 0.251, 1.0))
+	_ocean_shader_mat.set_shader_parameter("mid_color", Vector4(0.095, 0.34, 0.51, 1.0) if is_wet else Vector4(0.075, 0.27, 0.42, 1.0))
 
 
 func refresh_village_decisions() -> void:
@@ -248,7 +286,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		var new_hov_deme := str(hit_deme.get("deme_id", ""))
 		if new_hov_deme != hovered_deme_id:
 			hovered_deme_id = new_hov_deme
-			_network_layer.queue_redraw()
 		if _is_left_down and active_tool != "inspect" and hit_hex != "" and hit_hex != _last_dragged_hex_id:
 			_last_dragged_hex_id = hit_hex
 			hex_dragged.emit(hit_hex)
@@ -316,6 +353,7 @@ func _rebuild() -> void:
 	_built_pitch = camera.pitch_deg
 	_ground = camera.ground_transform()
 	_lift = camera.height_scale()
+	_update_ocean_shader_season()
 	_brush_hexes = _compute_brush_hexes()
 	_rebuild_cell_topology()
 	_layout_columns()
@@ -323,7 +361,6 @@ func _rebuild() -> void:
 	_roads = EvoRoadNetworkRenderer.collect_roads(self)
 	_static_props = EvoPropFloraRenderer.collect_static_props(self)
 	_network_layer.queue_redraw()
-	queue_redraw()
 
 
 func _reproject() -> void:
@@ -420,7 +457,6 @@ func _layout_columns() -> void:
 		var k_ratio: float = clampf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0)
 		var k_band: int = 0 if k_ratio < 0.60 else (1 if k_ratio < 0.85 else 2)
 		var r_band: int = int(roundf(clampf(cell.current_resources / maxf(1.0, cell.carrying_capacity_max), 0.0, 1.0) * 50.0)) if active_lens == "food" else 0
-		var is_brushed := _brush_hexes.has(hex_id)
 
 		var col_key: Array = [
 			_built_yaw,
@@ -430,11 +466,11 @@ func _layout_columns() -> void:
 			active_lens,
 			k_band,
 			r_band,
-			hex_id == selected_hex_id,
-			is_brushed,
-			active_tool == "inspect" if is_brushed else false,
 			_coast_dirs[hex_id],
-			_diff_biome_dirs[hex_id]
+			_diff_biome_dirs[hex_id],
+			cell.land_use,
+			cell.owner_deme_id,
+			cell.has_ruins
 		]
 
 		if not _column_state_cache.has(hex_id) or _column_state_cache[hex_id] != col_key:
@@ -450,11 +486,8 @@ func _compute_brush_hexes() -> Array[String]:
 
 
 func _update_brush() -> void:
-	var previous := _brush_hexes
 	_brush_hexes = _compute_brush_hexes()
-	for hex_id in previous + _brush_hexes:
-		_column_state_cache.erase(hex_id)
-		_columns[hex_id].queue_redraw()
+	_overlay_layer.queue_redraw()
 
 
 func _bob_ocean_columns() -> void:
@@ -515,32 +548,6 @@ func _cell_seed(q: int, r: int, salt: int = 0) -> int:
 # BACKDROP & TERRAIN COLUMNS
 # ============================================================================
 
-func _draw() -> void:
-	if world_state == null or camera == null:
-		return
-	var vp_size := get_viewport_rect().size
-	var is_wet := world_state.season == "wet_warm"
-	draw_rect(Rect2(Vector2.ZERO, vp_size), Color("#0e3352") if is_wet else Color("#0b2840"), true)
-
-	var band_col := Color("#134066") if is_wet else Color("#103352")
-	var band_h := 48.0
-	var num_bands := int(vp_size.y / band_h) + 1
-	for b in range(0, num_bands, 2):
-		draw_rect(Rect2(0.0, float(b) * band_h, vp_size.x, band_h * 0.55), band_col, true)
-
-	var wave_col := Color(0.42, 0.78, 0.96, 0.18)
-	var foam_col := Color(0.85, 0.96, 1.0, 0.22)
-	var rows := int(vp_size.y / 96.0) + 1
-	var cols := int(vp_size.x / 180.0) + 1
-	for ry in range(rows):
-		for cx in range(cols):
-			var phase := _anim_time * 1.9 + float(ry) * 0.75 + float(cx) * 0.55
-			var wx := float(cx * 180) + sin(phase) * 9.0 + float((ry % 2) * 82)
-			var wy := float(ry * 96) + cos(phase * 0.8) * 3.0
-			draw_rect(Rect2(wx, wy, 16.0, 2.0), wave_col, true)
-			draw_rect(Rect2(wx + 4.0, wy - 2.0, 8.0, 2.0), foam_col, true)
-
-
 func _draw_hex_column(column: Node2D, hex_id: String) -> void:
 	var cell: EvoTypes.HexCell = world_state.cells[hex_id]
 	var is_ocean := _is_water(cell)
@@ -548,7 +555,7 @@ func _draw_hex_column(column: Node2D, hex_id: String) -> void:
 	var pal: Dictionary = BIOME_PALETTE.get(eff_biome, BIOME_PALETTE["savanna"])
 	var top_pts: PackedVector2Array = _hex_polys[hex_id]
 
-	if not is_ocean:
+	if not is_ocean and cell.altitude - world_state.sea_level > 0.015:
 		var bot_pts := _project_hex(HexMath.axial_to_world(cell.q, cell.r), 0.0)
 		_draw_cliff_walls(column, cell, pal, top_pts, bot_pts)
 
@@ -557,6 +564,8 @@ func _draw_hex_column(column: Node2D, hex_id: String) -> void:
 	column.draw_polygon(top_pts, v_colors, _hex_uvs, PixelArtGen.get_texture("hex_tile_" + eff_biome))
 
 	if not is_ocean:
+		if cell.land_use == "crops" or cell.land_use == "pasture" or cell.has_ruins:
+			_draw_rural_and_ruins_top_overlay(column, cell, top_pts)
 		_draw_hex_borders(column, cell, pal, tint_col, top_pts)
 		if active_lens == "health":
 			var k_ratio: float = cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max)
@@ -565,13 +574,35 @@ func _draw_hex_column(column: Node2D, hex_id: String) -> void:
 			elif k_ratio < 0.85:
 				_draw_dashed_hex_border(column, top_pts, Color("#f59e0b"), 2.0)
 
-	var border_pts := top_pts.duplicate()
-	border_pts.append(top_pts[0])
-	if hex_id == selected_hex_id:
-		column.draw_polyline(border_pts, C_SELECTION, 3.4)
-	elif _brush_hexes.has(hex_id):
-		var brush_col := Color("#38bdf8") if active_tool == "inspect" else Color("#fb923c")
-		column.draw_polyline(border_pts, brush_col, 2.6)
+
+func _draw_rural_and_ruins_top_overlay(column: Node2D, cell: EvoTypes.HexCell, top_pts: PackedVector2Array) -> void:
+	var center: Vector2 = _hex_centers[cell.id]
+	var inner_pts := PackedVector2Array()
+	for pt in top_pts:
+		inner_pts.append(center.lerp(pt, 0.76))
+	if cell.land_use == "crops":
+		column.draw_colored_polygon(inner_pts, Color(0.78, 0.60, 0.24, 0.28))
+		var furrows := PackedVector2Array()
+		for row in range(-4, 5):
+			var t := float(row) / 5.5
+			var y_off := t * 72.0
+			var half_w := (1.0 - absf(t) * 0.55) * 96.0
+			furrows.append(center + Vector2(-half_w, y_off - half_w * 0.14))
+			furrows.append(center + Vector2(half_w, y_off + half_w * 0.14))
+		column.draw_multiline(furrows, Color(0.38, 0.24, 0.10, 0.48), 2.2)
+		var border := inner_pts.duplicate()
+		border.append(inner_pts[0])
+		column.draw_polyline(border, Color("#23150c") * Color(1, 1, 1, 0.45), 1.6)
+	elif cell.land_use == "pasture":
+		column.draw_colored_polygon(inner_pts, Color(0.32, 0.68, 0.34, 0.24))
+		var fence := inner_pts.duplicate()
+		fence.append(inner_pts[0])
+		column.draw_polyline(fence, Color(0.55, 0.36, 0.18, 0.72), 2.2)
+		for pt in inner_pts:
+			column.draw_circle(pt, 2.8, Color("#23150c"))
+	if cell.has_ruins:
+		column.draw_circle(center + Vector2(-18.0, 8.0), 34.0, Color(0.18, 0.14, 0.12, 0.32))
+		column.draw_circle(center + Vector2(22.0, -10.0), 26.0, Color(0.24, 0.20, 0.18, 0.28))
 
 
 func _draw_cliff_walls(
@@ -656,6 +687,12 @@ func _get_top_tint(cell: EvoTypes.HexCell, is_ocean: bool) -> Color:
 		tint_col = tint_col.lerp(Color("#9c6b4e"), 0.42)
 	elif k_ratio < 0.85:
 		tint_col = tint_col.lerp(Color("#c29b61"), 0.22)
+	if cell.land_use == "crops":
+		tint_col = tint_col.lerp(Color("#e8c468"), 0.24)
+	elif cell.land_use == "pasture":
+		tint_col = tint_col.lerp(Color("#76c975"), 0.22)
+	if cell.has_ruins:
+		tint_col = tint_col.lerp(Color("#5c4a3e"), 0.28)
 	return tint_col
 
 
@@ -713,12 +750,21 @@ func _draw_water_fx(fx: Node2D, hex_id: String) -> void:
 	var top_pts: PackedVector2Array = _hex_polys[hex_id]
 	for dir_idx in _coast_dirs[hex_id]:
 		var surf_pulse := 0.5 + 0.5 * sin(_anim_time * 3.2 + float(dir_idx + cell.q))
-		var inset := 0.06 + surf_pulse * 0.04
+		var inset_inner := 0.05 + surf_pulse * 0.03
+		var inset_outer := -0.05 - surf_pulse * 0.03
+		var c0 := top_pts[dir_idx]
+		var c1 := top_pts[(dir_idx + 1) % 6]
 		fx.draw_line(
-			top_pts[dir_idx].lerp(center, inset),
-			top_pts[(dir_idx + 1) % 6].lerp(center, inset),
+			c0.lerp(center, inset_inner),
+			c1.lerp(center, inset_inner),
 			C_SURF,
-			2.0 + surf_pulse
+			2.4 + surf_pulse
+		)
+		fx.draw_line(
+			c0.lerp(center, inset_outer),
+			c1.lerp(center, inset_outer),
+			C_RIPPLE,
+			1.6 + surf_pulse * 0.6
 		)
 
 
@@ -727,9 +773,10 @@ func _draw_water_fx(fx: Node2D, hex_id: String) -> void:
 # ============================================================================
 
 func _draw_network() -> void:
-	EvoRoadNetworkRenderer.draw_network_roads(self)
+	_last_network_cull_rect = _visible_world_rect.grow(HexMath.HEX_SIZE * 1.5) if _visible_world_rect.size != Vector2.ZERO else Rect2()
 	for village in _villages:
 		EvoPropFloraRenderer.draw_village_plaza(self, village)
+	EvoRoadNetworkRenderer.draw_network_roads(self)
 
 
 func _draw_animated() -> void:

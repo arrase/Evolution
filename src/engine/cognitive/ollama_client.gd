@@ -456,7 +456,7 @@ static func can_enqueue_jobs() -> bool:
 
 static func needs_prefetch() -> bool:
 	_mutex.lock()
-	var ok := _can_enqueue_locked() and (not _worker_running or _pending_jobs_by_sig.size() < 2)
+	var ok := _can_enqueue_locked() and (not _worker_running or _pending_jobs_by_sig.size() < 16)
 	_mutex.unlock()
 	return ok
 
@@ -510,6 +510,7 @@ static func sync_and_enqueue_batch(
 ) -> Dictionary:
 	var live_results: Dictionary = {}
 	var missing_sigs: Array[String] = []
+	var max_new: int = 0
 	if not buckets.is_empty():
 		_mutex.lock()
 		var can_enq := enqueue_missing and _can_enqueue_locked()
@@ -523,10 +524,10 @@ static func sync_and_enqueue_batch(
 				_newly_completed_sigs.erase(sig)
 			elif can_enq and not _pending_jobs_by_sig.has(sig):
 				missing_sigs.append(str(sig))
+		max_new = maxi(0, 32 - _pending_jobs_by_sig.size())
 		_mutex.unlock()
 
 	var new_jobs: Array[Dictionary] = []
-	var max_new := mini(3, maxi(0, 8 - _pending_jobs_by_sig.size()))
 	for i in range(mini(max_new, missing_sigs.size())):
 		var sig := missing_sigs[i]
 		var rep_deme: EvoTypes.Deme = buckets[sig]["representative"]
@@ -554,11 +555,11 @@ static func prefetch_for_reps(reps_by_sig: Dictionary, state: EvoTypes.WorldStat
 		for pending_sig in _pending_jobs_by_sig.keys():
 			if not reps_by_sig.has(pending_sig):
 				_pending_jobs_by_sig.erase(pending_sig)
-	if can_enq and _pending_jobs_by_sig.size() < 8:
+	if can_enq and _pending_jobs_by_sig.size() < 32:
 		for sig in reps_by_sig.keys():
 			if not _live_signature_cache.has(sig) and not _pending_jobs_by_sig.has(sig):
 				missing_sigs.append(str(sig))
-				if _pending_jobs_by_sig.size() + missing_sigs.size() >= 8 or missing_sigs.size() >= 2:
+				if _pending_jobs_by_sig.size() + missing_sigs.size() >= 32 or missing_sigs.size() >= 16:
 					break
 	_mutex.unlock()
 
@@ -636,6 +637,7 @@ static func _run_ollama_worker() -> void:
 		var batch: Array[Dictionary] = []
 		var status: Dictionary = {}
 		var batch_epoch: int = 0
+		var ctx_len: int = 8192
 
 		_mutex.lock()
 		if _pending_jobs_by_sig.is_empty() or _shutdown_requested:
@@ -644,6 +646,11 @@ static func _run_ollama_worker() -> void:
 			_mutex.unlock()
 			return
 		status = _cached_ollama_status.duplicate(true)
+		if not status.has("primary_tag"):
+			status["primary_tag"] = EvoUserSettings.primary_model
+		if not status.has("secondary_tag"):
+			status["secondary_tag"] = EvoUserSettings.secondary_model
+		ctx_len = EvoUserSettings.context_length
 		var can_eval := bool(status["connected"]) and (bool(status["primary_ready"]) or bool(status["secondary_ready"]))
 		if not can_eval:
 			_pending_jobs_by_sig.clear()
@@ -654,14 +661,14 @@ static func _run_ollama_worker() -> void:
 		batch_epoch = _cache_epoch
 		_active_worker_epoch = batch_epoch
 		var keys := _pending_jobs_by_sig.keys()
-		var count := mini(4, keys.size())
+		var count := mini(8, keys.size())
 		for i in range(count):
 			var k := str(keys[i])
 			batch.append(_pending_jobs_by_sig[k])
 			_pending_jobs_by_sig.erase(k)
 		_mutex.unlock()
 
-		var batch_results := _evaluate_job_batch_with_ollama(batch, status)
+		var batch_results := _evaluate_job_batch_with_ollama(batch, status, ctx_len)
 		if not batch_results.is_empty():
 			_mutex.lock()
 			if _cache_epoch == batch_epoch:
@@ -679,11 +686,11 @@ static func _run_ollama_worker() -> void:
 
 static func _evaluate_job_batch_with_ollama(
 	batch: Array[Dictionary],
-	status: Dictionary
+	status: Dictionary,
+	ctx_len: int = 8192
 ) -> Dictionary:
 	var results_by_sig: Dictionary = {}
 	var active_jobs: Array[Dictionary] = []
-	var ctx_len: int = EvoUserSettings.context_length
 
 	for item in batch:
 		if _shutdown_requested:

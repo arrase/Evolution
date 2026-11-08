@@ -392,6 +392,10 @@ static func get_event_type_color(event_type: String) -> Color:
 			return Color("#c2410c")
 		"extinction":
 			return Color("#b91c1c")
+		"epidemic":
+			return Color("#65a30d")
+		"walled_union":
+			return Color("#eab308")
 		"total_extinction":
 			return Color("#991b1b")
 		"single_survivor":
@@ -435,6 +439,10 @@ static func get_event_type_label(event_type: String, lang: String = "es") -> Str
 			return tr_text(lang, "Pérdida Cultural", "Cultural Loss")
 		"extinction":
 			return tr_text(lang, "Extinción", "Extinction")
+		"epidemic":
+			return tr_text(lang, "Epidemia", "Epidemic")
+		"walled_union":
+			return tr_text(lang, "Unión Amurallada", "Walled Union")
 		"total_extinction":
 			return EvoI18n.t(lang, "chronicle.type.total_extinction")
 		"single_survivor":
@@ -582,15 +590,13 @@ static func get_vital_status_color(status: String) -> Color:
 	return COLOR_SEPIA
 
 
-static func get_village_tier_label(population: int, lang: String = "es", merged_count: int = 0) -> String:
-	if merged_count >= 1 and population >= 200:
-		return tr_text(lang, "V · Metrópolis", "V · Metropolis")
-	if population >= 150:
-		return tr_text(lang, "IV · Poblado", "IV · Settlement")
-	if population >= 85:
-		return tr_text(lang, "III · Aldea", "III · Village")
-	if population >= 35:
-		return tr_text(lang, "II · Caserío", "II · Hamlet")
+static func get_village_tier_label(population: int, lang: String = "es", merged_count: int = 0, defense_tier: int = 0, walled_union_id: String = "") -> String:
+	if population >= 380 or (population >= 280 and (defense_tier >= 2 or merged_count >= 1 or walled_union_id != "")):
+		return tr_text(lang, "IV · Metrópolis", "IV · Metropolis")
+	if population >= 240 or (population >= 170 and (defense_tier >= 1 or merged_count >= 1)):
+		return tr_text(lang, "III · Villa", "III · Town")
+	if population >= 120 or defense_tier == 1:
+		return tr_text(lang, "II · Aldea", "II · Village")
 	return tr_text(lang, "I · Campamento", "I · Camp")
 
 

@@ -271,6 +271,9 @@ class HexCell extends RefCounted:
 			carrying_capacity_max = value
 	var seasonal_regen_rate: float = 0.18
 	var deme_ids: Array[String] = []
+	var land_use: String = "wild"
+	var owner_deme_id: String = ""
+	var has_ruins: bool = false
 
 	func duplicate_cell() -> HexCell:
 		var c := HexCell.new()
@@ -287,6 +290,9 @@ class HexCell extends RefCounted:
 		c.carrying_capacity_max = carrying_capacity_max
 		c.seasonal_regen_rate = seasonal_regen_rate
 		c.deme_ids = deme_ids.duplicate()
+		c.land_use = land_use
+		c.owner_deme_id = owner_deme_id
+		c.has_ruins = has_ruins
 		return c
 
 	func to_dict() -> Dictionary:
@@ -303,7 +309,10 @@ class HexCell extends RefCounted:
 			"carryingCapacity": carrying_capacity,
 			"carryingCapacityMax": carrying_capacity_max,
 			"seasonalRegenRate": seasonal_regen_rate,
-			"demeIds": deme_ids.duplicate()
+			"demeIds": deme_ids.duplicate(),
+			"landUse": land_use,
+			"ownerDemeId": owner_deme_id,
+			"hasRuins": has_ruins
 		}
 
 	static func from_dict(d: Dictionary) -> HexCell:
@@ -323,6 +332,12 @@ class HexCell extends RefCounted:
 		c.deme_ids = []
 		for item in d["demeIds"]:
 			c.deme_ids.append(str(item))
+		if d.has("landUse"):
+			c.land_use = str(d["landUse"])
+		if d.has("ownerDemeId"):
+			c.owner_deme_id = str(d["ownerDemeId"])
+		if d.has("hasRuins"):
+			c.has_ruins = bool(d["hasRuins"])
 		return c
 
 
@@ -349,6 +364,8 @@ class Deme extends RefCounted:
 	var defense_tier: int = 0
 	var merged_count: int = 0
 	var secondary_color: String = ""
+	var salubrity: float = 1.0
+	var walled_union_id: String = ""
 
 	func duplicate_deme() -> Deme:
 		var d := Deme.new()
@@ -374,6 +391,8 @@ class Deme extends RefCounted:
 		d.defense_tier = defense_tier
 		d.merged_count = merged_count
 		d.secondary_color = secondary_color
+		d.salubrity = salubrity
+		d.walled_union_id = walled_union_id
 		return d
 
 	func get_vital_status() -> String:
@@ -388,20 +407,16 @@ class Deme extends RefCounted:
 		return "stable"
 
 	func get_village_tier() -> int:
-		if merged_count >= 1 and (population >= 220 or defense_tier >= 3):
-			return 5
-		if population >= 400 or defense_tier >= 3:
+		if population >= 380 or (population >= 280 and (defense_tier >= 2 or merged_count >= 1 or walled_union_id != "")):
 			return 4
-		if population >= 150 or defense_tier == 2:
+		if population >= 240 or (population >= 170 and (defense_tier >= 1 or merged_count >= 1)):
 			return 3
-		if population >= 50 or defense_tier == 1:
+		if population >= 120 or defense_tier == 1:
 			return 2
 		return 1
 
 	func get_village_roman() -> String:
 		var tier := get_village_tier()
-		if tier == 5:
-			return "V"
 		if tier == 4:
 			return "IV"
 		if tier == 3:
@@ -434,7 +449,9 @@ class Deme extends RefCounted:
 			"lastJustification": last_justification,
 			"defenseTier": defense_tier,
 			"mergedCount": merged_count,
-			"secondaryColor": secondary_color
+			"secondaryColor": secondary_color,
+			"salubrity": salubrity,
+			"walledUnionId": walled_union_id
 		}
 
 	static func from_dict(dict_data: Dictionary) -> Deme:
@@ -480,6 +497,10 @@ class Deme extends RefCounted:
 			d.merged_count = int(dict_data["mergedCount"])
 		if dict_data.has("secondaryColor"):
 			d.secondary_color = str(dict_data["secondaryColor"])
+		if dict_data.has("salubrity"):
+			d.salubrity = float(dict_data["salubrity"])
+		if dict_data.has("walledUnionId"):
+			d.walled_union_id = str(dict_data["walledUnionId"])
 		return d
 
 
@@ -831,6 +852,36 @@ class WorldState extends RefCounted:
 			s.cells[str(k)] = HexCell.from_dict(d["cells"][k])
 		for k in d["demes"].keys():
 			s.demes[str(k)] = Deme.from_dict(d["demes"][k])
+		for cid in s.cells.keys():
+			(s.cells[cid] as HexCell).deme_ids.clear()
+		var invalid_deme_ids: Array[String] = []
+		for did in s.demes.keys():
+			var dm: Deme = s.demes[did]
+			if not s.cells.has(dm.hex_id):
+				invalid_deme_ids.append(did)
+				continue
+			var host_cell: HexCell = s.cells[dm.hex_id]
+			if host_cell.deme_ids.is_empty():
+				host_cell.deme_ids.append(dm.id)
+			else:
+				var relocated := false
+				for nid in HexMath.get_neighbor_ids(host_cell.q, host_cell.r, s.cells):
+					var ncell: HexCell = s.cells[nid]
+					if ncell.biome != "ocean" and ncell.altitude <= 0.85 and ncell.deme_ids.is_empty():
+						dm.hex_id = ncell.id
+						ncell.deme_ids.append(dm.id)
+						ncell.owner_deme_id = ""
+						ncell.land_use = "wild"
+						relocated = true
+						break
+				if not relocated:
+					var primary_dm: Deme = s.demes[host_cell.deme_ids[0]]
+					primary_dm.population += dm.population
+					primary_dm.energy_reserves = minf(280.0, primary_dm.energy_reserves + dm.energy_reserves)
+					primary_dm.merged_count += 1 + dm.merged_count
+					invalid_deme_ids.append(did)
+		for did in invalid_deme_ids:
+			s.demes.erase(did)
 		for k in d["traitsCatalog"].keys():
 			s.traits_catalog[str(k)] = TraitDef.from_dict(d["traitsCatalog"][k])
 		for k in d["decisionsCatalog"].keys():

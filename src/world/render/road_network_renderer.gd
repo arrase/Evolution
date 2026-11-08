@@ -99,6 +99,14 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 			flow_color = EvoPropFloraRenderer.resolve_deme_strategy_color(state, state.demes[cell_a.deme_ids[0]])
 
 		var effective_type := flow.flow_type
+		var d_from_id := flow.from_deme_id if flow.from_deme_id != "" else (cell_a.deme_ids[0] if not cell_a.deme_ids.is_empty() else "")
+		var d_to_id := flow.to_deme_id if flow.to_deme_id != "" else (cell_b.deme_ids[0] if not cell_b.deme_ids.is_empty() else "")
+		if not is_same_hex and d_from_id != "" and d_to_id != "" and state.demes.has(d_from_id) and state.demes.has(d_to_id):
+			var d1: EvoTypes.Deme = state.demes[d_from_id]
+			var d2: EvoTypes.Deme = state.demes[d_to_id]
+			if d1.walled_union_id != "" and d1.walled_union_id == d2.walled_union_id and effective_type in ["exchange", "cooperate", "trade", "pact", "merge"]:
+				effective_type = "merge"
+				curve_f = 0.0
 		if effective_type in ["exchange", "cooperate"] and flow.from_deme_id != "" and flow.to_deme_id != "":
 			if EvoTypes.is_pact_active(state, flow.from_deme_id, flow.to_deme_id):
 				effective_type = "pact"
@@ -317,135 +325,50 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 	var connected_deme_ids: Dictionary = {}
 	for d in all_demes:
 		var ca: EvoTypes.HexCell = state.cells[d.hex_id]
-		if ca.deme_ids.size() > 1:
-			connected_deme_ids[d.id] = true
-			continue
-		for n_id in HexMath.get_neighbor_ids(ca.q, ca.r, state.cells):
-			if not (state.cells[n_id] as EvoTypes.HexCell).deme_ids.is_empty():
-				connected_deme_ids[d.id] = true
-				break
-
-	for hex_id in state.cells:
-		var ca: EvoTypes.HexCell = state.cells[hex_id]
-		if ca.deme_ids.size() < 2:
-			continue
-		var z_ca: float = r._get_cell_top_z(ca)
-		var world_ca := HexMath.axial_to_world(ca.q, ca.r)
-		for i in range(ca.deme_ids.size()):
-			var id_a: String = ca.deme_ids[i]
-			if not state.demes.has(id_a):
+		var world_a := HexMath.axial_to_world(ca.q, ca.r)
+		var z_a: float = r._get_cell_top_z(ca)
+		var trim_a := get_cell_plaza_trim(ca)
+		var p_a_raw: Vector2 = r._project(world_a, z_a)
+		for dir_idx in range(6):
+			var n_id: String = r._neighbor_id(ca, dir_idx)
+			if not state.cells.has(n_id):
 				continue
-			var da: EvoTypes.Deme = state.demes[id_a]
-			for j in range(i + 1, ca.deme_ids.size()):
-				var id_b: String = ca.deme_ids[j]
-				if not state.demes.has(id_b):
-					continue
-				var db: EvoTypes.Deme = state.demes[id_b]
-				var d_key := make_pair_key(da.id, db.id)
-				if handled_deme_pairs.has(d_key):
-					continue
-				handled_deme_pairs[d_key] = true
+			var cb: EvoTypes.HexCell = state.cells[n_id]
+			if not cb.deme_ids.is_empty():
+				connected_deme_ids[d.id] = true
+			elif cb.owner_deme_id == d.id and (cb.land_use in ["crops", "pasture"]):
+				var h_key := make_pair_key(ca.id, cb.id)
+				if not handled_hex_pairs.has(h_key):
+					handled_hex_pairs[h_key] = true
+					var world_b := HexMath.axial_to_world(cb.q, cb.r)
+					var z_b: float = r._get_cell_top_z(cb)
+					var trim_b := 22.0
+					var trimmed := trim_road_segment(p_a_raw, r._project(world_b, z_b), trim_a, trim_b)
+					roads.append({
+						"kind": "rural_farm",
+						"hex_a": ca.id,
+						"hex_b": cb.id,
+						"world_a": world_a,
+						"z_a": z_a,
+						"trim_a": trim_a,
+						"world_b": world_b,
+						"z_b": z_b,
+						"trim_b": trim_b,
+						"p_a": trimmed["p_a"],
+						"p_b": trimmed["p_b"],
+						"is_same_hex": false,
+						"curve_factor": 0.035,
+						"show_badge": false,
+						"show_traffic": true,
+						"color": EvoPropFloraRenderer.resolve_deme_strategy_color(state, d)
+					})
 
-				var trim_r := get_cell_plaza_trim(ca)
-				var world_a := get_deme_world_pos(ca, da.id)
-				var world_b := get_deme_world_pos(ca, db.id)
-				var trimmed := trim_road_segment(r._project(world_a, z_ca), r._project(world_b, z_ca), trim_r, trim_r)
-				var p_a: Vector2 = trimmed["p_a"]
-				var p_b: Vector2 = trimmed["p_b"]
-				var is_prio: bool = (ca.id == r.selected_hex_id or ca.id == r.hovered_hex_id)
-
-				match classify_village_pair_relation(r, da, db):
-					"pact":
-						var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, 0.035)
-						var show_badge := register_road_badge(r, b_pos, badge_positions, true)
-						var show_traffic := claim_road_traffic(ca.id, ca.id, hex_traffic_counts, true)
-						roads.append({
-							"kind": "pact",
-							"hex_a": ca.id,
-							"hex_b": ca.id,
-							"world_a": world_a,
-							"z_a": z_ca,
-							"trim_a": trim_r,
-							"world_b": world_b,
-							"z_b": z_ca,
-							"trim_b": trim_r,
-							"p_a": p_a,
-							"p_b": p_b,
-							"is_same_hex": true,
-							"curve_factor": 0.035,
-							"show_badge": show_badge,
-							"show_traffic": show_traffic,
-							"badge_pos": b_pos,
-							"color": Color("#10b981")
-						})
-					"dispute_front":
-						var b_pos: Vector2 = r._cell_top_center(ca)
-						var show_badge := not intra_hex_badge_drawn.has(ca.id)
-						intra_hex_badge_drawn[ca.id] = true
-						if show_badge:
-							show_badge = register_road_badge(r, b_pos, badge_positions, is_prio)
-						roads.append({
-							"kind": "dispute",
-							"world_a": world_a,
-							"z_a": z_ca,
-							"trim_a": trim_r,
-							"world_b": world_b,
-							"z_b": z_ca,
-							"trim_b": trim_r,
-							"badge_world": world_ca,
-							"badge_z": z_ca,
-							"p_a": p_a,
-							"p_b": p_b,
-							"is_same_hex": true,
-							"show_badge": show_badge,
-							"badge_pos": b_pos
-						})
-					"active_road":
-						var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, 0.035)
-						var show_badge := register_road_badge(r, b_pos, badge_positions, is_prio)
-						var show_traffic := claim_road_traffic(ca.id, ca.id, hex_traffic_counts, is_prio)
-						roads.append({
-							"kind": "collab",
-							"hex_a": ca.id,
-							"hex_b": ca.id,
-							"world_a": world_a,
-							"z_a": z_ca,
-							"trim_a": trim_r,
-							"world_b": world_b,
-							"z_b": z_ca,
-							"trim_b": trim_r,
-							"p_a": p_a,
-							"p_b": p_b,
-							"is_same_hex": true,
-							"curve_factor": 0.035,
-							"show_badge": show_badge,
-							"show_traffic": show_traffic,
-							"color": Color(da.color)
-						})
-					_:
-						var dis_age := get_disused_road_age(r, da.id, db.id, ca.id, ca.id)
-						if dis_age > 0 or (state.generation == 0 and state.active_flows.is_empty()):
-							var b_pos := (p_a + p_b) * 0.5
-							var show_badge := register_road_badge(r, b_pos, badge_positions, is_prio)
-							roads.append({
-								"kind": "broken",
-								"world_a": world_a,
-								"z_a": z_ca,
-								"trim_a": trim_r,
-								"world_b": world_b,
-								"z_b": z_ca,
-								"trim_b": trim_r,
-								"p_a": p_a,
-								"p_b": p_b,
-								"show_badge": show_badge,
-								"alpha": 0.52 if dis_age == 2 else 0.90
-							})
-
-	for hex_id in state.cells:
-		var ca: EvoTypes.HexCell = state.cells[hex_id]
-		if ca.deme_ids.is_empty():
-			continue
-		for n_id in HexMath.get_neighbor_ids(ca.q, ca.r, state.cells):
+	for d in all_demes:
+		var ca: EvoTypes.HexCell = state.cells[d.hex_id]
+		for dir_idx in range(6):
+			var n_id: String = r._neighbor_id(ca, dir_idx)
+			if not state.cells.has(n_id):
+				continue
 			var cb: EvoTypes.HexCell = state.cells[n_id]
 			if cb.deme_ids.is_empty():
 				continue
@@ -480,6 +403,30 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 				or ca.id == r.hovered_hex_id
 				or cb.id == r.hovered_hex_id
 			)
+
+			if da.walled_union_id != "" and da.walled_union_id == db.walled_union_id:
+				var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, 0.0)
+				var show_badge := register_road_badge(r, b_pos, badge_positions, true)
+				roads.append({
+					"kind": "merge",
+					"hex_a": ca.id,
+					"hex_b": cb.id,
+					"world_a": world_a,
+					"z_a": z_a,
+					"trim_a": trim_a,
+					"world_b": world_b,
+					"z_b": z_b,
+					"trim_b": trim_b,
+					"p_a": p_a,
+					"p_b": p_b,
+					"is_same_hex": false,
+					"curve_factor": 0.0,
+					"show_badge": show_badge,
+					"show_traffic": true,
+					"badge_pos": b_pos,
+					"color": Color("#fbbf24")
+				})
+				continue
 
 			match classify_village_pair_relation(r, da, db):
 				"pact":
@@ -782,7 +729,15 @@ static func _draw_road_network(r: Node2D) -> void:
 
 
 static func draw_network_roads(r: Node2D) -> void:
+	draw_settlement_perimeter_walls(r)
+	var has_cull: bool = r._visible_world_rect.size != Vector2.ZERO
+	var cull_rect: Rect2 = r._visible_world_rect.grow(HexMath.HEX_SIZE * 1.5) if has_cull else Rect2()
 	for road in r._roads:
+		if has_cull:
+			var p_a: Vector2 = road["p_a"]
+			var p_b: Vector2 = road["p_b"]
+			if not cull_rect.has_point(p_a) and not cull_rect.has_point(p_b):
+				continue
 		match road["kind"]:
 			"pact":
 				draw_pact_highway(r, road)
@@ -806,6 +761,8 @@ static func draw_network_roads(r: Node2D) -> void:
 				draw_broken_cut_road(r, road)
 			"expedition":
 				draw_migration_expedition(r, road)
+			"rural_farm":
+				draw_rural_farm_track(r, road)
 
 
 static func draw_animated_roads(r: Node2D) -> void:
@@ -888,11 +845,9 @@ static func make_pair_key(a: String, b: String) -> String:
 
 
 static func get_cell_plaza_trim(cell: EvoTypes.HexCell) -> float:
-	var count := cell.deme_ids.size()
-	if count <= 0:
+	if cell.deme_ids.is_empty():
 		return 16.0
-	var sf := 1.0 if count == 1 else (0.86 if count == 2 else 0.78)
-	return 44.0 * sf
+	return 48.0
 
 
 static func trim_road_segment(p_a: Vector2, p_b: Vector2, trim_a: float, trim_b: float) -> Dictionary:
@@ -1484,7 +1439,7 @@ static func draw_war_animated_invasion(r: Node2D, road: Dictionary) -> void:
 		if v_textures.size() >= 3:
 			var frame := 1 + (int(anim_time * 7.0 + float(w_i)) % 2)
 			var tex: ImageTexture = v_textures[frame]
-			var sz := tex.get_size() * 2.45
+			var sz := tex.get_size() * (2.45 * 0.32)
 			anim_layer.draw_texture_rect(tex, Rect2(w_pos - Vector2(sz.x * 0.5, sz.y * 0.85), sz), false)
 		# Spear & shield accents on each marching warrior
 		var spear_base := w_pos + Vector2(-4.0, -6.0)
@@ -1556,7 +1511,7 @@ static func draw_raid_animated_plunder(r: Node2D, road: Dictionary) -> void:
 		if v_textures.size() >= 3:
 			var frame := 1 + (int(anim_time * 9.0 + float(r_i)) % 2)
 			var tex: ImageTexture = v_textures[frame]
-			var sz := tex.get_size() * 2.45
+			var sz := tex.get_size() * (2.45 * 0.32)
 			anim_layer.draw_texture_rect(tex, Rect2(r_pos - Vector2(sz.x * 0.5, sz.y * 0.85), sz), false)
 		EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "prop_raid_loot", r_pos + Vector2(7.0, -5.0), 1.05)
 
@@ -1613,3 +1568,102 @@ static func draw_betrayal_animated_ruin(r: Node2D, road: Dictionary) -> void:
 		anim_layer.draw_circle(badge_pos, 14.0 * pulse, Color(0.75, 0.07, 0.24, 0.42))
 		anim_layer.draw_circle(badge_pos, 10.0, Color("#4c0519"))
 		EvoWorldOverlayRenderer.draw_centered_sprite(anim_layer, "icon_betrayal", badge_pos + Vector2(0, 6.5), 1.35 * (0.95 + 0.08 * sin(anim_time * 7.0)))
+
+
+static func draw_rural_farm_track(r: Node2D, road: Dictionary) -> void:
+	var ci: Node2D = r._network_layer
+	var p_a: Vector2 = road["p_a"]
+	var p_b: Vector2 = road["p_b"]
+	var curve_f: float = float(road.get("curve_factor", 0.035))
+	var segments := 20
+	var pts := PackedVector2Array()
+	for i in range(segments + 1):
+		pts.append(sample_road_curve(p_a, p_b, float(i) / float(segments), 1.0, curve_f))
+
+	ci.draw_polyline(pts, Color("#23150c"), 11.5)
+	ci.draw_polyline(pts, Color("#6b4423"), 8.5)
+	ci.draw_polyline(pts, Color("#c29b61"), 5.2)
+	for i in range(2, segments, 2):
+		ci.draw_circle(pts[i], 2.0, Color("#8c5e35"))
+
+
+static func draw_settlement_perimeter_walls(r: Node2D) -> void:
+	var ci: Node2D = r._network_layer
+	var state: EvoTypes.WorldState = r.world_state
+	const EDGE_DIR_MAP: Array[int] = [0, 5, 4, 3, 2, 1]
+	const INK := Color("#23150c")
+	var has_cull: bool = r._visible_world_rect.size != Vector2.ZERO
+	var cull_rect: Rect2 = r._visible_world_rect.grow(HexMath.HEX_SIZE * 1.5) if has_cull else Rect2()
+
+	for village in r._villages:
+		var center: Vector2 = village["pos"]
+		if has_cull and not cull_rect.has_point(center):
+			continue
+		var deme: EvoTypes.Deme = village["deme"]
+		var tier := int(village["tier"])
+		var has_union: bool = deme.walled_union_id != ""
+		if deme.defense_tier < 1 and tier < 3 and not has_union:
+			continue
+		var hex_id: String = village["hex_id"]
+		if not state.cells.has(hex_id) or not r._hex_polys.has(hex_id):
+			continue
+		var cell: EvoTypes.HexCell = state.cells[hex_id]
+		var top_pts: PackedVector2Array = r._hex_polys[hex_id]
+		var mod_col: Color = village["modulate"]
+		var strat_col: Color = village["strat_color"]
+		var is_stone: bool = tier >= 3 or deme.defense_tier >= 2 or has_union
+		var wall_r := 0.78
+
+		var is_shared_edge: Array[bool] = [false, false, false, false, false, false]
+		if has_union:
+			for e in range(6):
+				var dir_idx: int = EDGE_DIR_MAP[e]
+				var nb_id: String = r._neighbor_id(cell, dir_idx)
+				if state.cells.has(nb_id):
+					var nb_cell: EvoTypes.HexCell = state.cells[nb_id]
+					if not nb_cell.deme_ids.is_empty() and state.demes.has(nb_cell.deme_ids[0]):
+						var nb_deme: EvoTypes.Deme = state.demes[nb_cell.deme_ids[0]]
+						if nb_deme.walled_union_id == deme.walled_union_id:
+							is_shared_edge[e] = true
+
+		for e in range(6):
+			if is_shared_edge[e]:
+				continue
+			var next_e: int = (e + 1) % 6
+			var c0 := center.lerp(top_pts[e], wall_r)
+			var c1 := center.lerp(top_pts[next_e], wall_r)
+
+			if is_stone:
+				var wall_h := 11.0
+				var t0 := c0 + Vector2(0.0, -wall_h)
+				var t1 := c1 + Vector2(0.0, -wall_h)
+				var wall_quad := PackedVector2Array([t0, t1, c1, c0])
+				ci.draw_colored_polygon(wall_quad, Color("#64748b") * mod_col)
+				ci.draw_polyline(PackedVector2Array([t0, t1, c1, c0, t0]), INK * mod_col, 1.8)
+				ci.draw_line(t0, t1, Color("#cbd5e1") * mod_col, 4.4)
+				for m_i in range(5):
+					var mt := (float(m_i) + 0.5) / 5.0
+					var m_pt := t0.lerp(t1, mt) + Vector2(0.0, -2.5)
+					ci.draw_rect(Rect2(m_pt - Vector2(3.2, 2.5), Vector2(6.4, 4.5)), Color("#e2e8f0") * mod_col, true)
+					ci.draw_rect(Rect2(m_pt - Vector2(3.2, 2.5), Vector2(6.4, 4.5)), INK * mod_col, false, 1.2)
+			else:
+				ci.draw_line(c0, c1, INK * mod_col, 6.2)
+				ci.draw_line(c0, c1, Color("#5c3a21") * mod_col, 4.2)
+				for s_i in range(9):
+					var st := float(s_i) / 8.0
+					var sb := c0.lerp(c1, st)
+					var st_top := sb + Vector2(0.0, -8.5)
+					ci.draw_line(sb, st_top, INK * mod_col, 3.6)
+					ci.draw_line(sb, st_top, Color("#8c5230") * mod_col, 2.2)
+					ci.draw_circle(st_top, 1.4, Color("#fde68a") * mod_col)
+
+		if is_stone:
+			var wall_h := 11.0
+			for v in range(6):
+				var prev_e: int = (v + 5) % 6
+				if is_shared_edge[v] and is_shared_edge[prev_e]:
+					continue
+				var cv := center.lerp(top_pts[v], wall_r)
+				ci.draw_circle(cv + Vector2(0.0, -wall_h * 0.5), 7.5, INK * mod_col)
+				ci.draw_circle(cv + Vector2(0.0, -wall_h * 0.5), 5.8, Color("#94a3b8") * mod_col)
+				ci.draw_circle(cv + Vector2(0.0, -wall_h - 2.0), 4.8, strat_col * mod_col)

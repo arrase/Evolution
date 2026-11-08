@@ -71,6 +71,7 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	if world_state == null:
 		return
+	var prev_rev := _last_model_revision
 	var async_res := EvoDecisionModel.apply_completed_live_results(world_state, lang, _last_model_revision)
 	_last_model_revision = int(async_res["revision"])
 	if bool(async_res["updated"]):
@@ -78,6 +79,8 @@ func _process(delta: float) -> void:
 		world_renderer.refresh_village_decisions()
 		if bool(async_res.get("dom_changed", true)):
 			world_renderer.refresh()
+	if _last_model_revision != prev_rev and EvoOllamaClient.needs_prefetch():
+		EvoDecisionModel.prefetch_for_state(world_state)
 
 	if not is_playing:
 		return
@@ -230,6 +233,7 @@ func load_preset(preset_id: String, strategy_a_id: String = "", strategy_b_id: S
 	hud.set_playing_state(false)
 	hud.setup(world_state, lang)
 	world_renderer.refresh()
+	EvoDecisionModel.prefetch_for_state(world_state)
 
 
 func set_matchup_strategies(strategy_a_id: String, strategy_b_id: String) -> void:
@@ -258,6 +262,7 @@ func _reapply_starting_strategies() -> void:
 		if world_state.demes.has(did):
 			EvoCatalog.apply_strategy_to_deme(world_state, world_state.demes[did], world_state.strategy_b_id, lang)
 	EvoDecisionModel.evaluate_all_demes(world_state, lang)
+	EvoDecisionModel.prefetch_for_state(world_state)
 
 
 func _on_strategy_saved(strategy_id: String) -> void:

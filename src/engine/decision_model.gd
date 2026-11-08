@@ -87,7 +87,7 @@ static func blend_with_environmental_weights(
 	var env_weights: Dictionary = {}
 	var eligible_ids: Array[String] = []
 	if deme != null and cell != null and state != null:
-		var w_key := "%d|%s|%d|%.1f" % [state.generation, cell.id, deme.population, deme.energy_reserves]
+		var w_key := EvoHeuristicScorer.build_env_weights_cache_key(deme, cell, state)
 		if deme.has_meta("env_w_key") and str(deme.get_meta("env_w_key")) == w_key:
 			env_weights = deme.get_meta("env_w_val") as Dictionary
 		else:
@@ -304,18 +304,87 @@ static func prefetch_for_state(state: EvoTypes.WorldState) -> void:
 	if state == null or state.demes.is_empty() or not EvoOllamaClient.needs_prefetch():
 		return
 	var reps_by_sig: Dictionary = {}
+	var saved_eval_sigs: Dictionary = {}
 	for deme_id in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[deme_id]
 		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2", "deme-darwin-rival"] and deme.decision_model_tag == EvoUserSettings.primary_model):
 			deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
 		var sig := compute_deme_evaluation_signature(deme, state)
 		deme.set_meta("eval_sig", sig)
+		saved_eval_sigs[deme_id] = sig
 		if not reps_by_sig.has(sig):
 			reps_by_sig[sig] = deme
-			if reps_by_sig.size() >= 8:
+			if reps_by_sig.size() >= 32:
 				break
 
 	EvoOllamaClient.prefetch_for_reps(reps_by_sig, state)
+	if not EvoOllamaClient.needs_prefetch():
+		return
+
+	var prev_gen := state.generation
+	var prev_season := state.season
+	state.generation = prev_gen + 1
+	state.season = "dry_cold" if prev_season == "wet_warm" else "wet_warm"
+	var gamma_season: float = 1.20 if state.season == "wet_warm" else 0.75
+	var delta_temp: float = 0.04 if state.season == "wet_warm" else -0.04
+	var delta_hum: float = 0.05 if state.season == "wet_warm" else -0.05
+
+	var collapsed_prev_gen_hexes: Dictionary = {}
+	for i in range(state.chronicle.size() - 1, -1, -1):
+		var entry := state.chronicle[i]
+		if entry.generation < prev_gen:
+			break
+		if entry.event_type == "tragedy_of_commons" and entry.generation == prev_gen:
+			collapsed_prev_gen_hexes[entry.hex_id] = true
+
+	var saved_cells: Dictionary = {}
+	for cid in state.cells.keys():
+		var cell: EvoTypes.HexCell = state.cells[cid]
+		if cell.biome == "ocean":
+			continue
+		saved_cells[cid] = [cell.carrying_capacity, cell.current_resources, cell.temperature, cell.humidity]
+		cell.temperature = clampf(snappedf(cell.temperature + delta_temp, 0.01), -1.0, 1.0)
+		cell.humidity = clampf(snappedf(cell.humidity + delta_hum, 0.01), 0.0, 1.0)
+		var recovery_rate: float = 0.005 if collapsed_prev_gen_hexes.has(cell.id) else 0.05
+		var next_k := clampf(
+			snappedf(cell.carrying_capacity + recovery_rate * (cell.carrying_capacity_max - cell.carrying_capacity), 0.01),
+			10.0,
+			cell.carrying_capacity_max
+		)
+		var next_r := minf(
+			next_k,
+			snappedf(cell.current_resources + next_k * cell.seasonal_regen_rate * gamma_season, 0.01)
+		)
+		cell.carrying_capacity = next_k
+		cell.current_resources = next_r
+
+	var next_reps_by_sig: Dictionary = {}
+	for deme_id in state.demes.keys():
+		var deme: EvoTypes.Deme = state.demes[deme_id]
+		var next_sig := compute_deme_evaluation_signature(deme, state)
+		if not next_reps_by_sig.has(next_sig):
+			next_reps_by_sig[next_sig] = deme
+			if next_reps_by_sig.size() >= 32:
+				break
+
+	EvoOllamaClient.prefetch_for_reps(next_reps_by_sig, state)
+
+	state.generation = prev_gen
+	state.season = prev_season
+	for cid in saved_cells.keys():
+		var cell: EvoTypes.HexCell = state.cells[cid]
+		var sv: Array = saved_cells[cid]
+		cell.carrying_capacity = float(sv[0])
+		cell.current_resources = float(sv[1])
+		cell.temperature = float(sv[2])
+		cell.humidity = float(sv[3])
+	for deme_id in saved_eval_sigs.keys():
+		var deme: EvoTypes.Deme = state.demes[deme_id]
+		deme.set_meta("eval_sig", saved_eval_sigs[deme_id])
+		if deme.has_meta("sig_cache_key"):
+			deme.remove_meta("sig_cache_key")
+		if deme.has_meta("geo_ctx_key"):
+			deme.remove_meta("geo_ctx_key")
 
 
 static func apply_completed_live_results(state: EvoTypes.WorldState, lang: String, last_seen_rev: int) -> Dictionary:

@@ -75,13 +75,13 @@ func _process(delta: float) -> void:
 	if absf(_target_zoom - zoom_level) < 0.001:
 		zoom_level = _target_zoom
 
-	# Yaw/pitch changes force a geometry rebuild, so snap once visually settled
-	# instead of easing asymptotically for dozens of frames.
+	# Pitch changes force a geometry rebuild, so snap once visually settled
+	# instead of easing asymptotically for dozens of frames. Yaw is locked at 0.0.
 	pitch_deg = lerpf(pitch_deg, _target_pitch_deg, lerp_t)
 	if absf(_target_pitch_deg - pitch_deg) < 0.05:
 		pitch_deg = _target_pitch_deg
-	var yaw_diff: float = wrapf(_target_yaw_deg - yaw_deg, -180.0, 180.0)
-	yaw_deg = _target_yaw_deg if absf(yaw_diff) < 0.05 else fposmod(yaw_deg + yaw_diff * lerp_t, 360.0)
+	_target_yaw_deg = 0.0
+	yaw_deg = 0.0
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -120,9 +120,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		var delta_pos: Vector2 = mm.position - _drag_last_pos
 		_drag_last_pos = mm.position
 		if _is_orbiting:
-			_target_yaw_deg = fposmod(_target_yaw_deg + delta_pos.x * 0.45, 360.0)
+			_target_yaw_deg = 0.0
 			_target_pitch_deg = clampf(_target_pitch_deg - delta_pos.y * 0.25, MIN_PITCH_DEG, MAX_PITCH_DEG)
-			yaw_deg = _target_yaw_deg
+			yaw_deg = 0.0
 			pitch_deg = _target_pitch_deg
 		elif _is_panning:
 			_target_pan += delta_pos
@@ -136,10 +136,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		if not ke.pressed or ke.echo:
 			return
 		match ke.keycode:
-			KEY_Q:
-				rotate_by(-18.0)
-			KEY_E:
-				rotate_by(18.0)
 			KEY_R:
 				tilt_by(8.0)
 			KEY_F:
@@ -174,8 +170,9 @@ func get_depth(world_xy: Vector2, z_height: float) -> float:
 	return rot_y + z_height * 0.02
 
 
-func rotate_by(delta_deg: float) -> void:
-	_target_yaw_deg = fposmod(_target_yaw_deg + delta_deg, 360.0)
+func rotate_by(_delta_deg: float) -> void:
+	_target_yaw_deg = 0.0
+	yaw_deg = 0.0
 
 
 func tilt_by(delta_deg: float) -> void:
@@ -221,6 +218,8 @@ func focus_on_hex(q: int, r: int, altitude: float) -> void:
 
 
 func _clamp_targets() -> void:
+	_target_yaw_deg = 0.0
+	yaw_deg = 0.0
 	_target_pitch_deg = clampf(_target_pitch_deg, MIN_PITCH_DEG, MAX_PITCH_DEG)
 	_target_zoom = clampf(_target_zoom, MIN_ZOOM, MAX_ZOOM)
 	var max_pan := MAX_PAN_RADIUS * maxf(1.0, _target_zoom / DEFAULT_ZOOM)

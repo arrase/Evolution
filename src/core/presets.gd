@@ -73,15 +73,15 @@ static func create_preset_world(
 
 
 static func _build_darwin_archipelago(state: EvoTypes.WorldState, lang: String, is_en: bool) -> void:
-	state.map_radius = 5
+	state.map_radius = 7
 	state.sea_level = 0.12
 	state.glacial_sea_level_cycle = true
 
-	var central_duel_ids := {"-1,0": true, "1,0": true}
-	var bridge_ids := {"0,-1": true, "0,1": true, "2,0": true}
-	var north_ids := {"0,-2": true, "0,-3": true}
-	var south_ids := {"0,2": true, "0,3": true}
-	var east_ids := {"3,0": true, "3,-1": true}
+	var central_duel_ids := {"-1,0": true, "1,0": true, "-2,0": true, "-1,-1": true, "2,-1": true, "1,1": true}
+	var bridge_ids := {"0,-1": true, "0,1": true, "2,0": true, "-2,1": true, "0,-4": true, "0,4": true, "4,-1": true}
+	var north_ids := {"0,-2": true, "0,-3": true, "1,-2": true, "-1,-2": true, "1,-3": true, "0,-5": true, "1,-4": true}
+	var south_ids := {"0,2": true, "0,3": true, "-1,2": true, "1,2": true, "-1,3": true, "0,5": true, "-1,4": true}
+	var east_ids := {"3,0": true, "3,-1": true, "4,0": true, "3,1": true, "4,-2": true, "5,-1": true}
 
 	for coord in HexMath.generate_hex_spiral(state.map_radius):
 		var cid := HexMath.make_id(coord.x, coord.y)
@@ -148,7 +148,7 @@ static func _build_darwin_archipelago(state: EvoTypes.WorldState, lang: String, 
 
 
 static func _build_finite_island(state: EvoTypes.WorldState, lang: String, is_en: bool) -> void:
-	state.map_radius = 4
+	state.map_radius = 7
 	state.sea_level = 0.20
 	state.glacial_sea_level_cycle = false
 
@@ -157,8 +157,10 @@ static func _build_finite_island(state: EvoTypes.WorldState, lang: String, is_en
 		var dist := HexMath.hex_distance(0, 0, coord.x, coord.y)
 		if dist <= 1:
 			state.cells[cid] = _make_cell(coord.x, coord.y, "savanna", 0.30, 0.55, 0.42, 580.0, 600.0, 600.0, 0.08)
-		elif dist == 2:
-			state.cells[cid] = _make_cell(coord.x, coord.y, "arid_steppe", 0.45, 0.30, 0.48, 200.0, 250.0, 280.0, 0.08)
+		elif dist <= 3:
+			state.cells[cid] = _make_cell(coord.x, coord.y, "arid_steppe", 0.45, 0.30, 0.48, 220.0, 270.0, 300.0, 0.08)
+		elif dist == 4 and int(abs(coord.x - coord.y)) % 2 == 0:
+			state.cells[cid] = _make_cell(coord.x, coord.y, "coastal_shallows", 0.22, 0.65, 0.22, 180.0, 220.0, 260.0, 0.14)
 		else:
 			state.cells[cid] = _make_cell(coord.x, coord.y, "ocean", 0.15, 0.90, 0.05, 0.0, 20.0, 60.0, 0.05)
 
@@ -210,14 +212,14 @@ static func _build_finite_island(state: EvoTypes.WorldState, lang: String, is_en
 static func _build_rift_savanna(state: EvoTypes.WorldState, lang: String, is_en: bool) -> void:
 	state.preset_id = "preset-rift-savanna"
 	state.world_name = EvoI18n.preset_title(lang, "preset-rift-savanna")
-	state.map_radius = 5
+	state.map_radius = 7
 	state.sea_level = 0.12
 	state.glacial_sea_level_cycle = false
 
 	for coord in HexMath.generate_hex_spiral(state.map_radius):
 		var cid := HexMath.make_id(coord.x, coord.y)
-		if coord.x == 0 and coord.y == 0:
-			state.cells[cid] = _make_cell(0, 0, "savanna", 0.25, 0.45, 0.52, 240.0, 280.0, 320.0, 0.18)
+		if coord.x == 0 and (coord.y == 0 or abs(coord.y) == 3):
+			state.cells[cid] = _make_cell(coord.x, coord.y, "savanna", 0.25, 0.45, 0.52, 240.0, 280.0, 320.0, 0.18)
 		elif coord.x == 0:
 			state.cells[cid] = _make_cell(coord.x, coord.y, "high_mountain", -0.35, 0.25, 0.88, 70.0, 108.0, 120.0, 0.08)
 		elif coord.x < 0:

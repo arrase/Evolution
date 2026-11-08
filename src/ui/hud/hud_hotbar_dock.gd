@@ -402,8 +402,8 @@ static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lan
 	var tier_lbl := Label.new()
 	tier_lbl.text = EvoUiStyle.tr_text(
 		lang,
-		"Aldeas: I Campamento · II Caserío · III Aldea · IV Poblado · V Metrópolis\nCaminos: 🛣️ Cooperación · ⚔️ Disputa · 🧭 Migración",
-		"Villages: I Camp · II Hamlet · III Village · IV Settlement · V Metropolis\nPaths: 🛣️ Cooperation · ⚔️ Dispute · 🧭 Migration"
+		"Aldeas: I Campamento · II Aldea · III Villa · IV Metrópolis\nCaminos: 🛣️ Cooperación · ⚔️ Disputa · 🧭 Migración",
+		"Villages: I Camp · II Village · III Town · IV Metropolis\nPaths: 🛣️ Cooperation · ⚔️ Dispute · 🧭 Migration"
 	)
 	tier_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tier_lbl.add_theme_font_size_override("font_size", 10)
