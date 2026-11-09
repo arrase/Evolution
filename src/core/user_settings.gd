@@ -3,7 +3,7 @@ extends RefCounted
 
 const DEFAULT_PRIMARY_MODEL: String = "d3:4b"
 const DEFAULT_SECONDARY_MODEL: String = "tev1:4b"
-const DEFAULT_CONTEXT_LENGTH: int = 8192
+const DEFAULT_CONTEXT_LENGTH: int = 16384
 
 static var primary_model: String = DEFAULT_PRIMARY_MODEL
 static var secondary_model: String = DEFAULT_SECONDARY_MODEL
@@ -80,15 +80,9 @@ static func save_user_catalog(state: EvoTypes.WorldState) -> void:
 		var tr: EvoTypes.TraitDef = state.traits_catalog[tid]
 		if tr.origin in ["user", "custom"]:
 			traits_arr.append(tr.to_dict())
-	var decisions_arr: Array = []
-	for did in state.decisions_catalog.keys():
-		var dec: EvoTypes.DecisionDef = state.decisions_catalog[did]
-		if dec.origin in ["user", "custom"]:
-			decisions_arr.append(dec.to_dict())
 	var payload := {
 		"strategies": strategies_arr,
-		"traits": traits_arr,
-		"decisions": decisions_arr
+		"traits": traits_arr
 	}
 	file.store_string(JSON.stringify(payload, "\t") + "\n")
 	file.close()
@@ -113,11 +107,6 @@ static func load_user_catalog_into(state: EvoTypes.WorldState) -> void:
 			if item is Dictionary:
 				var tr := EvoTypes.TraitDef.from_dict(item as Dictionary)
 				state.traits_catalog[tr.id] = tr
-	if data.has("decisions") and data["decisions"] is Array:
-		for item in data["decisions"]:
-			if item is Dictionary:
-				var dec := EvoTypes.DecisionDef.from_dict(item as Dictionary)
-				state.decisions_catalog[dec.id] = dec
 	if data.has("strategies") and data["strategies"] is Array:
 		for item in data["strategies"]:
 			if item is Dictionary:

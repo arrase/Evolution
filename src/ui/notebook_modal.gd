@@ -2,7 +2,6 @@ class_name EvoNotebookModal
 extends Control
 
 signal jump_to_hex_requested(hex_id: String, deme_id: String)
-signal modal_closed()
 
 const FILTER_KEYS: Array[String] = [
 	"all",
@@ -21,6 +20,7 @@ const FILTER_KEYS: Array[String] = [
 	"tragedy_of_commons",
 	"cultural_loss",
 	"extinction",
+	"epidemic",
 	"single_survivor",
 	"ecological_equilibrium"
 ]
@@ -161,7 +161,6 @@ func set_filter(filter_key: String) -> void:
 
 func close_modal() -> void:
 	visible = false
-	modal_closed.emit()
 
 
 func _update_labels() -> void:
@@ -176,14 +175,29 @@ func _update_labels() -> void:
 	_update_filter_buttons()
 
 
+func _get_filter_label(f_key: String) -> String:
+	if f_key == "epidemic":
+		return EvoUiStyle.tr_text(_lang, "Epidemias", "Epidemics")
+	if f_key in ["war", "raid", "pact", "betrayal", "fortify", "merge", "tribute", "siege"]:
+		return EvoI18n.t(_lang, "filter_" + f_key)
+	return EvoUiStyle.get_event_type_label(f_key, _lang)
+
+
+func _get_event_icon_tex(event_type: String) -> ImageTexture:
+	if event_type == "epidemic":
+		return EvoUiStyle.get_pixel_icon("status_starving")
+	if event_type in ["war", "siege", "raid", "betrayal"]:
+		return EvoUiStyle.get_pixel_icon("icon_dispute")
+	if event_type in ["pact", "merge", "walled_union", "symbiosis"]:
+		return EvoUiStyle.get_pixel_icon("icon_cooperate")
+	return EvoUiStyle.get_pixel_icon("icon_innovate")
+
+
 func _update_filter_buttons() -> void:
 	for f_key in FILTER_KEYS:
 		if _filter_buttons.has(f_key):
 			var btn: Button = _filter_buttons[f_key]
-			if f_key in ["war", "raid", "pact", "betrayal", "fortify", "merge", "tribute", "siege"]:
-				btn.text = EvoI18n.t(_lang, "filter_" + f_key)
-			else:
-				btn.text = EvoUiStyle.get_event_type_label(f_key, _lang)
+			btn.text = _get_filter_label(f_key)
 			EvoUiStyle.apply_button_active(btn, _active_filter == f_key)
 
 
@@ -242,6 +256,16 @@ func _create_entry_card(entry: EvoTypes.ChronicleEntry) -> Control:
 	var top_hbox := HBoxContainer.new()
 	top_hbox.add_theme_constant_override("separation", 8)
 	vbox.add_child(top_hbox)
+
+	var icon_tex := _get_event_icon_tex(entry.event_type)
+	if icon_tex != null:
+		var ev_icon := TextureRect.new()
+		ev_icon.custom_minimum_size = Vector2(20, 20)
+		ev_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ev_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ev_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		ev_icon.texture = icon_tex
+		top_hbox.add_child(ev_icon)
 
 	var badge := PanelContainer.new()
 	badge.add_theme_stylebox_override("panel", EvoUiStyle.make_badge_style(ev_color))

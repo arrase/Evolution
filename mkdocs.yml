@@ -1,5 +1,5 @@
 site_name: Evolution
-site_description: Interactive bio-cultural and evolutionary population simulator built with Godot 4.7, featuring a cozy isometric hexagonal ecosystem, 6-axis thermodynamic conservation, and a dual-frequency Ollama cognitive engine.
+site_description: Interactive bio-cultural and evolutionary population simulator built with Godot 4.7, featuring a 169-hex 2.5D illustrated isometric ecosystem, GPU shaders, rural hinterlands, multi-hex walled unions, 6-axis thermodynamic conservation, and a dual-model Ollama System 1 cognitive engine.
 site_author: Arrase
 site_url: https://arrase.github.io/Evolution/
 docs_dir: gh-pages

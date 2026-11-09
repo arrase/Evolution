@@ -45,7 +45,6 @@ static func _make_decision(
 	p_mobility: float,
 	p_cohesion: float,
 	p_threshold: float,
-	p_required_traits: Array[String],
 	lang: String
 ) -> EvoTypes.DecisionDef:
 	var d := EvoTypes.DecisionDef.new()
@@ -55,7 +54,6 @@ static func _make_decision(
 	d.name = EvoI18n.t(lang, "decision." + p_id + ".name")
 	d.description = EvoI18n.t(lang, "decision." + p_id + ".desc")
 	d.vector = EvoTypes.BiophysicalVector.new(p_cost, p_extract, p_eco, p_mobility, p_cohesion, p_threshold)
-	d.required_trait_ids = p_required_traits.duplicate()
 	return d
 
 
@@ -71,7 +69,7 @@ static func create_base_traits_catalog(lang: String = "es") -> Dictionary:
 		_make_trait("cul-extraction-tools", "cultural", 0.25, 0.65, -0.25, 0.10, 0.20, 0.50, [], false, lang),
 		_make_trait("cul-communal-conservation", "cultural", 0.15, 0.25, 0.55, 0.00, 0.50, 0.55, [], false, lang),
 		_make_trait("cul-interdeme-barter", "cultural", 0.35, 0.40, 0.15, 0.30, 0.50, 0.60, [], false, lang),
-		_make_trait("cul-warrior-expansion", "cultural", 0.45, 0.30, -0.35, 0.45, 0.60, 0.45, [], false, lang)
+		_make_trait("cul-warrior-expansion", "cultural", 0.35, 0.35, -0.25, 0.45, 0.45, 0.35, [], false, lang)
 	]
 	var catalog: Dictionary = {}
 	for t in traits:
@@ -81,13 +79,22 @@ static func create_base_traits_catalog(lang: String = "es") -> Dictionary:
 
 static func create_base_decisions_catalog(lang: String = "es") -> Dictionary:
 	var decisions: Array[EvoTypes.DecisionDef] = [
-		_make_decision("dec-conservative-forage", "forage", 0.10, 0.35, 0.10, 0.00, 0.05, 0.05, [], lang),
-		_make_decision("dec-intensive-overexploit", "overexploit", 0.25, 0.85, -0.65, 0.00, -0.10, 0.10, [], lang),
-		_make_decision("dec-selective-migration", "migrate", 0.30, 0.15, 0.15, 0.75, 0.05, 0.10, [], lang),
-		_make_decision("dec-cooperate-store", "cooperate", 0.25, 0.45, 0.15, -0.10, 0.65, 0.35, [], lang),
-		_make_decision("dec-exchange-symbiosis", "exchange", 0.35, 0.50, 0.20, 0.20, 0.60, 0.45, ["bio-encephalization", "bio-social-instinct"], lang),
-		_make_decision("dec-territorial-dispute", "dispute", 0.55, 0.40, -0.30, 0.25, 0.55, 0.20, [], lang),
-		_make_decision("dec-explore-innovate", "innovate", 0.50, 0.15, 0.00, 0.40, 0.35, 0.65, ["bio-encephalization", "bio-social-instinct"], lang)
+		_make_decision("forage", "forage", 0.10, 0.35, 0.10, 0.00, 0.05, 0.05, lang),
+		_make_decision("intensify", "overexploit", 0.25, 0.85, -0.65, 0.00, -0.10, 0.10, lang),
+		_make_decision("fortify", "cooperate", 0.20, 0.10, 0.00, -0.20, 0.55, 0.20, lang),
+		_make_decision("innovate", "innovate", 0.22, 0.42, 0.15, 0.40, 0.35, 0.65, lang),
+		_make_decision("settle", "migrate", 0.30, 0.15, 0.15, 0.75, 0.05, 0.10, lang),
+		_make_decision("trade", "exchange", 0.30, 0.50, 0.20, 0.20, 0.60, 0.45, lang),
+		_make_decision("aid", "cooperate", 0.15, 0.20, 0.20, 0.00, 0.70, 0.35, lang),
+		_make_decision("offer_pact", "pact", 0.10, 0.20, 0.10, 0.05, 0.65, 0.35, lang),
+		_make_decision("accept_pact", "pact", 0.10, 0.20, 0.10, 0.05, 0.65, 0.35, lang),
+		_make_decision("demand_tribute", "dispute", 0.30, 0.40, -0.10, 0.20, -0.15, 0.15, lang),
+		_make_decision("pay_tribute", "exchange", 0.10, 0.10, 0.05, 0.00, 0.30, 0.20, lang),
+		_make_decision("raid", "raid", 0.42, 0.48, -0.22, 0.35, -0.25, 0.15, lang),
+		_make_decision("betray", "betrayal", 0.40, 0.55, -0.20, 0.25, -0.45, 0.15, lang),
+		_make_decision("conquer", "war", 0.50, 0.45, -0.30, 0.55, 0.10, 0.20, lang),
+		_make_decision("unite", "pact", 0.15, 0.30, 0.15, 0.00, 0.75, 0.40, lang),
+		_make_decision("accept_union", "pact", 0.15, 0.30, 0.15, 0.00, 0.75, 0.40, lang)
 	]
 	var catalog: Dictionary = {}
 	for d in decisions:
@@ -110,6 +117,7 @@ static func _make_strategy(
 	s.icon = p_icon
 	s.color = p_color
 	s.origin = "base"
+	s.doctrine = EvoI18n.strategy_text(p_id, "doctrine", "", "en")
 	s.biological_trait_ids = p_bio.duplicate()
 	s.cultural_trait_ids = p_cul.duplicate()
 	return s
@@ -193,88 +201,10 @@ static func deme_has_trait(deme: EvoTypes.Deme, trait_id: String) -> bool:
 	return deme.biological_trait_ids.has(trait_id) or deme.cultural_trait_ids.has(trait_id)
 
 
-static func compute_baseline_decision_weights(deme: EvoTypes.Deme, traits_catalog: Dictionary = {}) -> Dictionary:
-	var effective_traits := traits_catalog if not traits_catalog.is_empty() else create_base_traits_catalog()
-	var vec := compute_deme_vector(deme, effective_traits)
-	var has_cultural_cap := deme_has_cultural_capacity(deme, effective_traits) or deme_has_trait(deme, "bio-encephalization") or deme_has_trait(deme, "bio-social-instinct")
-	var has_warrior := deme_has_trait(deme, "cul-warrior-expansion")
-	var has_r_strat := deme_has_trait(deme, "bio-r-strategy")
-	var coop_cohesion := 0.0 if has_warrior else maxf(0.0, vec.social_cohesion) * (0.18 if has_r_strat else 0.45)
-
-	var raw_scores := {
-		"dec-conservative-forage": (
-			0.22
-			+ maxf(0.0, vec.ecological_impact) * 0.45
-			+ (0.20 if deme_has_trait(deme, "cul-communal-conservation") else 0.0)
-		),
-		"dec-intensive-overexploit": (
-			0.08
-			+ maxf(0.0, vec.extraction_efficiency) * 0.35
-			+ maxf(0.0, -vec.ecological_impact) * 0.30
-			+ (0.18 if deme_has_trait(deme, "cul-extraction-tools") else 0.0)
-			+ (0.12 if has_r_strat else 0.0)
-		),
-		"dec-selective-migration": (
-			0.10
-			+ maxf(0.0, vec.spatial_mobility) * 0.45
-			+ (0.28 if deme_has_trait(deme, "bio-thermal-tolerance") else 0.0)
-			+ (0.16 if (has_warrior or has_r_strat) else 0.0)
-		),
-		"dec-cooperate-store": (
-			0.12
-			+ coop_cohesion
-			+ (0.25 if deme_has_trait(deme, "cul-communal-conservation") else 0.0)
-			+ (0.15 if (deme_has_trait(deme, "bio-social-instinct") and not has_warrior and not has_r_strat) else 0.0)
-		),
-		"dec-exchange-symbiosis": (
-			0.08
-			+ (0.0 if has_warrior else maxf(0.0, vec.social_cohesion) * 0.25)
-			+ maxf(0.0, vec.spatial_mobility) * 0.25
-			+ (0.48 if deme_has_trait(deme, "cul-interdeme-barter") else 0.0)
-		) if has_cultural_cap else 0.0,
-		"dec-territorial-dispute": (
-			0.04
-			+ maxf(0.0, vec.extraction_efficiency) * 0.25
-			+ maxf(0.0, -vec.ecological_impact) * 0.25
-			+ maxf(0.0, -vec.social_cohesion) * 0.40
-			+ (0.55 if has_warrior else 0.0)
-			+ (0.12 if has_r_strat else 0.0)
-		),
-		"dec-explore-innovate": (
-			0.08
-			+ maxf(0.0, vec.transmission_threshold) * 0.50
-			+ (0.35 if (deme_has_trait(deme, "cul-fire-processing") or deme_has_trait(deme, "cul-lithic-acheulean")) else 0.0)
-			+ (0.30 if (deme_has_trait(deme, "bio-encephalization") or deme_has_trait(deme, "bio-digestive-spec")) else 0.0)
-		) if has_cultural_cap else 0.0
-	}
-
-	var eligible_ids: Array[String] = [
-		"dec-conservative-forage",
-		"dec-intensive-overexploit",
-		"dec-selective-migration",
-		"dec-cooperate-store",
-		"dec-territorial-dispute"
-	]
-	if has_cultural_cap:
-		eligible_ids.append("dec-exchange-symbiosis")
-		eligible_ids.append("dec-explore-innovate")
-
-	return EvoHeuristicScorer.normalize_decision_probabilities(raw_scores, eligible_ids)
-
-
-static func compute_strategy_baseline_probabilities(deme: EvoTypes.Deme, traits_catalog: Dictionary = {}) -> Dictionary:
-	var norm := compute_baseline_decision_weights(deme, traits_catalog)
-	var probs: Dictionary = norm["probabilities"]
-	deme.last_decision_probabilities = probs.duplicate()
-	deme.last_dominant_decision_id = str(norm["dominant_decision_id"])
-	return probs
-
-
 static func apply_strategy_to_deme(
 	state: EvoTypes.WorldState,
 	deme: EvoTypes.Deme,
-	strategy_id: String,
-	_lang: String = "es"
+	strategy_id: String
 ) -> void:
 	if not state.strategies_catalog.has(strategy_id):
 		return
@@ -286,8 +216,6 @@ static func apply_strategy_to_deme(
 		deme.cultural_trait_ids = strategy.cultural_trait_ids.duplicate()
 	else:
 		deme.cultural_trait_ids = []
-
-	compute_strategy_baseline_probabilities(deme, state.traits_catalog)
 
 	if state.lineage_tree.has(deme.lineage_id):
 		var lin: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id]
@@ -314,8 +242,7 @@ static func deme_has_cultural_capacity(deme: EvoTypes.Deme, traits_catalog: Dict
 static func inject_trait_into_deme(
 	state: EvoTypes.WorldState,
 	deme_id: String,
-	trait_id: String,
-	lang: String = "es"
+	trait_id: String
 ) -> bool:
 	if not state.demes.has(deme_id) or not state.traits_catalog.has(trait_id):
 		return false
@@ -368,12 +295,6 @@ static func inject_trait_into_deme(
 		for tid in deme.cultural_trait_ids:
 			if not lin.acquired_trait_ids.has(tid):
 				lin.acquired_trait_ids.append(tid)
-
-	var eval_res := EvoDecisionModel.evaluate_deme(deme, state, lang)
-	deme.last_decision_probabilities = eval_res["probabilities"]
-	deme.last_dominant_decision_id = str(eval_res["dominant_decision_id"])
-	deme.last_confidence = float(eval_res["confidence"]) if eval_res.has("confidence") else 0.85
-	deme.last_justification = str(eval_res["justification"])
 	return true
 
 

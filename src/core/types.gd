@@ -19,7 +19,10 @@ const ARCHETYPES: Array[String] = [
 	"exchange",
 	"dispute",
 	"innovate",
-	"custom"
+	"pact",
+	"raid",
+	"war",
+	"betrayal"
 ]
 
 const SPECIATION_PALETTE: Array[String] = [
@@ -32,6 +35,16 @@ const SPECIATION_PALETTE: Array[String] = [
 	"#00BBF9",
 	"#00F5D4"
 ]
+
+const EVENT_TYPES: Array[String] = [
+	"pact", "betrayal", "raid", "tribute", "pillage",
+	"war", "war_repelled", "siege", "fortify", "walled_union",
+	"absorption", "colonize", "epidemic", "epidemic_spread",
+	"epidemic_recovered", "famine", "extinction",
+	"allopatric_speciation", "cultural_innovation", "baldwin_trait", "symbiosis"
+]
+
+const STATS_HISTORY_LIMIT: int = 200
 
 const BIOME_CLIMATE_DEFAULTS: Dictionary = {
 	"tropical_forest": {"temperature": 0.45, "humidity": 0.85, "min_alt": 0.28, "max_alt": 0.65, "regen": 0.28, "k_max": 600.0},
@@ -51,11 +64,6 @@ class BiophysicalVector extends RefCounted:
 	var spatial_mobility: float = 0.0
 	var social_cohesion: float = 0.0
 	var transmission_threshold: float = 0.0
-	var cognitive_plasticity: float:
-		get:
-			return transmission_threshold
-		set(value):
-			transmission_threshold = value
 
 	func _init(
 		p_cost: float = 0.0,
@@ -152,6 +160,8 @@ class TraitDef extends RefCounted:
 		return t
 
 
+# Fixed catalog of action types a settlement can choose each turn ("forage", "raid", ...).
+# `archetype` selects the village action sprite; `vector` feeds Baldwin assimilation.
 class DecisionDef extends RefCounted:
 	var id: String = ""
 	var name: String = ""
@@ -159,18 +169,6 @@ class DecisionDef extends RefCounted:
 	var origin: String = "catalog"
 	var description: String = ""
 	var vector: BiophysicalVector = BiophysicalVector.new()
-	var required_trait_ids: Array[String] = []
-
-	func duplicate_decision() -> DecisionDef:
-		var dec := DecisionDef.new()
-		dec.id = id
-		dec.name = name
-		dec.archetype = archetype
-		dec.origin = origin
-		dec.description = description
-		dec.vector = vector.duplicate_vec()
-		dec.required_trait_ids = required_trait_ids.duplicate()
-		return dec
 
 	func to_dict() -> Dictionary:
 		return {
@@ -179,8 +177,7 @@ class DecisionDef extends RefCounted:
 			"archetype": archetype,
 			"origin": origin,
 			"description": description,
-			"vector": vector.to_dict(),
-			"requiredTraitIds": required_trait_ids.duplicate()
+			"vector": vector.to_dict()
 		}
 
 	static func from_dict(d: Dictionary) -> DecisionDef:
@@ -188,13 +185,49 @@ class DecisionDef extends RefCounted:
 		dec.id = str(d["id"])
 		dec.name = str(d["name"])
 		dec.archetype = str(d["archetype"])
-		dec.origin = str(d["origin"]) if d.has("origin") else "catalog"
+		dec.origin = str(d["origin"])
 		dec.description = str(d["description"])
 		dec.vector = BiophysicalVector.from_dict(d["vector"])
-		dec.required_trait_ids = []
-		for item in d["requiredTraitIds"]:
-			dec.required_trait_ids.append(str(item))
 		return dec
+
+
+# Bilateral relationship between two settlements (keyed by `make_pair_key`).
+class Relation extends RefCounted:
+	var pact_turns: int = 0 # > 0 means an active alliance pact
+	var trust: float = 0.0 # [-1, 1]
+	var feud_turns: int = 0 # > 0 means active hostility after raids, betrayals or wars
+	var truce_turns: int = 0 # > 0 after tribute was paid
+	var proposal_from: String = "" # deme id that made a pending proposal
+	var proposal_kind: String = "" # "pact" | "union" | "tribute"
+	var proposal_amount: float = 0.0
+	var proposal_gen: int = -1
+	var last_event: String = ""
+
+	func to_dict() -> Dictionary:
+		return {
+			"pactTurns": pact_turns,
+			"trust": trust,
+			"feudTurns": feud_turns,
+			"truceTurns": truce_turns,
+			"proposalFrom": proposal_from,
+			"proposalKind": proposal_kind,
+			"proposalAmount": proposal_amount,
+			"proposalGen": proposal_gen,
+			"lastEvent": last_event
+		}
+
+	static func from_dict(d: Dictionary) -> Relation:
+		var r := Relation.new()
+		r.pact_turns = int(d["pactTurns"])
+		r.trust = float(d["trust"])
+		r.feud_turns = int(d["feudTurns"])
+		r.truce_turns = int(d["truceTurns"])
+		r.proposal_from = str(d["proposalFrom"])
+		r.proposal_kind = str(d["proposalKind"])
+		r.proposal_amount = float(d["proposalAmount"])
+		r.proposal_gen = int(d["proposalGen"])
+		r.last_event = str(d["lastEvent"])
+		return r
 
 
 class StrategyDef extends RefCounted:
@@ -204,6 +237,7 @@ class StrategyDef extends RefCounted:
 	var icon: String = "🛡️"
 	var color: String = "#10B981"
 	var origin: String = "base" # "base" | "user"
+	var doctrine: String = "" # cultural persona given to the decision model
 	var biological_trait_ids: Array[String] = []
 	var cultural_trait_ids: Array[String] = []
 
@@ -215,6 +249,7 @@ class StrategyDef extends RefCounted:
 		s.icon = icon
 		s.color = color
 		s.origin = origin
+		s.doctrine = doctrine
 		s.biological_trait_ids = biological_trait_ids.duplicate()
 		s.cultural_trait_ids = cultural_trait_ids.duplicate()
 		return s
@@ -227,8 +262,7 @@ class StrategyDef extends RefCounted:
 			"icon": icon,
 			"color": color,
 			"origin": origin,
-			"biologicalTraitIds": biological_trait_ids.duplicate(),
-			"culturalTraitIds": cultural_trait_ids.duplicate(),
+			"doctrine": doctrine,
 			"biological_trait_ids": biological_trait_ids.duplicate(),
 			"cultural_trait_ids": cultural_trait_ids.duplicate()
 		}
@@ -241,13 +275,12 @@ class StrategyDef extends RefCounted:
 		s.icon = str(data["icon"]) if data.has("icon") else "🛡️"
 		s.color = str(data["color"]) if data.has("color") else "#10B981"
 		s.origin = str(data["origin"]) if data.has("origin") else "base"
+		s.doctrine = str(data["doctrine"]) if data.has("doctrine") else ""
 		s.biological_trait_ids = []
-		var raw_bio: Array = data["biologicalTraitIds"] if data.has("biologicalTraitIds") else (data["biological_trait_ids"] if data.has("biological_trait_ids") else [])
-		for item in raw_bio:
+		for item in data["biological_trait_ids"]:
 			s.biological_trait_ids.append(str(item))
 		s.cultural_trait_ids = []
-		var raw_cul: Array = data["culturalTraitIds"] if data.has("culturalTraitIds") else (data["cultural_trait_ids"] if data.has("cultural_trait_ids") else [])
-		for item in raw_cul:
+		for item in data["cultural_trait_ids"]:
 			s.cultural_trait_ids.append(str(item))
 		return s
 
@@ -264,30 +297,11 @@ class HexCell extends RefCounted:
 	var current_resources: float = 300.0
 	var carrying_capacity: float = 400.0
 	var carrying_capacity_max: float = 450.0
-	var max_carrying_capacity: float:
-		get:
-			return carrying_capacity_max
-		set(value):
-			carrying_capacity_max = value
 	var seasonal_regen_rate: float = 0.18
 	var deme_ids: Array[String] = []
-
-	func duplicate_cell() -> HexCell:
-		var c := HexCell.new()
-		c.id = id
-		c.q = q
-		c.r = r
-		c.s = s
-		c.biome = biome
-		c.temperature = temperature
-		c.humidity = humidity
-		c.altitude = altitude
-		c.current_resources = current_resources
-		c.carrying_capacity = carrying_capacity
-		c.carrying_capacity_max = carrying_capacity_max
-		c.seasonal_regen_rate = seasonal_regen_rate
-		c.deme_ids = deme_ids.duplicate()
-		return c
+	var land_use: String = "wild"
+	var owner_deme_id: String = ""
+	var has_ruins: bool = false
 
 	func to_dict() -> Dictionary:
 		return {
@@ -303,7 +317,10 @@ class HexCell extends RefCounted:
 			"carryingCapacity": carrying_capacity,
 			"carryingCapacityMax": carrying_capacity_max,
 			"seasonalRegenRate": seasonal_regen_rate,
-			"demeIds": deme_ids.duplicate()
+			"demeIds": deme_ids.duplicate(),
+			"landUse": land_use,
+			"ownerDemeId": owner_deme_id,
+			"hasRuins": has_ruins
 		}
 
 	static func from_dict(d: Dictionary) -> HexCell:
@@ -323,6 +340,12 @@ class HexCell extends RefCounted:
 		c.deme_ids = []
 		for item in d["demeIds"]:
 			c.deme_ids.append(str(item))
+		if d.has("landUse"):
+			c.land_use = str(d["landUse"])
+		if d.has("ownerDemeId"):
+			c.owner_deme_id = str(d["ownerDemeId"])
+		if d.has("hasRuins"):
+			c.has_ruins = bool(d["hasRuins"])
 		return c
 
 
@@ -342,13 +365,23 @@ class Deme extends RefCounted:
 	var innovation_counter: float = 0.0
 	var isolation_turns: int = 0
 	var decision_model_tag: String = EvoUserSettings.primary_model
-	var last_confidence: float = 0.85
-	var last_decision_probabilities: Dictionary = {"dec-conservative-forage": 1.0} # String -> float
-	var last_dominant_decision_id: String = "dec-conservative-forage"
-	var last_justification: String = ""
+	var last_confidence: float = 0.0
+	var chosen_action: Dictionary = {"key": "forage", "type": "forage", "target": ""}
+	var action_probabilities: Dictionary = {} # action key -> probability from the decision model
+	var action_forecasts: Dictionary = {} # action key -> forecast text shown to the decision model
+	var last_outcome: String = ""
+	var memory: Array[String] = []
+	var reputation: float = 0.0 # [-1, 1], visible to every neighbor
 	var defense_tier: int = 0
 	var merged_count: int = 0
 	var secondary_color: String = ""
+	var salubrity: float = 1.0
+	var walled_union_id: String = ""
+	var infection_turns: int = 0
+	var immunity_turns: int = 0
+	var last_food_intake: float = 0.0
+	var last_food_need: float = 0.0
+	var last_population_delta: int = 0
 
 	func duplicate_deme() -> Deme:
 		var d := Deme.new()
@@ -368,12 +401,22 @@ class Deme extends RefCounted:
 		d.isolation_turns = isolation_turns
 		d.decision_model_tag = decision_model_tag
 		d.last_confidence = last_confidence
-		d.last_decision_probabilities = last_decision_probabilities.duplicate()
-		d.last_dominant_decision_id = last_dominant_decision_id
-		d.last_justification = last_justification
+		d.chosen_action = chosen_action.duplicate()
+		d.action_probabilities = action_probabilities.duplicate()
+		d.action_forecasts = action_forecasts.duplicate()
+		d.last_outcome = last_outcome
+		d.memory = memory.duplicate()
+		d.reputation = reputation
 		d.defense_tier = defense_tier
 		d.merged_count = merged_count
 		d.secondary_color = secondary_color
+		d.salubrity = salubrity
+		d.walled_union_id = walled_union_id
+		d.infection_turns = infection_turns
+		d.immunity_turns = immunity_turns
+		d.last_food_intake = last_food_intake
+		d.last_food_need = last_food_need
+		d.last_population_delta = last_population_delta
 		return d
 
 	func get_vital_status() -> String:
@@ -388,20 +431,16 @@ class Deme extends RefCounted:
 		return "stable"
 
 	func get_village_tier() -> int:
-		if merged_count >= 1 and (population >= 220 or defense_tier >= 3):
-			return 5
-		if population >= 400 or defense_tier >= 3:
+		if population >= 380 or (population >= 280 and (defense_tier >= 2 or merged_count >= 1 or walled_union_id != "")):
 			return 4
-		if population >= 150 or defense_tier == 2:
+		if population >= 240 or (population >= 170 and (defense_tier >= 1 or merged_count >= 1)):
 			return 3
-		if population >= 50 or defense_tier == 1:
+		if population >= 120 or defense_tier == 1:
 			return 2
 		return 1
 
 	func get_village_roman() -> String:
 		var tier := get_village_tier()
-		if tier == 5:
-			return "V"
 		if tier == 4:
 			return "IV"
 		if tier == 3:
@@ -415,7 +454,6 @@ class Deme extends RefCounted:
 			"id": id,
 			"name": name,
 			"lineageId": lineage_id,
-			"strategyId": strategy_id,
 			"strategy_id": strategy_id,
 			"color": color,
 			"hexId": hex_id,
@@ -429,12 +467,22 @@ class Deme extends RefCounted:
 			"isolationTurns": isolation_turns,
 			"decisionModelTag": decision_model_tag,
 			"lastConfidence": last_confidence,
-			"lastDecisionProbabilities": last_decision_probabilities.duplicate(),
-			"lastDominantDecisionId": last_dominant_decision_id,
-			"lastJustification": last_justification,
+			"chosenAction": chosen_action.duplicate(),
+			"actionProbabilities": action_probabilities.duplicate(),
+			"actionForecasts": action_forecasts.duplicate(),
+			"lastOutcome": last_outcome,
+			"memory": memory.duplicate(),
+			"reputation": reputation,
 			"defenseTier": defense_tier,
 			"mergedCount": merged_count,
-			"secondaryColor": secondary_color
+			"secondaryColor": secondary_color,
+			"salubrity": salubrity,
+			"walledUnionId": walled_union_id,
+			"infectionTurns": infection_turns,
+			"immunityTurns": immunity_turns,
+			"lastFoodIntake": last_food_intake,
+			"lastFoodNeed": last_food_need,
+			"lastPopulationDelta": last_population_delta
 		}
 
 	static func from_dict(dict_data: Dictionary) -> Deme:
@@ -442,10 +490,7 @@ class Deme extends RefCounted:
 		d.id = str(dict_data["id"])
 		d.name = str(dict_data["name"])
 		d.lineage_id = str(dict_data["lineageId"])
-		if dict_data.has("strategyId"):
-			d.strategy_id = str(dict_data["strategyId"])
-		elif dict_data.has("strategy_id"):
-			d.strategy_id = str(dict_data["strategy_id"])
+		d.strategy_id = str(dict_data["strategy_id"])
 		d.color = str(dict_data["color"])
 		d.hex_id = str(dict_data["hexId"])
 		d.population = int(dict_data["population"])
@@ -463,23 +508,26 @@ class Deme extends RefCounted:
 			d.baldwin_counters[str(k)] = int(raw_bc[k])
 		d.innovation_counter = float(dict_data["innovationCounter"])
 		d.isolation_turns = int(dict_data["isolationTurns"])
-		d.decision_model_tag = str(dict_data["decisionModelTag"]) if dict_data.has("decisionModelTag") else EvoUserSettings.primary_model
-		d.last_confidence = float(dict_data["lastConfidence"]) if dict_data.has("lastConfidence") else 0.85
-		d.last_dominant_decision_id = str(dict_data["lastDominantDecisionId"])
-		d.last_decision_probabilities = {}
-		var raw_probs: Dictionary = dict_data["lastDecisionProbabilities"]
-		for k in raw_probs.keys():
-			d.last_decision_probabilities[str(k)] = float(raw_probs[k])
-		if d.last_decision_probabilities.is_empty():
-			var fallback_dec_id := d.last_dominant_decision_id if d.last_dominant_decision_id != "" else "dec-conservative-forage"
-			d.last_decision_probabilities = {fallback_dec_id: 1.0}
-		d.last_justification = str(dict_data["lastJustification"])
-		if dict_data.has("defenseTier"):
-			d.defense_tier = int(dict_data["defenseTier"])
-		if dict_data.has("mergedCount"):
-			d.merged_count = int(dict_data["mergedCount"])
-		if dict_data.has("secondaryColor"):
-			d.secondary_color = str(dict_data["secondaryColor"])
+		d.decision_model_tag = str(dict_data["decisionModelTag"])
+		d.last_confidence = float(dict_data["lastConfidence"])
+		d.chosen_action = (dict_data["chosenAction"] as Dictionary).duplicate()
+		d.action_probabilities = (dict_data["actionProbabilities"] as Dictionary).duplicate()
+		d.action_forecasts = (dict_data["actionForecasts"] as Dictionary).duplicate()
+		d.last_outcome = str(dict_data["lastOutcome"])
+		d.memory = []
+		for item in dict_data["memory"]:
+			d.memory.append(str(item))
+		d.reputation = float(dict_data["reputation"])
+		d.defense_tier = int(dict_data["defenseTier"])
+		d.merged_count = int(dict_data["mergedCount"])
+		d.secondary_color = str(dict_data["secondaryColor"])
+		d.salubrity = float(dict_data["salubrity"])
+		d.walled_union_id = str(dict_data["walledUnionId"])
+		d.infection_turns = int(dict_data["infectionTurns"])
+		d.immunity_turns = int(dict_data["immunityTurns"])
+		d.last_food_intake = float(dict_data["lastFoodIntake"])
+		d.last_food_need = float(dict_data["lastFoodNeed"])
+		d.last_population_delta = int(dict_data["lastPopulationDelta"])
 		return d
 
 
@@ -497,31 +545,11 @@ class LineageNode extends RefCounted:
 	var biological_trait_ids: Array[String] = []
 	var cultural_trait_ids: Array[String] = []
 
-	func duplicate_node() -> LineageNode:
-		var n := LineageNode.new()
-		n.id = id
-		n.name = name
-		n.parent_id = parent_id
-		n.strategy_id = strategy_id
-		n.color = color
-		n.founded_generation = founded_generation
-		n.extinct_generation = extinct_generation
-		n.founder_hex_id = founder_hex_id
-		n.divergence_reason = divergence_reason
-		n.acquired_trait_ids = acquired_trait_ids.duplicate()
-		n.biological_trait_ids = biological_trait_ids.duplicate()
-		n.cultural_trait_ids = cultural_trait_ids.duplicate()
-		return n
-
-	func duplicate_lineage() -> LineageNode:
-		return duplicate_node()
-
 	func to_dict() -> Dictionary:
 		return {
 			"id": id,
 			"name": name,
 			"parentId": parent_id,
-			"strategyId": strategy_id,
 			"strategy_id": strategy_id,
 			"color": color,
 			"foundedGeneration": founded_generation,
@@ -538,10 +566,7 @@ class LineageNode extends RefCounted:
 		n.id = str(d["id"])
 		n.name = str(d["name"])
 		n.parent_id = str(d["parentId"]) if d.has("parentId") and d["parentId"] != null else ""
-		if d.has("strategyId"):
-			n.strategy_id = str(d["strategyId"])
-		elif d.has("strategy_id"):
-			n.strategy_id = str(d["strategy_id"])
+		n.strategy_id = str(d["strategy_id"])
 		n.color = str(d["color"])
 		n.founded_generation = int(d["foundedGeneration"])
 		n.extinct_generation = int(d["extinctGeneration"]) if d.has("extinctGeneration") and d["extinctGeneration"] != null else -1
@@ -565,45 +590,20 @@ class ChronicleEntry extends RefCounted:
 	var id: String = ""
 	var generation: int = 0
 	var event_type: String = "" # "baldwin_trait" | "cultural_innovation" | "allopatric_speciation" | "extinction" | "tragedy_of_commons" | "symbiosis" | "cultural_loss" | "war" | "raid" | "pact" | "betrayal"
-	var type: String: # "baldwin_trait" | "cultural_innovation" | "allopatric_speciation" | "extinction" | "tragedy_of_commons" | "symbiosis" | "cultural_loss" | "war" | "raid" | "pact" | "betrayal"
-		get:
-			return event_type
-		set(value):
-			event_type = value
 	var title: String = ""
 	var causal_explanation: String = ""
-	var description: String:
-		get:
-			return causal_explanation
-		set(value):
-			causal_explanation = value
 	var hex_id: String = "0,0"
 	var deme_id: String = ""
 	var lineage_id: String = ""
 	var trait_id: String = ""
 
-	func duplicate_entry() -> ChronicleEntry:
-		var e := ChronicleEntry.new()
-		e.id = id
-		e.generation = generation
-		e.event_type = event_type
-		e.title = title
-		e.causal_explanation = causal_explanation
-		e.hex_id = hex_id
-		e.deme_id = deme_id
-		e.lineage_id = lineage_id
-		e.trait_id = trait_id
-		return e
-
 	func to_dict() -> Dictionary:
 		return {
 			"id": id,
 			"generation": generation,
-			"eventType": event_type,
-			"type": event_type,
+			"event_type": event_type,
 			"title": title,
-			"causalExplanation": causal_explanation,
-			"description": causal_explanation,
+			"causal_explanation": causal_explanation,
 			"hexId": hex_id,
 			"demeId": deme_id,
 			"lineageId": lineage_id,
@@ -614,9 +614,9 @@ class ChronicleEntry extends RefCounted:
 		var e := ChronicleEntry.new()
 		e.id = str(d["id"])
 		e.generation = int(d["generation"])
-		e.event_type = str(d["eventType"]) if d.has("eventType") else (str(d["type"]) if d.has("type") else "")
+		e.event_type = str(d["event_type"])
 		e.title = str(d["title"])
-		e.causal_explanation = str(d["causalExplanation"]) if d.has("causalExplanation") else (str(d["description"]) if d.has("description") else "")
+		e.causal_explanation = str(d["causal_explanation"])
 		e.hex_id = str(d["hexId"])
 		e.deme_id = str(d["demeId"]) if d.has("demeId") else ""
 		e.lineage_id = str(d["lineageId"]) if d.has("lineageId") else ""
@@ -632,22 +632,11 @@ class HexEdgeFlow extends RefCounted:
 	var from_deme_id: String = ""
 	var to_deme_id: String = ""
 
-	func duplicate_flow() -> HexEdgeFlow:
-		var f := HexEdgeFlow.new()
-		f.from_hex_id = from_hex_id
-		f.to_hex_id = to_hex_id
-		f.flow_type = flow_type
-		f.intensity = intensity
-		f.from_deme_id = from_deme_id
-		f.to_deme_id = to_deme_id
-		return f
-
 	func to_dict() -> Dictionary:
 		return {
 			"fromHexId": from_hex_id,
 			"toHexId": to_hex_id,
-			"type": flow_type,
-			"flowType": flow_type,
+			"flow_type": flow_type,
 			"intensity": intensity,
 			"fromDemeId": from_deme_id,
 			"toDemeId": to_deme_id
@@ -657,7 +646,7 @@ class HexEdgeFlow extends RefCounted:
 		var f := HexEdgeFlow.new()
 		f.from_hex_id = str(d["fromHexId"])
 		f.to_hex_id = str(d["toHexId"])
-		f.flow_type = str(d["type"]) if d.has("type") else (str(d["flowType"]) if d.has("flowType") else "migration")
+		f.flow_type = str(d["flow_type"])
 		f.intensity = float(d["intensity"])
 		f.from_deme_id = str(d["fromDemeId"]) if d.has("fromDemeId") else ""
 		f.to_deme_id = str(d["toDemeId"]) if d.has("toDemeId") else ""
@@ -685,14 +674,11 @@ class WorldState extends RefCounted:
 	var strategy_a_id: String = "strat-cooperation"
 	var strategy_b_id: String = "strat-war"
 	var lineage_tree: Dictionary = {} # String (lineage_id) -> LineageNode
-	var lineages: Dictionary:
-		get:
-			return lineage_tree
-		set(value):
-			lineage_tree = value
 	var chronicle: Array[ChronicleEntry] = []
 	var active_flows: Array[HexEdgeFlow] = []
-	var active_pacts: Dictionary = {} # pair_key ("idA__idB" sorted) -> int (consecutive turns of mutual cooperation/exchange; >= 2 means formal active pact)
+	var relations: Dictionary = {} # pair_key ("idA__idB" sorted) -> Relation
+	var rng_seed: int = 1
+	var rng := RandomNumberGenerator.new()
 	var recent_extinction_hexes: Array[String] = [] # hex_ids that had real extinction this turn
 	var disused_connections: Array[Dictionary] = [] # previous turn roads/bridges
 	var quiet_turns: int = 0
@@ -700,48 +686,8 @@ class WorldState extends RefCounted:
 	var macro_outcome_type: String = "" # "" | "total_extinction" | "single_survivor" | "ecological_equilibrium"
 	var macro_outcome_title: String = ""
 	var macro_outcome_summary: String = ""
-
-	func duplicate_state() -> WorldState:
-		var s := WorldState.new()
-		s.preset_id = preset_id
-		s.world_name = world_name
-		s.generation = generation
-		s.season = season
-		s.map_radius = map_radius
-		s.sea_level = sea_level
-		s.glacial_sea_level_cycle = glacial_sea_level_cycle
-		s.selective_pressure_points = selective_pressure_points
-		s.selective_pressure_regen_per_turn = selective_pressure_regen_per_turn
-		s.unlimited_pressure_mode = unlimited_pressure_mode
-		s.free_sandbox_mode = free_sandbox_mode
-		s.auto_pause_on_milestone = auto_pause_on_milestone
-		s.strategy_a_id = strategy_a_id
-		s.strategy_b_id = strategy_b_id
-		for k in cells.keys():
-			s.cells[k] = (cells[k] as HexCell).duplicate_cell()
-		for k in demes.keys():
-			s.demes[k] = (demes[k] as Deme).duplicate_deme()
-		for k in traits_catalog.keys():
-			s.traits_catalog[k] = (traits_catalog[k] as TraitDef).duplicate_trait()
-		for k in decisions_catalog.keys():
-			s.decisions_catalog[k] = (decisions_catalog[k] as DecisionDef).duplicate_decision()
-		for k in strategies_catalog.keys():
-			s.strategies_catalog[k] = (strategies_catalog[k] as StrategyDef).duplicate_strategy()
-		for k in lineage_tree.keys():
-			s.lineage_tree[k] = (lineage_tree[k] as LineageNode).duplicate_node()
-		for entry in chronicle:
-			s.chronicle.append(entry.duplicate_entry())
-		for fl in active_flows:
-			s.active_flows.append(fl.duplicate_flow())
-		s.active_pacts = active_pacts.duplicate()
-		s.recent_extinction_hexes = recent_extinction_hexes.duplicate()
-		s.disused_connections = disused_connections.duplicate(true)
-		s.quiet_turns = quiet_turns
-		s.previous_populations = previous_populations.duplicate()
-		s.macro_outcome_type = macro_outcome_type
-		s.macro_outcome_title = macro_outcome_title
-		s.macro_outcome_summary = macro_outcome_summary
-		return s
+	var turn_events: Array[Dictionary] = []
+	var stats_history: Array[Dictionary] = []
 
 	func to_dict() -> Dictionary:
 		var cells_dict := {}
@@ -768,6 +714,9 @@ class WorldState extends RefCounted:
 		var flows_arr := []
 		for fl in active_flows:
 			flows_arr.append(fl.to_dict())
+		var relations_dict := {}
+		for k in relations.keys():
+			relations_dict[k] = (relations[k] as Relation).to_dict()
 		return {
 			"presetId": preset_id,
 			"worldName": world_name,
@@ -781,28 +730,27 @@ class WorldState extends RefCounted:
 			"unlimitedPressureMode": unlimited_pressure_mode,
 			"freeSandboxMode": free_sandbox_mode,
 			"autoPauseOnMilestone": auto_pause_on_milestone,
-			"strategyAId": strategy_a_id,
-			"strategyBId": strategy_b_id,
 			"strategy_a_id": strategy_a_id,
 			"strategy_b_id": strategy_b_id,
 			"cells": cells_dict,
 			"demes": demes_dict,
 			"traitsCatalog": traits_dict,
 			"decisionsCatalog": decisions_dict,
-			"strategiesCatalog": strategies_dict,
 			"strategies_catalog": strategies_dict,
 			"lineageTree": lineage_dict,
 			"chronicle": chron_arr,
 			"activeFlows": flows_arr,
-			"activePacts": active_pacts.duplicate(),
-			"active_pacts": active_pacts.duplicate(),
+			"relations": relations_dict,
+			"rngSeed": rng_seed,
+			"rngState": rng.state,
 			"recentExtinctionHexes": recent_extinction_hexes.duplicate(),
 			"disusedConnections": disused_connections.duplicate(true),
 			"quietTurns": quiet_turns,
 			"previousPopulations": previous_populations.duplicate(),
 			"macroOutcomeType": macro_outcome_type,
 			"macroOutcomeTitle": macro_outcome_title,
-			"macroOutcomeSummary": macro_outcome_summary
+			"macroOutcomeSummary": macro_outcome_summary,
+			"statsHistory": stats_history.duplicate(true)
 		}
 
 	static func from_dict(d: Dictionary) -> WorldState:
@@ -819,23 +767,29 @@ class WorldState extends RefCounted:
 		s.unlimited_pressure_mode = bool(d["unlimitedPressureMode"])
 		s.free_sandbox_mode = bool(d["freeSandboxMode"])
 		s.auto_pause_on_milestone = bool(d["autoPauseOnMilestone"])
-		if d.has("strategyAId"):
-			s.strategy_a_id = str(d["strategyAId"])
-		elif d.has("strategy_a_id"):
-			s.strategy_a_id = str(d["strategy_a_id"])
-		if d.has("strategyBId"):
-			s.strategy_b_id = str(d["strategyBId"])
-		elif d.has("strategy_b_id"):
-			s.strategy_b_id = str(d["strategy_b_id"])
+		s.strategy_a_id = str(d["strategy_a_id"])
+		s.strategy_b_id = str(d["strategy_b_id"])
 		for k in d["cells"].keys():
 			s.cells[str(k)] = HexCell.from_dict(d["cells"][k])
 		for k in d["demes"].keys():
 			s.demes[str(k)] = Deme.from_dict(d["demes"][k])
+		for cid in s.cells.keys():
+			(s.cells[cid] as HexCell).deme_ids.clear()
+		var invalid_deme_ids: Array[String] = []
+		for did in s.demes.keys():
+			var dm: Deme = s.demes[did]
+			if not s.cells.has(dm.hex_id):
+				invalid_deme_ids.append(did)
+				continue
+			var host_cell: HexCell = s.cells[dm.hex_id]
+			host_cell.deme_ids.append(dm.id)
+		for did in invalid_deme_ids:
+			s.demes.erase(did)
 		for k in d["traitsCatalog"].keys():
 			s.traits_catalog[str(k)] = TraitDef.from_dict(d["traitsCatalog"][k])
 		for k in d["decisionsCatalog"].keys():
 			s.decisions_catalog[str(k)] = DecisionDef.from_dict(d["decisionsCatalog"][k])
-		var raw_strats: Dictionary = d["strategiesCatalog"] if d.has("strategiesCatalog") else (d["strategies_catalog"] if d.has("strategies_catalog") else {})
+		var raw_strats: Dictionary = d["strategies_catalog"]
 		for k in raw_strats.keys():
 			s.strategies_catalog[str(k)] = StrategyDef.from_dict(raw_strats[k])
 		for k in d["lineageTree"].keys():
@@ -844,10 +798,13 @@ class WorldState extends RefCounted:
 			s.chronicle.append(ChronicleEntry.from_dict(item))
 		for item in d["activeFlows"]:
 			s.active_flows.append(HexEdgeFlow.from_dict(item))
-		s.active_pacts = {}
-		var raw_pacts: Dictionary = d["activePacts"] if d.has("activePacts") else (d["active_pacts"] if d.has("active_pacts") else {})
-		for k in raw_pacts.keys():
-			s.active_pacts[str(k)] = int(raw_pacts[k])
+		s.relations = {}
+		var raw_relations: Dictionary = d["relations"]
+		for k in raw_relations.keys():
+			s.relations[str(k)] = Relation.from_dict(raw_relations[k])
+		s.rng_seed = int(d["rngSeed"])
+		s.rng.seed = s.rng_seed
+		s.rng.state = int(d["rngState"])
 		s.recent_extinction_hexes = []
 		if d.has("recentExtinctionHexes"):
 			for item in d["recentExtinctionHexes"]:
@@ -869,7 +826,150 @@ class WorldState extends RefCounted:
 		s.macro_outcome_type = str(d["macroOutcomeType"]) if d.has("macroOutcomeType") else ""
 		s.macro_outcome_title = str(d["macroOutcomeTitle"]) if d.has("macroOutcomeTitle") else ""
 		s.macro_outcome_summary = str(d["macroOutcomeSummary"]) if d.has("macroOutcomeSummary") else ""
+		s.stats_history = []
+		for item in d["statsHistory"]:
+			s.stats_history.append((item as Dictionary).duplicate(true))
 		return s
+
+
+static func push_event(
+	state: WorldState,
+	type: String,
+	from_hex: String,
+	to_hex: String,
+	from_deme: String,
+	to_deme: String = "",
+	magnitude: float = 0.0,
+	casualties: int = 0
+) -> void:
+	var actor_color := ""
+	if state.demes.has(from_deme):
+		var d: Deme = state.demes[from_deme]
+		actor_color = (state.strategies_catalog[d.strategy_id] as StrategyDef).color if state.strategies_catalog.has(d.strategy_id) else d.color
+	state.turn_events.append({
+		"type": type,
+		"from_hex": from_hex,
+		"to_hex": to_hex if to_hex != "" else from_hex,
+		"from_deme": from_deme,
+		"to_deme": to_deme,
+		"actor_color": actor_color,
+		"magnitude": magnitude,
+		"casualties": casualties
+	})
+
+
+static func _is_side_b_deme(state: WorldState, d: Deme) -> bool:
+	if state.strategy_a_id != state.strategy_b_id:
+		if d.strategy_id == state.strategy_b_id:
+			return true
+		if d.strategy_id == state.strategy_a_id:
+			return false
+	return d.id.begins_with("deme-rift-east") or d.id.begins_with("deme-darwin-rival") or d.id.begins_with("deme-island-2")
+
+
+static func compute_world_stats(state: WorldState) -> Dictionary:
+	var side_a := {
+		"strategy_id": state.strategy_a_id,
+		"villages": 0,
+		"population": 0,
+		"pop_delta": 0,
+		"reserves": 0.0,
+		"food_intake": 0.0,
+		"food_need": 0.0,
+		"food_ratio": 1.0,
+		"salubrity_avg": 1.0,
+		"infected": 0,
+		"starving": 0,
+		"rural_hexes": 0
+	}
+	var side_b := {
+		"strategy_id": state.strategy_b_id,
+		"villages": 0,
+		"population": 0,
+		"pop_delta": 0,
+		"reserves": 0.0,
+		"food_intake": 0.0,
+		"food_need": 0.0,
+		"food_ratio": 1.0,
+		"salubrity_avg": 1.0,
+		"infected": 0,
+		"starving": 0,
+		"rural_hexes": 0
+	}
+	var sal_sum_a: float = 0.0
+	var sal_sum_b: float = 0.0
+	var union_ids: Dictionary = {}
+
+	for d: Deme in state.demes.values():
+		if d.population <= 0:
+			continue
+		if d.walled_union_id != "":
+			union_ids[d.walled_union_id] = true
+		var is_b := _is_side_b_deme(state, d)
+		var target: Dictionary = side_b if is_b else side_a
+		target["villages"] = int(target["villages"]) + 1
+		target["population"] = int(target["population"]) + d.population
+		target["pop_delta"] = int(target["pop_delta"]) + d.last_population_delta
+		target["reserves"] = float(target["reserves"]) + d.energy_reserves
+		target["food_intake"] = float(target["food_intake"]) + d.last_food_intake
+		target["food_need"] = float(target["food_need"]) + d.last_food_need
+		if d.infection_turns > 0:
+			target["infected"] = int(target["infected"]) + 1
+		if d.get_vital_status() == "starving":
+			target["starving"] = int(target["starving"]) + 1
+		if is_b:
+			sal_sum_b += d.salubrity
+		else:
+			sal_sum_a += d.salubrity
+
+	for c: HexCell in state.cells.values():
+		if c.owner_deme_id != "" and (c.land_use == "crops" or c.land_use == "pasture") and state.demes.has(c.owner_deme_id):
+			var owner: Deme = state.demes[c.owner_deme_id]
+			var target: Dictionary = side_b if _is_side_b_deme(state, owner) else side_a
+			target["rural_hexes"] = int(target["rural_hexes"]) + 1
+
+	var v_a := int(side_a["villages"])
+	var v_b := int(side_b["villages"])
+	var need_a := float(side_a["food_need"])
+	var need_b := float(side_b["food_need"])
+	side_a["food_ratio"] = clampf(float(side_a["food_intake"]) / maxf(1.0, need_a), 0.0, 2.0) if need_a > 0.0 else (1.0 if v_a > 0 else 0.0)
+	side_b["food_ratio"] = clampf(float(side_b["food_intake"]) / maxf(1.0, need_b), 0.0, 2.0) if need_b > 0.0 else (1.0 if v_b > 0 else 0.0)
+	side_a["salubrity_avg"] = (sal_sum_a / float(v_a)) if v_a > 0 else 0.0
+	side_b["salubrity_avg"] = (sal_sum_b / float(v_b)) if v_b > 0 else 0.0
+
+	var pacts_count: int = 0
+	var vendettas_count: int = 0
+	for pk in state.relations.keys():
+		var rel: Relation = state.relations[pk]
+		if rel.pact_turns > 0:
+			pacts_count += 1
+		elif rel.feud_turns > 0:
+			vendettas_count += 1
+
+	var wars_count: int = 0
+	for ev in state.turn_events:
+		if str(ev["type"]) in ["war", "war_repelled", "siege", "raid", "betrayal"]:
+			wars_count += 1
+
+	return {
+		"generation": state.generation,
+		"a": side_a,
+		"b": side_b,
+		"pacts": pacts_count,
+		"vendettas": vendettas_count,
+		"unions": union_ids.size(),
+		"wars": wars_count
+	}
+
+
+static func record_turn_stats(state: WorldState) -> void:
+	var snap := compute_world_stats(state)
+	if not state.stats_history.is_empty() and int(state.stats_history.back()["generation"]) == state.generation:
+		state.stats_history[state.stats_history.size() - 1] = snap
+	else:
+		state.stats_history.append(snap)
+	while state.stats_history.size() > STATS_HISTORY_LIMIT:
+		state.stats_history.pop_front()
 
 
 static func make_pair_key(id_a: String, id_b: String) -> String:
@@ -877,14 +977,32 @@ static func make_pair_key(id_a: String, id_b: String) -> String:
 
 
 static func is_pact_active(state: WorldState, id_a: String, id_b: String) -> bool:
-	if state.active_pacts.is_empty():
-		return false
-	var key := (id_a + "__" + id_b) if id_a < id_b else (id_b + "__" + id_a)
-	return int(state.active_pacts.get(key, 0)) >= 2
+	var key := make_pair_key(id_a, id_b)
+	return state.relations.has(key) and (state.relations[key] as Relation).pact_turns > 0
 
 
 static func is_vendetta_active(state: WorldState, id_a: String, id_b: String) -> bool:
-	if state.active_pacts.is_empty():
-		return false
-	var key := (id_a + "__" + id_b) if id_a < id_b else (id_b + "__" + id_a)
-	return int(state.active_pacts.get(key, 0)) < 0
+	var key := make_pair_key(id_a, id_b)
+	return state.relations.has(key) and (state.relations[key] as Relation).feud_turns > 0
+
+
+static func get_relation(state: WorldState, id_a: String, id_b: String) -> Relation:
+	var key := make_pair_key(id_a, id_b)
+	if not state.relations.has(key):
+		state.relations[key] = Relation.new()
+	return state.relations[key]
+
+
+static func pair_partner(pair_key: String, deme_id: String) -> String:
+	var parts := pair_key.split("__")
+	if parts[0] == deme_id:
+		return parts[1]
+	if parts[1] == deme_id:
+		return parts[0]
+	return ""
+
+
+static func erase_deme_relations(state: WorldState, deme_id: String) -> void:
+	for pk in state.relations.keys():
+		if pair_partner(str(pk), deme_id) != "":
+			state.relations.erase(pk)

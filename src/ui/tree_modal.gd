@@ -2,7 +2,6 @@ class_name EvoTreeModal
 extends Control
 
 signal lineage_highlight_requested(lineage_id: String)
-signal modal_closed()
 
 var _world_state: EvoTypes.WorldState = null
 var _lang: String = "es"
@@ -349,7 +348,6 @@ func set_language(lang: String) -> void:
 
 func close_modal() -> void:
 	visible = false
-	modal_closed.emit()
 
 
 func _update_labels() -> void:

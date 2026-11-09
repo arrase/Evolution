@@ -84,7 +84,7 @@ func _run_captures() -> void:
 		main.step_generation()
 	if not main.world_state.demes.is_empty():
 		var first_d: EvoTypes.Deme = main.world_state.demes.values()[0]
-		first_d.baldwin_counters[first_d.last_dominant_decision_id] = 8
+		first_d.baldwin_counters["fortify"] = 8
 		first_d.innovation_counter = 1.1
 		EvoMilestonePhase.run_milestone_phase(main.world_state, main.lang)
 		main.hud.refresh(main.world_state)
@@ -133,6 +133,31 @@ func _run_captures() -> void:
 		main.world_renderer.selected_deme_id = best_did
 		main.world_renderer.selected_hex_id = (main.world_state.demes[best_did] as EvoTypes.Deme).hex_id
 	await _wait_and_save(main, "screenshot_late_simulation.png")
+
+	# 8. screenshot_lens_diplomacy.png (diplomacy lens + dynamic legend)
+	main.hud._on_lens_pressed("diplomacy")
+	if not main.hud._legend_panel.visible:
+		main.hud._on_legend_toggle_pressed()
+	await _wait_and_save(main, "screenshot_lens_diplomacy.png")
+
+	# 9. screenshot_lens_territory.png (territory lens)
+	main.hud._on_lens_pressed("territory")
+	await _wait_and_save(main, "screenshot_lens_territory.png")
+
+	# 10. screenshot_lens_food.png (food lens)
+	main.hud._on_lens_pressed("food")
+	await _wait_and_save(main, "screenshot_lens_food.png")
+
+	# 11. screenshot_stats_chart.png (biome lens + A-vs-B history chart drawer open)
+	if main.hud._legend_panel.visible:
+		main.hud._on_legend_toggle_pressed()
+	main.hud._on_lens_pressed("biome")
+	main.hud._stats_chart_panel.visible = true
+	EvoUiStyle.apply_button_active(main.hud._stats_chart_toggle_btn, true)
+	EvoHudStatsStrip.refresh_stats_strip(main.hud)
+	await _wait_and_save(main, "screenshot_stats_chart.png")
+	main.hud._stats_chart_panel.visible = false
+	EvoUiStyle.apply_button_active(main.hud._stats_chart_toggle_btn, false)
 
 	main.free()
 	EvoDecisionModel.wait_for_workers()

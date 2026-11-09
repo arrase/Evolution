@@ -14,17 +14,6 @@ const HOTBAR_SLOTS_DEF: Array[Dictionary] = [
 	{"slot": 9, "key": "0", "tool": "sea_level", "sub": "sea_level", "icon": "slot_sealevel", "cost": 25}
 ]
 
-var _hud: Control = null
-
-
-func _init(p_hud: Control = null) -> void:
-	_hud = p_hud
-
-
-func refresh_legend(state: EvoTypes.WorldState, lang: String = "es") -> void:
-	if _hud != null:
-		EvoHudHotbarDock.refresh_legend_for_hud(_hud, state, lang)
-
 
 static func build_bottom_hotbar(hud: Control) -> void:
 	# 1. Floating Sub-Options Bar (appears right above the hotbar when Sea Level / extra biomes active)
@@ -48,30 +37,7 @@ static func build_bottom_hotbar(hud: Control) -> void:
 	hud._sub_options_flow.add_theme_constant_override("v_separation", 4)
 	hud._sub_options_panel.add_child(hud._sub_options_flow)
 
-	# 2. Hidden Equipped Tool Plaque (tooltips + hotbar slot badges handle display)
-	hud._equipped_tool_banner = PanelContainer.new()
-	hud._equipped_tool_banner.visible = false
-	hud._equipped_tool_banner.anchor_left = 0.5
-	hud._equipped_tool_banner.anchor_right = 0.5
-	hud._equipped_tool_banner.anchor_top = 1.0
-	hud._equipped_tool_banner.anchor_bottom = 1.0
-	hud._equipped_tool_banner.offset_left = -240
-	hud._equipped_tool_banner.offset_right = 240
-	hud._equipped_tool_banner.offset_top = -100
-	hud._equipped_tool_banner.offset_bottom = -74
-	hud._equipped_tool_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var eq_style := EvoUiStyle.make_parchment_card(Color("#fef3c7"), EvoUiStyle.COLOR_GOLD_BRIGHT, 4)
-	hud._equipped_tool_banner.add_theme_stylebox_override("panel", eq_style)
-	hud.add_child(hud._equipped_tool_banner)
-
-	hud._equipped_tool_lbl = Label.new()
-	hud._equipped_tool_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hud._equipped_tool_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	hud._equipped_tool_lbl.add_theme_font_size_override("font_size", 12)
-	hud._equipped_tool_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
-	hud._equipped_tool_banner.add_child(hud._equipped_tool_lbl)
-
-	# 3. 10-Slot Inventory Hotbar + Brush Radius Switcher
+	# 2. 10-Slot Inventory Hotbar + Brush Radius Switcher
 	var hotbar_frame := PanelContainer.new()
 	hotbar_frame.anchor_left = 0.5
 	hotbar_frame.anchor_right = 0.5
@@ -171,10 +137,10 @@ static func build_legend_panel(hud: Control) -> void:
 	hud._legend_panel.anchor_right = 0.0
 	hud._legend_panel.anchor_top = 0.0
 	hud._legend_panel.anchor_bottom = 0.0
-	hud._legend_panel.offset_left = 428
-	hud._legend_panel.offset_right = 736
-	hud._legend_panel.offset_top = 10
-	hud._legend_panel.offset_bottom = 434
+	hud._legend_panel.offset_left = 454
+	hud._legend_panel.offset_right = 762
+	hud._legend_panel.offset_top = 76
+	hud._legend_panel.offset_bottom = 490
 	hud._legend_panel.z_index = 22
 	hud._legend_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
 	hud.add_child(hud._legend_panel)
@@ -261,13 +227,6 @@ static func update_hotbar_visuals(hud: Control) -> void:
 		var info := get_slot_title_and_desc(hud._lang, i)
 		btn.tooltip_text = "[%s] %s\n%s" % [str(HOTBAR_SLOTS_DEF[i]["key"]), info["title"], info["desc"]]
 		EvoUiStyle.apply_hotbar_slot_style(btn, i == active_idx)
-
-	var cur_info := get_slot_title_and_desc(hud._lang, active_idx)
-	if hud._active_tool == "set_biome" and hud._active_sub_mode in ["coastal_shallows", "ocean", "high_mountain"]:
-		var b_lbl := EvoUiStyle.get_biome_label(hud._active_sub_mode, hud._lang)
-		hud._equipped_tool_lbl.text = "🐚 %s — %s (⚡10)" % [b_lbl, EvoUiStyle.tr_text(hud._lang, "Moldear bioma costero/cumbre", "Shape coastal/peak biome")]
-	else:
-		hud._equipped_tool_lbl.text = "%s — %s" % [cur_info["title"], cur_info["desc"]]
 
 
 static func rebuild_sub_tool_options(hud: Control) -> void:
@@ -379,76 +338,88 @@ static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lan
 		hud._legend_vbox.add_child(sep)
 
 	var title := Label.new()
-	title.text = EvoUiStyle.tr_text(lang, "🗺️ Leyenda del Valle", "🗺️ Valley Legend")
 	title.add_theme_font_size_override("font_size", 13)
 	title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._legend_vbox.add_child(title)
 
-	for b_id in EvoTypes.BIOMES:
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 6)
-		hud._legend_vbox.add_child(row)
+	match hud._active_lens:
+		"food":
+			title.text = EvoUiStyle.tr_text(lang, "🌾 Lente: Alimento y Capacidad K", "🌾 Lens: Food & Capacity K")
+			_add_legend_row(hud._legend_vbox, Color("#16a34a"), EvoUiStyle.tr_text(lang, "R/Kmax ≥ 65% · Biomasa abundante", "R/Kmax ≥ 65% · Abundant biomass"), "icon_forage")
+			_add_legend_row(hud._legend_vbox, Color("#eab308"), EvoUiStyle.tr_text(lang, "R/Kmax 30–64% · Alimento moderado", "R/Kmax 30–64% · Moderate food"))
+			_add_legend_row(hud._legend_vbox, Color("#92400e"), EvoUiStyle.tr_text(lang, "R/Kmax < 30% · Suelo agotado", "R/Kmax < 30% · Depleted resources"))
+			_add_legend_row(hud._legend_vbox, Color("#f59e0b"), EvoUiStyle.tr_text(lang, "Borde discontinuo · K/Kmax degradado (< 85%)", "Dashed border · Degraded K/Kmax (< 85%)"))
+			_add_legend_row(hud._legend_vbox, Color("#22c55e"), EvoUiStyle.tr_text(lang, "🍖 Barra Ingesta / Necesidad calórica", "🍖 Caloric Intake / Need bar"), "icon_forage")
+		"health":
+			title.text = EvoUiStyle.tr_text(lang, "✚ Lente: Salubridad y Epidemias", "✚ Lens: Salubrity & Epidemics")
+			_add_legend_row(hud._legend_vbox, Color("#10b981"), EvoUiStyle.tr_text(lang, "Salubridad ≥ 75% · Sana (resiste contagio)", "Salubrity ≥ 75% · Healthy (resists contagion)"))
+			_add_legend_row(hud._legend_vbox, Color("#f59e0b"), EvoUiStyle.tr_text(lang, "Salubridad 40–74% · Susceptible (< 70%)", "Salubrity 40–74% · Susceptible (< 70%)"))
+			_add_legend_row(hud._legend_vbox, Color("#ef4444"), EvoUiStyle.tr_text(lang, "Salubridad < 35% · Crítica (riesgo de brote)", "Salubrity < 35% · Critical (outbreak risk)"))
+			_add_legend_row(hud._legend_vbox, Color("#84cc16"), EvoUiStyle.tr_text(lang, "☣ Miasma epidémico activo + turnos", "☣ Active epidemic miasma + turns"), "icon_epidemic")
+			_add_legend_row(hud._legend_vbox, Color("#06b6d4"), EvoUiStyle.tr_text(lang, "🛡️ Anillo cian de inmunidad temporal", "🛡️ Cyan ring of temporary immunity"), "icon_immune")
+			_add_legend_row(hud._legend_vbox, Color("#a3e635"), EvoUiStyle.tr_text(lang, "➔ Flecha de contagio epidémico", "➔ Epidemic contagion arrow"), "icon_epidemic")
+		"diplomacy":
+			title.text = EvoUiStyle.tr_text(lang, "🤝 Lente: Diplomacia y Conflictos", "🤝 Lens: Diplomacy & Conflicts")
+			_add_legend_row(hud._legend_vbox, Color("#10b981"), EvoUiStyle.tr_text(lang, "🤝 Pacto activo (grosor = duración)", "🤝 Active pact (thickness = duration)"), "icon_pact")
+			_add_legend_row(hud._legend_vbox, Color("#34d399"), EvoUiStyle.tr_text(lang, "Cooperación incipiente (1 turno)", "Incipient cooperation (1 turn)"), "icon_cooperate")
+			_add_legend_row(hud._legend_vbox, Color("#be123c"), EvoUiStyle.tr_text(lang, "🩸 Vendetta activa (línea discontinua)", "🩸 Active vendetta (dashed line)"), "icon_vendetta")
+			_add_legend_row(hud._legend_vbox, Color("#ef4444"), EvoUiStyle.tr_text(lang, "⚔️ Guerra / Asedio (flecha direccional)", "⚔️ War / Siege (directional arrow)"), "icon_war")
+			_add_legend_row(hud._legend_vbox, Color("#f97316"), EvoUiStyle.tr_text(lang, "🔥 Incursión / Saqueo (flecha direccional)", "🔥 Raid / Pillage (directional arrow)"), "icon_raid")
+			_add_legend_row(hud._legend_vbox, Color("#f59e0b"), EvoUiStyle.tr_text(lang, "🪙 Tributo (quien paga ➔ quien cobra)", "🪙 Tribute (payer ➔ receiver)"), "icon_tribute")
+			_add_legend_row(hud._legend_vbox, Color("#eab308"), EvoUiStyle.tr_text(lang, "🧱 Unión Amurallada (enlace dorado)", "🧱 Walled Union (golden link)"), "icon_merge")
+		"territory":
+			title.text = EvoUiStyle.tr_text(lang, "🚩 Lente: Dominio Territorial A vs. B", "🚩 Lens: Territorial Control A vs. B")
+			var col_a := Color("#10b981")
+			var col_b := Color("#ef4444")
+			if state != null:
+				if state.strategies_catalog.has(state.strategy_a_id):
+					col_a = Color.from_string((state.strategies_catalog[state.strategy_a_id] as EvoTypes.StrategyDef).color, col_a)
+				if state.strategies_catalog.has(state.strategy_b_id):
+					col_b = Color.from_string((state.strategies_catalog[state.strategy_b_id] as EvoTypes.StrategyDef).color, col_b)
+			_add_legend_row(hud._legend_vbox, col_a, EvoUiStyle.tr_text(lang, "Dominio Estrategia A (urbano y rural)", "Strategy A Control (urban & rural)"))
+			_add_legend_row(hud._legend_vbox, col_b, EvoUiStyle.tr_text(lang, "Dominio Estrategia B (urbano y rural)", "Strategy B Control (urban & rural)"))
+			_add_legend_row(hud._legend_vbox, Color("#fbbf24"), EvoUiStyle.tr_text(lang, "Frontera exterior continua de cada bando", "Continuous outer border per side"))
+			_add_legend_row(hud._legend_vbox, Color("#94a3b8"), EvoUiStyle.tr_text(lang, "Tierra salvaje sin reclamar", "Unclaimed wild territory"))
+		_:
+			title.text = EvoUiStyle.tr_text(lang, "🌿 Lente: Bioma y Asentamientos", "🌿 Lens: Biome & Settlements")
+			for b_id in EvoTypes.BIOMES:
+				_add_legend_row(hud._legend_vbox, EvoUiStyle.get_biome_color(b_id), EvoUiStyle.get_biome_label(b_id, lang), b_id)
+			var tier_lbl := Label.new()
+			tier_lbl.text = EvoUiStyle.tr_text(
+				lang,
+				"Aldeas: I Campamento · II Aldea · III Villa · IV Metrópolis\nRural: 🌾 Cultivos · 🐑 Pastos · 🏚️ Ruinas · 🏰 Murallas (Nv.1–3)",
+				"Villages: I Camp · II Village · III Town · IV Metropolis\nRural: 🌾 Crops · 🐑 Pasture · 🏚️ Ruins · 🏰 Perimeter Walls (Lv.1–3)"
+			)
+			tier_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			tier_lbl.add_theme_font_size_override("font_size", 10)
+			tier_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
+			hud._legend_vbox.add_child(tier_lbl)
 
-		var sw := ColorRect.new()
-		sw.custom_minimum_size = Vector2(12, 12)
-		sw.color = EvoUiStyle.get_biome_color(b_id)
-		row.add_child(sw)
 
-		var lbl := Label.new()
-		lbl.text = EvoUiStyle.get_biome_label(b_id, lang)
-		lbl.add_theme_font_size_override("font_size", 11)
-		row.add_child(lbl)
+static func _add_legend_row(vbox: VBoxContainer, color: Color, text: String, icon_key: String = "") -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	vbox.add_child(row)
 
-	var tier_lbl := Label.new()
-	tier_lbl.text = EvoUiStyle.tr_text(
-		lang,
-		"Aldeas: I Campamento · II Caserío · III Aldea · IV Poblado · V Metrópolis\nCaminos: 🛣️ Cooperación · ⚔️ Disputa · 🧭 Migración",
-		"Villages: I Camp · II Hamlet · III Village · IV Settlement · V Metropolis\nPaths: 🛣️ Cooperation · ⚔️ Dispute · 🧭 Migration"
-	)
-	tier_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tier_lbl.add_theme_font_size_override("font_size", 10)
-	tier_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
-	hud._legend_vbox.add_child(tier_lbl)
+	var sw := ColorRect.new()
+	sw.custom_minimum_size = Vector2(12, 12)
+	sw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	sw.color = color
+	row.add_child(sw)
 
-	var flow_sep := HSeparator.new()
-	hud._legend_vbox.add_child(flow_sep)
+	if icon_key != "":
+		var icon_rect := TextureRect.new()
+		icon_rect.custom_minimum_size = Vector2(14, 14)
+		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		icon_rect.texture = EvoUiStyle.get_pixel_icon(icon_key)
+		row.add_child(icon_rect)
 
-	var geo_title := Label.new()
-	geo_title.text = EvoUiStyle.tr_text(lang, "🗺️ Leyenda Geopolítica", "🗺️ Geopolitical Legend")
-	geo_title.add_theme_font_size_override("font_size", 12)
-	geo_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
-	hud._legend_vbox.add_child(geo_title)
-
-	var legend_defs := [
-		{"key": "legend_flow_pact", "icon": "icon_pact", "color": Color("#10b981")},
-		{"key": "legend_flow_merge", "icon": "icon_merge", "color": Color("#eab308")},
-		{"key": "legend_flow_tribute", "icon": "icon_tribute", "color": Color("#f59e0b")},
-		{"key": "legend_flow_war", "icon": "icon_war", "color": Color("#ef4444")},
-		{"key": "legend_flow_siege", "icon": "icon_siege", "color": Color("#dc2626")},
-		{"key": "legend_flow_raid", "icon": "icon_raid", "color": Color("#f97316")},
-		{"key": "legend_flow_betrayal", "icon": "icon_betrayal", "color": Color("#be123c")}
-	]
-	for def in legend_defs:
-		var f_row := HBoxContainer.new()
-		f_row.add_theme_constant_override("separation", 6)
-		hud._legend_vbox.add_child(f_row)
-
-		var f_sw := ColorRect.new()
-		f_sw.custom_minimum_size = Vector2(12, 12)
-		f_sw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		f_sw.color = def["color"]
-		f_row.add_child(f_sw)
-
-		var f_icon := TextureRect.new()
-		f_icon.custom_minimum_size = Vector2(14, 14)
-		f_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		f_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		f_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		f_icon.texture = EvoUiStyle.get_pixel_icon(str(def["icon"]))
-		f_row.add_child(f_icon)
-
-		var f_lbl := Label.new()
-		f_lbl.text = EvoI18n.t(lang, str(def["key"]))
-		f_lbl.add_theme_font_size_override("font_size", 11)
-		f_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
-		f_row.add_child(f_lbl)
+	var lbl := Label.new()
+	lbl.text = text
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
+	row.add_child(lbl)

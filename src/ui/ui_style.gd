@@ -7,7 +7,6 @@ const COLOR_WOOD_LIGHT := Color("#7a4524")
 const COLOR_WOOD_PLANK := Color("#6b3b1e")
 const COLOR_GOLD_BEVEL := Color("#d99b43")
 const COLOR_GOLD_BRIGHT := Color("#f59e0b")
-const COLOR_BRONZE_BORDER := Color("#b07228")
 
 const COLOR_PARCHMENT := Color("#f6e7c8")
 const COLOR_PARCHMENT_ALT := Color("#edd6a8")
@@ -352,28 +351,28 @@ static func style_progress_bar(bar: ProgressBar, fill_color: Color) -> void:
 	bar.add_theme_stylebox_override("fill", make_progress_fill(fill_color))
 
 
-static func event_color(ev_type: String) -> Color:
-	return get_event_type_color(ev_type)
-
-
-static func event_label(ev_type: String, lang: String = "es") -> String:
-	return get_event_type_label(ev_type, lang)
-
-
 static func get_event_type_color(event_type: String) -> Color:
 	match event_type:
 		"war":
 			return Color("ef4444")
+		"war_repelled":
+			return Color("#ea580c")
 		"raid":
 			return Color("f97316")
+		"pillage":
+			return Color("#ea580c")
 		"pact":
 			return Color("10b981")
 		"betrayal":
 			return Color("be123c")
+		"vendetta":
+			return Color("#be123c")
 		"fortify", "defense":
 			return Color("#3b82f6")
-		"merge":
+		"merge", "walled_union", "absorption":
 			return Color("#eab308")
+		"colonize":
+			return Color("#0ea5e9")
 		"tribute":
 			return Color("#f59e0b")
 		"siege":
@@ -386,12 +385,18 @@ static func get_event_type_color(event_type: String) -> Color:
 			return Color("#2563eb")
 		"symbiosis":
 			return Color("#15803d")
-		"tragedy_of_commons":
+		"tragedy_of_commons", "famine":
 			return Color("#d97706")
 		"cultural_loss":
 			return Color("#c2410c")
 		"extinction":
 			return Color("#b91c1c")
+		"epidemic":
+			return Color("#65a30d")
+		"epidemic_spread":
+			return Color("#84cc16")
+		"epidemic_recovered":
+			return Color("#06b6d4")
 		"total_extinction":
 			return Color("#991b1b")
 		"single_survivor":
@@ -407,16 +412,26 @@ static func get_event_type_label(event_type: String, lang: String = "es") -> Str
 			return tr_text(lang, "Todos", "All")
 		"war":
 			return EvoI18n.t(lang, "event_war")
+		"war_repelled":
+			return tr_text(lang, "Guerra Repelida", "War Repelled")
 		"raid":
 			return EvoI18n.t(lang, "event_raid")
+		"pillage":
+			return tr_text(lang, "Saqueo Rural", "Rural Pillage")
 		"pact":
 			return EvoI18n.t(lang, "event_pact")
 		"betrayal":
 			return EvoI18n.t(lang, "event_betrayal")
+		"vendetta":
+			return tr_text(lang, "Vendetta", "Vendetta")
 		"fortify", "defense":
 			return EvoI18n.t(lang, "event_fortify")
 		"merge":
 			return EvoI18n.t(lang, "event_merge")
+		"absorption":
+			return tr_text(lang, "Absorción Urbana", "Urban Absorption")
+		"colonize":
+			return tr_text(lang, "Colonización", "Colonization")
 		"tribute":
 			return EvoI18n.t(lang, "event_tribute")
 		"siege":
@@ -431,10 +446,20 @@ static func get_event_type_label(event_type: String, lang: String = "es") -> Str
 			return tr_text(lang, "Simbiosis", "Symbiosis")
 		"tragedy_of_commons":
 			return tr_text(lang, "Tragedia de los Comunes", "Tragedy of the Commons")
+		"famine":
+			return tr_text(lang, "Hambruna", "Famine")
 		"cultural_loss":
 			return tr_text(lang, "Pérdida Cultural", "Cultural Loss")
 		"extinction":
 			return tr_text(lang, "Extinción", "Extinction")
+		"epidemic":
+			return tr_text(lang, "Epidemia", "Epidemic")
+		"epidemic_spread":
+			return tr_text(lang, "Contagio Epidémico", "Epidemic Contagion")
+		"epidemic_recovered":
+			return tr_text(lang, "Inmunidad Adquirida", "Immunity Acquired")
+		"walled_union":
+			return tr_text(lang, "Unión Amurallada", "Walled Union")
 		"total_extinction":
 			return EvoI18n.t(lang, "chronicle.type.total_extinction")
 		"single_survivor":
@@ -516,33 +541,6 @@ static func get_archetype_label(archetype: String, lang: String = "es") -> Strin
 	return archetype
 
 
-static func get_decision_icon_key(decision_id: String, state: EvoTypes.WorldState) -> String:
-	var arch := "forage"
-	if state != null and state.decisions_catalog.has(decision_id):
-		arch = (state.decisions_catalog[decision_id] as EvoTypes.DecisionDef).archetype
-	elif "cooperate" in decision_id:
-		arch = "cooperate"
-	elif "migrate" in decision_id or "migration" in decision_id:
-		arch = "migrate"
-	elif "exchange" in decision_id or "symbiosis" in decision_id:
-		arch = "exchange"
-	elif "dispute" in decision_id:
-		arch = "dispute"
-	elif "overexploit" in decision_id:
-		arch = "overexploit"
-	elif "innovate" in decision_id:
-		arch = "innovate"
-	elif "war" in decision_id:
-		arch = "war"
-	elif "raid" in decision_id:
-		arch = "raid"
-	elif "pact" in decision_id:
-		arch = "pact"
-	elif "betrayal" in decision_id:
-		arch = "betrayal"
-	return "icon_" + arch
-
-
 static func get_vital_status_label(status: String, lang: String = "es") -> String:
 	match status:
 		"thriving":
@@ -569,28 +567,13 @@ static func get_vital_status_heart(status: String) -> String:
 	return "💚"
 
 
-static func get_vital_status_color(status: String) -> Color:
-	match status:
-		"thriving":
-			return Color("#16a34a")
-		"stable":
-			return Color("#0284c7")
-		"struggling", "declining":
-			return Color("#d97706")
-		"starving":
-			return Color("#dc2626")
-	return COLOR_SEPIA
-
-
-static func get_village_tier_label(population: int, lang: String = "es", merged_count: int = 0) -> String:
-	if merged_count >= 1 and population >= 200:
-		return tr_text(lang, "V · Metrópolis", "V · Metropolis")
-	if population >= 150:
-		return tr_text(lang, "IV · Poblado", "IV · Settlement")
-	if population >= 85:
-		return tr_text(lang, "III · Aldea", "III · Village")
-	if population >= 35:
-		return tr_text(lang, "II · Caserío", "II · Hamlet")
+static func get_village_tier_label(population: int, lang: String = "es", merged_count: int = 0, defense_tier: int = 0, walled_union_id: String = "") -> String:
+	if population >= 380 or (population >= 280 and (defense_tier >= 2 or merged_count >= 1 or walled_union_id != "")):
+		return tr_text(lang, "IV · Metrópolis", "IV · Metropolis")
+	if population >= 240 or (population >= 170 and (defense_tier >= 1 or merged_count >= 1)):
+		return tr_text(lang, "III · Villa", "III · Town")
+	if population >= 120 or defense_tier == 1:
+		return tr_text(lang, "II · Aldea", "II · Village")
 	return tr_text(lang, "I · Campamento", "I · Camp")
 
 
@@ -623,8 +606,6 @@ static func get_pixel_icon(icon_key: String) -> ImageTexture:
 		"adjust_carrying_capacity": "tool_fertility",
 		"sea_level": "tool_sealevel",
 		"slot_sealevel": "tool_sealevel",
-		"season_wet": "season_wet",
-		"season_dry": "season_dry",
 		"tropical_forest": "tree_tropical",
 		"slot_tropical": "tree_tropical",
 		"savanna": "tree_savanna",
@@ -635,27 +616,19 @@ static func get_pixel_icon(icon_key: String) -> ImageTexture:
 		"slot_tundra": "tree_tundra",
 		"high_mountain": "rock_mountain",
 		"coastal_shallows": "coastal_reeds",
-		"status_thriving": "status_thriving",
-		"status_stable": "status_stable",
-		"status_struggling": "status_struggling",
 		"status_starving": "status_starving",
 		"icon_forage": "icon_forage",
-		"icon_overexploit": "icon_overexploit",
-		"icon_migrate": "icon_migrate",
 		"icon_cooperate": "icon_cooperate",
-		"icon_exchange": "icon_exchange",
 		"icon_dispute": "icon_dispute",
 		"icon_innovate": "icon_innovate",
-		"icon_custom": "icon_custom",
 		"icon_war": "icon_war",
 		"icon_raid": "icon_raid",
 		"icon_pact": "icon_pact",
-		"icon_betrayal": "icon_betrayal",
-		"icon_defense": "icon_defense",
-		"icon_fortify": "icon_defense",
+		"icon_vendetta": "icon_vendetta",
 		"icon_merge": "icon_merge",
 		"icon_tribute": "icon_tribute",
-		"icon_siege": "icon_siege"
+		"icon_epidemic": "icon_epidemic",
+		"icon_immune": "icon_immune"
 	}
 	if sprite_map.has(icon_key):
 		var tex_from_gen := EvoPixelArtGen.get_texture(str(sprite_map[icon_key]))

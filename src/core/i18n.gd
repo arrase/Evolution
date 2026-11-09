@@ -40,10 +40,9 @@ const STRINGS: Dictionary = {
 		"status.struggling": "En apuros",
 		"status.starving": "En hambruna",
 		"tier.1": "Campamento",
-		"tier.2": "Caserío",
-		"tier.3": "Aldea Consolidada",
-		"tier.4": "Poblado Complejo",
-		"tier.5": "Metrópolis Unificada",
+		"tier.2": "Aldea",
+		"tier.3": "Villa",
+		"tier.4": "Metrópolis",
 		"tool.inspect": "Observar",
 		"tool.set_biome": "Clima / Bioma",
 		"tool.adjust_altitude": "Relieve / Altitud",
@@ -60,9 +59,11 @@ const STRINGS: Dictionary = {
 		"tool.chronicle": "Crónica",
 		"tool.phylo_tree": "Linajes",
 		"tool.catalog_lab": "Laboratorio",
-		"lens.biome": "Bioma",
-		"lens.food": "Alimento (R)",
-		"lens.health": "Salud (K/Kmax)",
+		"lens.biome": "🌿 Bioma",
+		"lens.food": "🌾 Alimento",
+		"lens.health": "✚ Salud",
+		"lens.diplomacy": "🤝 Diplom.",
+		"lens.territory": "🚩 Territ.",
 		"panel.populations": "Aldeas Activas",
 		"panel.no_populations": "Todas las poblaciones se han extinguido.",
 		"panel.population": "Población",
@@ -127,20 +128,38 @@ const STRINGS: Dictionary = {
 		"trait.cul-interdeme-barter.desc": "Protocolos codificados de diplomacia intergrupal e intercambio recíproco que facilitan la cohabitación pacífica, bonos calóricos y difusión cultural.",
 		"trait.cul-warrior-expansion.name": "Tradición Guerrera / Expansionista",
 		"trait.cul-warrior-expansion.desc": "Organización marcial y doctrinas de expansión territorial que maximizan el dominio competitivo en disputas a alto coste energético y ecológico.",
-		"decision.dec-conservative-forage.name": "Forrajeo Conservador",
-		"decision.dec-conservative-forage.desc": "Recolección oportunista de bajo riesgo y eficiente dentro de los límites de capacidad de carga local, preservando la regeneración del hábitat.",
-		"decision.dec-intensive-overexploit.name": "Sobreexplotación Intensiva",
-		"decision.dec-intensive-overexploit.desc": "Extracción agresiva de alto rendimiento que maximiza la ingesta calórica inmediata a costa de una severa degradación de la capacidad de carga K.",
-		"decision.dec-selective-migration.name": "Migración Selectiva",
-		"decision.dec-selective-migration.desc": "Dispersión espacial dirigida hacia hexágonos adyacentes transitables con mejor ratio de recursos por habitante.",
-		"decision.dec-cooperate-store.name": "Cooperación y Almacenamiento",
-		"decision.dec-cooperate-store.desc": "Puesta en común de recursos, conservación de alimentos y defensa mutua que amortiguan la escasez estacional y refuerzan la cohesión.",
-		"decision.dec-exchange-symbiosis.name": "Intercambio / Simbiosis",
-		"decision.dec-exchange-symbiosis.desc": "Intercambio recíproco de recursos y transmisión cultural horizontal con demes cohabitantes o vecinos, generando excedentes energéticos.",
-		"decision.dec-territorial-dispute.name": "Disputa Territorial",
-		"decision.dec-territorial-dispute.desc": "Estrategia Halcón agonística de monopolización de recursos frente a demes rivales en hexágonos compartidos, con alto riesgo metabólico y demográfico.",
-		"decision.dec-explore-innovate.name": "Exploración / Innovación",
-		"decision.dec-explore-innovate.desc": "Experimentación cognitiva de alto coste y prototipado de herramientas que sacrifica rendimiento inmediato para acumular innovación cultural.",
+		"decision.forage.name": "Forrajeo",
+		"decision.forage.desc": "Recolección cuidadosa en el propio hexágono: +20% de cosecha sin dañar el hábitat.",
+		"decision.intensify.name": "Sobreexplotar",
+		"decision.intensify.desc": "Cosecha agresiva (+55%) que degrada permanentemente la capacidad de carga del hexágono.",
+		"decision.fortify.name": "Fortificar",
+		"decision.fortify.desc": "Invierte reservas y recursos del hexágono en subir un nivel de muralla.",
+		"decision.innovate.name": "Innovar",
+		"decision.innovate.desc": "Experimentación cultural que acumula progreso hacia una nueva tradición.",
+		"decision.settle.name": "Colonizar",
+		"decision.settle.desc": "Envía colonos y alimento a fundar un campamento en un hexágono vacío adyacente.",
+		"decision.trade.name": "Comerciar",
+		"decision.trade.desc": "Intercambio con un vecino: beneficio para ambos si es recíproco.",
+		"decision.aid.name": "Ayudar",
+		"decision.aid.desc": "Regala alimento a un vecino; aumenta su confianza y tu reputación.",
+		"decision.offer_pact.name": "Proponer pacto",
+		"decision.offer_pact.desc": "Ofrece una alianza; el vecino decide si la acepta el turno siguiente.",
+		"decision.accept_pact.name": "Aceptar pacto",
+		"decision.accept_pact.desc": "Acepta la alianza propuesta: bonificación de cosecha y defensa mutua.",
+		"decision.demand_tribute.name": "Exigir tributo",
+		"decision.demand_tribute.desc": "Exige alimento a un vecino más débil bajo amenaza.",
+		"decision.pay_tribute.name": "Pagar tributo",
+		"decision.pay_tribute.desc": "Paga el tributo exigido a cambio de una tregua.",
+		"decision.raid.name": "Saquear",
+		"decision.raid.desc": "Incursión para robar reservas y cosechas de un vecino no aliado.",
+		"decision.betray.name": "Traicionar",
+		"decision.betray.desc": "Rompe una alianza con un ataque por sorpresa contra el aliado.",
+		"decision.conquer.name": "Conquistar",
+		"decision.conquer.desc": "Envía un ejército a tomar el hexágono del vecino.",
+		"decision.unite.name": "Proponer unión",
+		"decision.unite.desc": "Propone a un aliado o pariente fusionar ambos asentamientos.",
+		"decision.accept_union.name": "Aceptar unión",
+		"decision.accept_union.desc": "Acepta la unión propuesta (sinecismo o unión amurallada).",
 		"chronicle.type.baldwin_trait": "Asimilación de Baldwin",
 		"chronicle.type.cultural_innovation": "Innovación Cultural",
 		"chronicle.type.allopatric_speciation": "Especiación Alopátrica",
@@ -159,6 +178,10 @@ const STRINGS: Dictionary = {
 		"chronicle.type.merge": "Unión de Poblaciones",
 		"chronicle.type.tribute": "Pago de Tributo",
 		"chronicle.type.siege": "Asedio a Fortaleza",
+		"chronicle.type.epidemic": "Epidemia Urbana",
+		"chronicle.type.epidemic_spread": "Contagio Epidémico",
+		"chronicle.type.epidemic_recovered": "Inmunidad Post-Epidemia",
+		"chronicle.type.famine": "Hambruna Severa",
 		"filter_war": "Guerra",
 		"filter_raid": "Saqueo",
 		"filter_pact": "Pactos",
@@ -210,16 +233,31 @@ const STRINGS: Dictionary = {
 		"chronicle_tribute_desc": "{victim} entregó {loot} reservas como tributo a {raider} en ({hex}), evitando bajas y sellando una tregua.",
 		"chronicle_siege_title": "Asedio Repelido en ({hex})",
 		"chronicle_siege_desc": "Las fortificaciones de {defender} en ({hex}) resistieron el asedio de {attacker}, causando {casualties} bajas a los asaltantes.",
+		"chronicle_epidemic_title": "Epidemia Urbana en ({hex})",
+		"chronicle_epidemic_desc": "El hacinamiento y baja salubridad en ({hex}) desataron una epidemia en {deme}, causando {casualties} bajas.",
+		"chronicle_epidemic_spread_title": "Contagio Epidémico en ({hex})",
+		"chronicle_epidemic_spread_desc": "El contacto con {source} propagó la epidemia a {deme} en ({hex}), causando {casualties} bajas.",
+		"chronicle_epidemic_recovered_title": "Fin de Epidemia en ({hex})",
+		"chronicle_epidemic_recovered_desc": "{deme} superó el brote epidémico en ({hex}) y adquirió inmunidad temporal.",
+		"chronicle_famine_title": "Hambruna en ({hex})",
+		"chronicle_famine_desc": "El déficit calórico severo provocó una hambruna en {deme} ({hex}), con una pérdida de {casualties} habitantes.",
+		"chronicle_walled_union_title": "Unión Amurallada en ({hex})",
+		"chronicle_walled_union_desc": "{deme_a} y {deme_b} unificaron sus murallas perimetrales en una ciudad multi-hexágono ({hex}).",
 		"strategy.strat-cooperation.name": "Alianza Cooperativa",
 		"strategy.strat-cooperation.desc": "Fomenta la cohesión social, la conservación comunal del hábitat y el almacenamiento.",
+		"strategy.strat-cooperation.doctrine": "Alianza Cooperativa: valoras la solidaridad, cumples tu palabra y proteges a tus vecinos; recuerdas quién te ayudó.",
 		"strategy.strat-expansion.name": "Pioneros Expansionistas",
 		"strategy.strat-expansion.desc": "Reproducción rápida, alta movilidad y tolerancia térmica para colonizar nuevos territorios.",
+		"strategy.strat-expansion.doctrine": "Pioneros Expansionistas: valoras la tierra nueva y las familias numerosas; colonizas cada valle fértil.",
 		"strategy.strat-trade.name": "Liga Mercantil",
 		"strategy.strat-trade.desc": "Impulsa el trueque inter-tribal, la simbiosis comercial y la difusión cultural.",
+		"strategy.strat-trade.doctrine": "Liga Mercantil: valoras los buenos tratos, la confianza y la reputación; la riqueza fluye hacia quien comercia.",
 		"strategy.strat-war.name": "Horda Conquistadora",
 		"strategy.strat-war.desc": "Expansión marcial agresiva y extracción intensiva para dominar territorios rivales.",
+		"strategy.strat-war.doctrine": "Horda Conquistadora: honras la fuerza; la conquista, el saqueo y el tributo dan respeto; la debilidad invita al ataque.",
 		"strategy.strat-innovation.name": "Tecnócratas Innovadores",
 		"strategy.strat-innovation.desc": "Alta encefalización, procesado térmico y herramientas especializadas de extracción.",
+		"strategy.strat-innovation.doctrine": "Tecnócratas Innovadores: valoras el conocimiento y las herramientas; inviertes en inventar y superas a tus rivales con ingenio.",
 		"lab_tab_strat": "🛡️ Estrategias",
 		"lab_new_strat": "+ Nueva Estrategia",
 		"lab_save_strat": "💾 Guardar Estrategia",
@@ -233,96 +271,7 @@ const STRINGS: Dictionary = {
 		"hud_matchup_reset": "🔄",
 		"hud_matchup_reset_tip": "Reiniciar duelo en Generación 0 con las estrategias seleccionadas",
 		"insp_strategy": "Estrategia",
-		"legend_strategies": "Duelo de Estrategias",
-		"strategies": {
-			"strat-cooperation": {
-				"name": "Alianza Cooperativa",
-				"desc": "Fomenta la cohesión social, la conservación comunal del hábitat y el almacenamiento."
-			},
-			"strat-expansion": {
-				"name": "Pioneros Expansionistas",
-				"desc": "Reproducción rápida, alta movilidad y tolerancia térmica para colonizar nuevos territorios."
-			},
-			"strat-trade": {
-				"name": "Liga Mercantil",
-				"desc": "Impulsa el trueque inter-tribal, la simbiosis comercial y la difusión cultural."
-			},
-			"strat-war": {
-				"name": "Horda Conquistadora",
-				"desc": "Expansión marcial agresiva y extracción intensiva para dominar territorios rivales."
-			},
-			"strat-innovation": {
-				"name": "Tecnócratas Innovadores",
-				"desc": "Alta encefalización, procesado térmico y herramientas especializadas de extracción."
-			}
-		},
-		"ui": {
-			"lab_tab_strat": "🛡️ Estrategias",
-			"lab_new_strat": "+ Nueva Estrategia",
-			"lab_save_strat": "💾 Guardar Estrategia",
-			"lab_strat_icon": "Emblema",
-			"lab_strat_color": "Color",
-			"lab_strat_traits": "Rasgos de la Estrategia",
-			"lab_strat_vector": "Huella Biofísica Combinada",
-			"lab_use_strat_a": "Usar como Estrategia A",
-			"lab_use_strat_b": "Usar como Estrategia B",
-			"hud_matchup_vs": "⚔️",
-			"hud_matchup_reset": "🔄",
-			"hud_matchup_reset_tip": "Reiniciar duelo en Generación 0 con las estrategias seleccionadas",
-			"insp_strategy": "Estrategia",
-			"legend_strategies": "Duelo de Estrategias",
-			"filter_war": "Guerra",
-			"filter_raid": "Saqueo",
-			"filter_pact": "Pactos",
-			"filter_betrayal": "Traición",
-			"filter_fortify": "Defensa",
-			"filter_merge": "Unión",
-			"filter_tribute": "Tributo",
-			"filter_siege": "Asedio",
-			"event_war": "Guerra de Conquista",
-			"event_raid": "Incursión de Saqueo",
-			"event_pact": "Pacto Formal",
-			"event_betrayal": "Traición de Pacto",
-			"event_fortify": "Fortificación Defensiva",
-			"event_merge": "Unión de Poblaciones",
-			"event_tribute": "Pago de Tributo",
-			"event_siege": "Asedio a Fortaleza",
-			"inspector_pacts": "Pactos y Alianzas",
-			"inspector_no_pacts": "Sin pactos activos",
-			"inspector_pact_with": "Pacto activo con {partner}",
-			"inspector_defense_label": "Defensa",
-			"inspector_defense_0": "Sin fortificar",
-			"inspector_defense_1": "Nv.1 Empalizada (+45%)",
-			"inspector_defense_2": "Nv.2 Muralla (+95%)",
-			"inspector_defense_3": "Nv.3 Castillo (+155%)",
-			"inspector_merged_city": "Ciudad Unificada ({count} pueblos)",
-			"inspector_vendetta_with": "Rencor / Vendetta contra {partner}",
-			"legend_flow_war": "Guerra / Invasión",
-			"legend_flow_raid": "Saqueo / Incursión",
-			"legend_flow_pact": "Pacto / Alianza",
-			"legend_flow_betrayal": "Traición",
-			"legend_flow_tribute": "Tributo / Tregua",
-			"legend_flow_merge": "Unión en Ciudad",
-			"legend_flow_siege": "Asedio Activo",
-			"chronicle_war_victory_title": "Conquista Militar en ({hex})",
-			"chronicle_war_victory_desc": "{attacker} derrotó a {defender} en el hexágono ({hex}), causando {casualties} bajas y capturando {loot} reservas energéticas.",
-			"chronicle_war_repelled_title": "Invasión Repelida en ({hex})",
-			"chronicle_war_repelled_desc": "{defender} repelió la ofensiva de {attacker} en ({hex}), infligiendo {casualties} bajas a los atacantes.",
-			"chronicle_raid_title": "Incursión de Saqueo en ({hex})",
-			"chronicle_raid_desc": "{raider} saqueó a {victim} en ({hex}), arrebatando {loot} unidades de reservas calóricas.",
-			"chronicle_pact_title": "Pacto de Alianza en ({hex})",
-			"chronicle_pact_desc": "{deme_a} y {deme_b} consolidaron un pacto formal de cooperación e intercambio mutuo en ({hex}).",
-			"chronicle_betrayal_title": "Traición de Pacto en ({hex})",
-			"chronicle_betrayal_desc": "{betrayer} rompió su alianza y atacó por sorpresa a {victim} en ({hex}), saqueando {loot} reservas energéticas.",
-			"chronicle_fortify_title": "Fortificación Erigida en ({hex})",
-			"chronicle_fortify_desc": "{deme} invirtió excedentes para erigir {tier_name} en ({hex}), reforzando su defensa territorial.",
-			"chronicle_merge_title": "Unión de Pueblos en ({hex})",
-			"chronicle_merge_desc": "{deme_a} y {deme_b} unieron sus poblaciones y defensas en una sola ciudad en ({hex}) (pob. {pop}).",
-			"chronicle_tribute_title": "Tributo de Paz en ({hex})",
-			"chronicle_tribute_desc": "{victim} entregó {loot} reservas como tributo a {raider} en ({hex}), evitando bajas y sellando una tregua.",
-			"chronicle_siege_title": "Asedio Repelido en ({hex})",
-			"chronicle_siege_desc": "Las fortificaciones de {defender} en ({hex}) resistieron el asedio de {attacker}, causando {casualties} bajas a los asaltantes."
-		}
+		"legend_strategies": "Duelo de Estrategias"
 	},
 	"en": {
 		"app.title": "Evolution — Population Evolutionary Simulator",
@@ -362,10 +311,9 @@ const STRINGS: Dictionary = {
 		"status.struggling": "Struggling",
 		"status.starving": "Starving",
 		"tier.1": "Camp",
-		"tier.2": "Hamlet",
-		"tier.3": "Consolidated Village",
-		"tier.4": "Complex Settlement",
-		"tier.5": "Unified Metropolis",
+		"tier.2": "Village",
+		"tier.3": "Town",
+		"tier.4": "Metropolis",
 		"tool.inspect": "Observe",
 		"tool.set_biome": "Climate / Biome",
 		"tool.adjust_altitude": "Terrain / Altitude",
@@ -382,9 +330,11 @@ const STRINGS: Dictionary = {
 		"tool.chronicle": "Chronicle",
 		"tool.phylo_tree": "Lineages",
 		"tool.catalog_lab": "Catalog Lab",
-		"lens.biome": "Biome",
-		"lens.food": "Food (R)",
-		"lens.health": "Health (K/Kmax)",
+		"lens.biome": "🌿 Biome",
+		"lens.food": "🌾 Food",
+		"lens.health": "✚ Health",
+		"lens.diplomacy": "🤝 Diplom.",
+		"lens.territory": "🚩 Territ.",
 		"panel.populations": "Active Villages",
 		"panel.no_populations": "All populations are extinct.",
 		"panel.population": "Population",
@@ -449,20 +399,38 @@ const STRINGS: Dictionary = {
 		"trait.cul-interdeme-barter.desc": "Codified protocols of inter-group diplomacy and reciprocal exchange that facilitate peaceful cohabitation, mutual caloric bonuses, and cultural diffusion.",
 		"trait.cul-warrior-expansion.name": "Warrior / Expansionist Tradition",
 		"trait.cul-warrior-expansion.desc": "Militarized organization and territorial expansion norms that maximize competitive dominance in inter-deme disputes at high energetic and ecological cost.",
-		"decision.dec-conservative-forage.name": "Conservative Foraging",
-		"decision.dec-conservative-forage.desc": "Low-risk, energy-efficient opportunistic gathering within local carrying capacity limits, preserving habitat regeneration.",
-		"decision.dec-intensive-overexploit.name": "Intensive Overexploitation",
-		"decision.dec-intensive-overexploit.desc": "Aggressive, high-yield biomass extraction that maximizes immediate caloric intake at the expense of severe habitat carrying capacity degradation.",
-		"decision.dec-selective-migration.name": "Selective Migration",
-		"decision.dec-selective-migration.desc": "Directed spatial dispersal toward adjacent passable hexes with superior resource-to-population ratios.",
-		"decision.dec-cooperate-store.name": "Cooperation & Storage",
-		"decision.dec-cooperate-store.desc": "Collective resource pooling, food preservation, and mutual defense that buffer seasonal scarcity and strengthen intra-deme cohesion.",
-		"decision.dec-exchange-symbiosis.name": "Exchange / Symbiosis",
-		"decision.dec-exchange-symbiosis.desc": "Reciprocal resource exchange and horizontal cultural transmission with cohabiting or neighboring demes, generating non-zero-sum energetic surpluses.",
-		"decision.dec-territorial-dispute.name": "Territorial Dispute",
-		"decision.dec-territorial-dispute.desc": "Agonistic Hawk-strategy resource monopolization against rival demes in shared hexes, seizing competitor biomass shares at high metabolic and demographic risk.",
-		"decision.dec-explore-innovate.name": "Exploration / Innovation",
-		"decision.dec-explore-innovate.desc": "High-cost cognitive experimentation and tool prototyping that sacrifices immediate foraging yield to accumulate cultural innovation.",
+		"decision.forage.name": "Forage",
+		"decision.forage.desc": "Careful gathering on the home hex: +20% harvest without harming the habitat.",
+		"decision.intensify.name": "Overexploit",
+		"decision.intensify.desc": "Aggressive harvest (+55%) that permanently degrades the hex carrying capacity.",
+		"decision.fortify.name": "Fortify",
+		"decision.fortify.desc": "Invest reserves and hex resources to raise the wall level by one.",
+		"decision.innovate.name": "Innovate",
+		"decision.innovate.desc": "Cultural experimentation that accumulates progress toward a new tradition.",
+		"decision.settle.name": "Settle",
+		"decision.settle.desc": "Send settlers and food to found a camp on an adjacent empty hex.",
+		"decision.trade.name": "Trade",
+		"decision.trade.desc": "Exchange with a neighbor: both gain if it is reciprocated.",
+		"decision.aid.name": "Aid",
+		"decision.aid.desc": "Give food to a neighbor; raises its trust and your reputation.",
+		"decision.offer_pact.name": "Offer pact",
+		"decision.offer_pact.desc": "Offer an alliance; the neighbor decides next turn whether to accept.",
+		"decision.accept_pact.name": "Accept pact",
+		"decision.accept_pact.desc": "Accept the proposed alliance: harvest bonus and mutual defense.",
+		"decision.demand_tribute.name": "Demand tribute",
+		"decision.demand_tribute.desc": "Demand food from a weaker neighbor under threat.",
+		"decision.pay_tribute.name": "Pay tribute",
+		"decision.pay_tribute.desc": "Pay the demanded tribute in exchange for a truce.",
+		"decision.raid.name": "Raid",
+		"decision.raid.desc": "Raid a non-allied neighbor to steal reserves and crops.",
+		"decision.betray.name": "Betray",
+		"decision.betray.desc": "Break an alliance with a surprise attack on the ally.",
+		"decision.conquer.name": "Conquer",
+		"decision.conquer.desc": "Send an army to seize the neighbor's hex.",
+		"decision.unite.name": "Propose union",
+		"decision.unite.desc": "Propose to an ally or kin to merge both settlements.",
+		"decision.accept_union.name": "Accept union",
+		"decision.accept_union.desc": "Accept the proposed union (synoecism or walled union).",
 		"chronicle.type.baldwin_trait": "Baldwin Assimilation",
 		"chronicle.type.cultural_innovation": "Cultural Innovation",
 		"chronicle.type.allopatric_speciation": "Allopatric Speciation",
@@ -481,6 +449,10 @@ const STRINGS: Dictionary = {
 		"chronicle.type.merge": "Settlement Unification",
 		"chronicle.type.tribute": "Tribute Payment",
 		"chronicle.type.siege": "Fortress Siege",
+		"chronicle.type.epidemic": "Urban Epidemic",
+		"chronicle.type.epidemic_spread": "Epidemic Contagion",
+		"chronicle.type.epidemic_recovered": "Epidemic Recovery",
+		"chronicle.type.famine": "Severe Famine",
 		"filter_war": "War",
 		"filter_raid": "Raid",
 		"filter_pact": "Pacts",
@@ -532,16 +504,31 @@ const STRINGS: Dictionary = {
 		"chronicle_tribute_desc": "{victim} paid {loot} reserves as tribute to {raider} at ({hex}), avoiding casualties and sealing a truce.",
 		"chronicle_siege_title": "Siege Repelled at ({hex})",
 		"chronicle_siege_desc": "The fortifications of {defender} at ({hex}) withstood the siege by {attacker}, inflicting {casualties} casualties on the assailants.",
+		"chronicle_epidemic_title": "Urban Epidemic at ({hex})",
+		"chronicle_epidemic_desc": "Crowding and poor sanitation at ({hex}) triggered an epidemic in {deme}, causing {casualties} casualties.",
+		"chronicle_epidemic_spread_title": "Epidemic Contagion at ({hex})",
+		"chronicle_epidemic_spread_desc": "Contact with {source} spread the epidemic to {deme} at ({hex}), causing {casualties} casualties.",
+		"chronicle_epidemic_recovered_title": "Epidemic Subsided at ({hex})",
+		"chronicle_epidemic_recovered_desc": "{deme} overcame the epidemic outbreak at ({hex}) and acquired temporary immunity.",
+		"chronicle_famine_title": "Famine at ({hex})",
+		"chronicle_famine_desc": "Severe caloric deficit triggered famine in {deme} ({hex}), causing a loss of {casualties} inhabitants.",
+		"chronicle_walled_union_title": "Walled Union at ({hex})",
+		"chronicle_walled_union_desc": "{deme_a} and {deme_b} joined their perimeter walls into a multi-hex city ({hex}).",
 		"strategy.strat-cooperation.name": "Cooperative Alliance",
 		"strategy.strat-cooperation.desc": "Fosters social cohesion, communal habitat conservation, and resource buffering.",
+		"strategy.strat-cooperation.doctrine": "Cooperative Alliance: you value solidarity, keep your word and protect your neighbors; you remember who helped you.",
 		"strategy.strat-expansion.name": "Expansionist Pioneers",
 		"strategy.strat-expansion.desc": "Fast reproduction, high mobility, and thermal tolerance to colonize new territories.",
+		"strategy.strat-expansion.doctrine": "Expansionist Pioneers: you prize new land and large families; you settle every fertile valley.",
 		"strategy.strat-trade.name": "Merchant League",
 		"strategy.strat-trade.desc": "Drives inter-village barter, commercial symbiosis, and cultural diffusion.",
+		"strategy.strat-trade.doctrine": "Merchant League: you value profitable deals, trust and reputation; wealth flows to those who trade.",
 		"strategy.strat-war.name": "Conquering Horde",
 		"strategy.strat-war.desc": "Aggressive martial expansion and intensive extraction to dominate rival territories.",
+		"strategy.strat-war.doctrine": "Conquering Horde: you honor strength; conquest, plunder and tribute earn respect; weakness invites attack.",
 		"strategy.strat-innovation.name": "Innovator Technocrats",
 		"strategy.strat-innovation.desc": "High encephalization, thermal processing, and specialized extraction tools.",
+		"strategy.strat-innovation.doctrine": "Innovator Technocrats: you value knowledge and tools; you invest in invention and outthink your rivals.",
 		"lab_tab_strat": "🛡️ Strategies",
 		"lab_new_strat": "+ New Strategy",
 		"lab_save_strat": "💾 Save Strategy",
@@ -555,140 +542,31 @@ const STRINGS: Dictionary = {
 		"hud_matchup_reset": "🔄",
 		"hud_matchup_reset_tip": "Reset duel at Generation 0 with the selected strategies",
 		"insp_strategy": "Strategy",
-		"legend_strategies": "Strategy Duel",
-		"strategies": {
-			"strat-cooperation": {
-				"name": "Cooperative Alliance",
-				"desc": "Fosters social cohesion, communal habitat conservation, and resource buffering."
-			},
-			"strat-expansion": {
-				"name": "Expansionist Pioneers",
-				"desc": "Fast reproduction, high mobility, and thermal tolerance to colonize new territories."
-			},
-			"strat-trade": {
-				"name": "Merchant League",
-				"desc": "Drives inter-village barter, commercial symbiosis, and cultural diffusion."
-			},
-			"strat-war": {
-				"name": "Conquering Horde",
-				"desc": "Aggressive martial expansion and intensive extraction to dominate rival territories."
-			},
-			"strat-innovation": {
-				"name": "Innovator Technocrats",
-				"desc": "High encephalization, thermal processing, and specialized extraction tools."
-			}
-		},
-		"ui": {
-			"lab_tab_strat": "🛡️ Strategies",
-			"lab_new_strat": "+ New Strategy",
-			"lab_save_strat": "💾 Save Strategy",
-			"lab_strat_icon": "Emblem",
-			"lab_strat_color": "Color",
-			"lab_strat_traits": "Strategy Traits",
-			"lab_strat_vector": "Combined Biophysical Footprint",
-			"lab_use_strat_a": "Set as Strategy A",
-			"lab_use_strat_b": "Set as Strategy B",
-			"hud_matchup_vs": "⚔️",
-			"hud_matchup_reset": "🔄",
-			"hud_matchup_reset_tip": "Reset duel at Generation 0 with the selected strategies",
-			"insp_strategy": "Strategy",
-			"legend_strategies": "Strategy Duel",
-			"filter_war": "War",
-			"filter_raid": "Raid",
-			"filter_pact": "Pacts",
-			"filter_betrayal": "Betrayal",
-			"filter_fortify": "Defense",
-			"filter_merge": "Union",
-			"filter_tribute": "Tribute",
-			"filter_siege": "Siege",
-			"event_war": "War of Conquest",
-			"event_raid": "Plunder Raid",
-			"event_pact": "Formal Pact",
-			"event_betrayal": "Pact Betrayal",
-			"event_fortify": "Defensive Fortification",
-			"event_merge": "Settlement Unification",
-			"event_tribute": "Tribute Payment",
-			"event_siege": "Fortress Siege",
-			"inspector_pacts": "Pacts & Alliances",
-			"inspector_no_pacts": "No active pacts",
-			"inspector_pact_with": "Active pact with {partner}",
-			"inspector_defense_label": "Defense",
-			"inspector_defense_0": "Unfortified",
-			"inspector_defense_1": "Lv.1 Palisade (+45%)",
-			"inspector_defense_2": "Lv.2 Stone Wall (+95%)",
-			"inspector_defense_3": "Lv.3 Castle (+155%)",
-			"inspector_merged_city": "Unified City ({count} peoples)",
-			"inspector_vendetta_with": "Grudge / Vendetta against {partner}",
-			"legend_flow_war": "War / Invasion",
-			"legend_flow_raid": "Raid / Plunder",
-			"legend_flow_pact": "Pact / Alliance",
-			"legend_flow_betrayal": "Betrayal",
-			"legend_flow_tribute": "Tribute / Truce",
-			"legend_flow_merge": "City Unification",
-			"legend_flow_siege": "Active Siege",
-			"chronicle_war_victory_title": "Military Conquest at ({hex})",
-			"chronicle_war_victory_desc": "{attacker} defeated {defender} at hex ({hex}), inflicting {casualties} casualties and seizing {loot} energy reserves.",
-			"chronicle_war_repelled_title": "Invasion Repelled at ({hex})",
-			"chronicle_war_repelled_desc": "{defender} repelled the assault by {attacker} at ({hex}), inflicting {casualties} casualties on the attackers.",
-			"chronicle_raid_title": "Plunder Raid at ({hex})",
-			"chronicle_raid_desc": "{raider} raided {victim} at ({hex}), plundering {loot} caloric reserve units.",
-			"chronicle_pact_title": "Alliance Pact at ({hex})",
-			"chronicle_pact_desc": "{deme_a} and {deme_b} forged a formal pact of mutual cooperation and exchange at ({hex}).",
-			"chronicle_betrayal_title": "Pact Betrayal at ({hex})",
-			"chronicle_betrayal_desc": "{betrayer} broke their alliance and ambushed {victim} at ({hex}), plundering {loot} energy reserves.",
-			"chronicle_fortify_title": "Fortification Built at ({hex})",
-			"chronicle_fortify_desc": "{deme} invested surplus resources to build {tier_name} at ({hex}), reinforcing its territorial defense.",
-			"chronicle_merge_title": "Unification of Peoples at ({hex})",
-			"chronicle_merge_desc": "{deme_a} and {deme_b} united their populations and defenses into a single city at ({hex}) (pop. {pop}).",
-			"chronicle_tribute_title": "Peace Tribute at ({hex})",
-			"chronicle_tribute_desc": "{victim} paid {loot} reserves as tribute to {raider} at ({hex}), avoiding casualties and sealing a truce.",
-			"chronicle_siege_title": "Siege Repelled at ({hex})",
-			"chronicle_siege_desc": "The fortifications of {defender} at ({hex}) withstood the siege by {attacker}, inflicting {casualties} casualties on the assailants."
-		}
+		"legend_strategies": "Strategy Duel"
 	}
 }
-
-const TRANSLATIONS: Dictionary = STRINGS
 
 
 static func resolve_lang(lang: String) -> String:
 	return "en" if lang == "en" else "es"
 
 
-static func t(lang: String, key: String = "es", params: Dictionary = {}) -> String:
-	var actual_lang := lang
-	var actual_key := key
-	if lang not in ["es", "en"] and key in ["es", "en"]:
-		actual_lang = key
-		actual_key = lang
-	var res := actual_key
-	var table: Dictionary = STRINGS[resolve_lang(actual_lang)]
-	if table.has(actual_key) and table[actual_key] is String:
-		res = str(table[actual_key])
-	elif (table["ui"] as Dictionary).has(actual_key):
-		res = str((table["ui"] as Dictionary)[actual_key])
-	else:
-		var es_table: Dictionary = STRINGS["es"]
-		if es_table.has(actual_key) and es_table[actual_key] is String:
-			res = str(es_table[actual_key])
-		elif (es_table["ui"] as Dictionary).has(actual_key):
-			res = str((es_table["ui"] as Dictionary)[actual_key])
+static func t(lang: String, key: String, params: Dictionary = {}) -> String:
+	var table: Dictionary = STRINGS[resolve_lang(lang)]
+	var res := key
+	if table.has(key):
+		res = str(table[key])
+	elif STRINGS["es"].has(key):
+		res = str(STRINGS["es"][key])
 	return res.format(params) if not params.is_empty() else res
 
 
-static func ui(key: String, lang: String = "es", params: Dictionary = {}) -> String:
-	return t(lang, key, params)
-
-
 static func strategy_text(strategy_id: String, field: String, fallback: String = "", lang: String = "es") -> String:
-	var l := resolve_lang(lang)
-	var strategies: Dictionary = STRINGS[l]["strategies"]
-	if strategies.has(strategy_id):
-		var entry: Dictionary = strategies[strategy_id]
-		if entry.has(field):
-			return str(entry[field])
-		if field == "description" and entry.has("desc"):
-			return str(entry["desc"])
+	var key_suffix := "desc" if field == "description" else field
+	var key := "strategy.%s.%s" % [strategy_id, key_suffix]
+	var table: Dictionary = STRINGS[resolve_lang(lang)]
+	if table.has(key):
+		return str(table[key])
 	return fallback
 
 
@@ -704,22 +582,10 @@ static func strategy_description(lang: String, strat_def: EvoTypes.StrategyDef) 
 	return strategy_text(strat_def.id, "desc", strat_def.description, lang)
 
 
-static func trait_text(trait_id: String, field: String, fallback: String = "", lang: String = "es") -> String:
-	var f := "desc" if field == "description" else field
-	var key := "trait." + trait_id + "." + f
-	var table: Dictionary = STRINGS[resolve_lang(lang)]
-	if table.has(key):
-		return str(table[key])
-	return fallback
-
-
-static func decision_text(decision_id: String, field: String, fallback: String = "", lang: String = "es") -> String:
-	var f := "desc" if field == "description" else field
-	var key := "decision." + decision_id + "." + f
-	var table: Dictionary = STRINGS[resolve_lang(lang)]
-	if table.has(key):
-		return str(table[key])
-	return fallback
+static func strategy_doctrine(lang: String, strat_def: EvoTypes.StrategyDef) -> String:
+	if strat_def is Object and strat_def.get("origin") != null and str(strat_def.get("origin")) not in ["base", "catalog"]:
+		return str(strat_def.doctrine)
+	return strategy_text(strat_def.id, "doctrine", strat_def.doctrine, lang)
 
 
 static func localize_world_state(state: EvoTypes.WorldState, lang: String = "es") -> void:
@@ -753,7 +619,6 @@ static func localize_world_state(state: EvoTypes.WorldState, lang: String = "es"
 		"deme-rift-west": "Western Forest Hominids" if is_en else "Homínidos del Bosque Occidental",
 		"deme-rift-east": "Eastern Savanna Hominids" if is_en else "Homínidos de la Sabana Oriental",
 		"deme-darwin-founder": "Western Island Founders" if is_en else "Fundadores Insulares del Oeste",
-		"deme-darwin-west": "Western Island Founders" if is_en else "Fundadores Insulares del Oeste",
 		"deme-darwin-rival": "Eastern Island Rivals" if is_en else "Rivales Insulares del Este",
 		"deme-island-1": "Northern Quarry Clan" if is_en else "Clan de la Cantera Norte",
 		"deme-island-2": "Southern Timber Clan" if is_en else "Clan Maderero del Sur"
@@ -771,7 +636,7 @@ static func localize_world_state(state: EvoTypes.WorldState, lang: String = "es"
 		if base_deme_names.has(did):
 			d.name = str(base_deme_names[did])
 		elif base_lineage_names.has(d.lineage_id):
-			var root_id := EvoDemographyMigration._strip_migration_suffix(str(did))
+			var root_id := EvoSettlementPhase.strip_migration_suffix(str(did))
 			if base_deme_names.has(root_id):
 				if str(did).contains("-w"):
 					d.name = "%s · %s (%s)" % [base_deme_names[root_id], "Warband" if is_en else "Horda", d.hex_id]
@@ -831,29 +696,5 @@ static func decision_description(lang: String, dec_def: EvoTypes.DecisionDef) ->
 	return dec_def.description
 
 
-static func archetype_name(lang: String, archetype: String) -> String:
-	return t(lang, "archetype." + archetype)
-
-
-static func status_name(lang: String, status: String) -> String:
-	return t(lang, "status." + status)
-
-
-static func village_tier_name(lang: String, tier: int) -> String:
-	return t(lang, "tier." + str(clampi(tier, 1, 5)))
-
-
 static func preset_title(lang: String, preset_id: String) -> String:
 	return t(lang, "preset." + preset_id + ".name")
-
-
-static func preset_description(lang: String, preset_id: String) -> String:
-	return t(lang, "preset." + preset_id + ".desc")
-
-
-static func preset_hypothesis(lang: String, preset_id: String) -> String:
-	return t(lang, "preset." + preset_id + ".hyp")
-
-
-static func chronicle_type_name(lang: String, event_type: String) -> String:
-	return t(lang, "chronicle.type." + event_type)
