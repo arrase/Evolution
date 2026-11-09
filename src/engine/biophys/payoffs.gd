@@ -177,9 +177,10 @@ static func raid_odds(attacker: EvoTypes.Deme, defender: EvoTypes.Deme, state: E
 	var attack := float(troops) * attack_multiplier(attacker, state)
 	var mobilized := SURPRISE_MOBILIZATION if surprise else RAID_MOBILIZATION
 	var defense := defense_power(defender, attacker.id, mobilized, not surprise, state)
-	var loot_share := 0.65 if surprise else 0.45
+	var loot_share := 0.75 if surprise else 0.45
 	var shield := 0.25 * WALL_LOOT_SHIELD[defender.defense_tier] if surprise else WALL_LOOT_SHIELD[defender.defense_tier]
-	var loot := minf(defender.energy_reserves * loot_share, float(troops) * 2.2) * (1.0 - shield)
+	var cap_mult := 3.0 if surprise else 2.2
+	var loot := minf(defender.energy_reserves * loot_share, float(troops) * cap_mult) * (1.0 - shield)
 	return {
 		"p_win": win_probability(attack, defense),
 		"troops": troops,

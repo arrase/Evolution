@@ -100,7 +100,7 @@ static func describe(deme: EvoTypes.Deme, opt: Dictionary, state: EvoTypes.World
 		"betray":
 			var odds := EvoPayoffs.raid_odds(deme, other, state, true)
 			var loot := float(odds["loot"])
-			return "Betray ally %s with a surprise attack while their gates are open (win chance %s): harvest %s food + plunder ~%s food on win = ~%s food (they lose ~%d; on loss you lose ~%d; ends alliance, %d-turn feud, every neighbor will distrust you, reputation -0.50)." % [
+			return "Betray ally %s with a surprise attack while their gates are open (win chance %s): harvest %s food + seize ~%s food and 1 field on win = ~%s food (they lose ~%d, on loss you lose ~%d; breaks pact, %d-turn feud, reputation -0.50)." % [
 				other.name, _pct(float(odds["p_win"])), _food(base_income), _food(loot), _food(base_income + loot), int(odds["defender_loss_win"]),
 				int(odds["attacker_loss_lose"]), EvoPayoffs.FEUD_AFTER_BETRAYAL
 			]

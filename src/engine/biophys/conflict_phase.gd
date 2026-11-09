@@ -13,7 +13,7 @@ static func resolve(state: EvoTypes.WorldState, lang: String) -> void:
 			if str(deme.chosen_action["type"]) != action_type:
 				continue
 			var other := EvoDiplomacyPhase.adjacent_target(deme, state)
-			if other == null or other.lineage_id == deme.lineage_id:
+			if other == null or (action_type != "betray" and other.lineage_id == deme.lineage_id):
 				deme.last_outcome = "Your %s was called off: no valid target." % action_type
 				continue
 			var rel := EvoTypes.get_relation(state, deme.id, other.id)

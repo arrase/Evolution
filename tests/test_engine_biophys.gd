@@ -94,7 +94,7 @@ static func _test_payoffs_and_canonical_scenarios(r) -> void:
 		if str(opt["type"]) == "betray" and str(opt["target"]) == def.id:
 			has_betray = true
 			var fc := EvoOutcomeForecast.describe(att, opt, state)
-			r._assert(fc.contains("surprise attack") and fc.contains("every neighbor will distrust you"), "betray forecast quantifies surprise loot and reputation cost")
+			r._assert(fc.contains("surprise attack") and fc.contains("reputation -0.50"), "betray forecast quantifies surprise loot and reputation cost")
 	r._assert(has_betray, "Allied neighbor unlocks betray option in action menu")
 
 

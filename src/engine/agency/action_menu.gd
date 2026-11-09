@@ -96,7 +96,8 @@ static func build(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Array[Dict
 		if rel.pact_turns >= 3 and deme.get_village_tier() >= 2 and other.get_village_tier() >= 2 and deme.walled_union_id == "" and other.walled_union_id == "":
 			options.append(option("unite", other.id))
 		if rel.pact_turns > 0:
-			if not kin:
+			var hungry_or_martial := deme.energy_reserves < EvoPayoffs.food_need(deme, cell, state) * 1.35 or deme.cultural_trait_ids.has("cul-warrior-expansion")
+			if not kin or (rel.pact_turns >= 2 and other.energy_reserves >= 65.0 and hungry_or_martial):
 				options.append(option("betray", other.id))
 			continue
 		if rel.feud_turns == 0 and rel.proposal_from != deme.id and (kin or rel.trust >= 0.12):
