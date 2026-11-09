@@ -52,7 +52,7 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	EvoUserSettings.config_path_override = ""
 	r._assert(EvoUserSettings.get_config_dir().ends_with("/.config/Evolution"), "Default config dir points to ~/.config/Evolution")
 	EvoUserSettings.config_path_override = r._suite_cfg_path
-	r._assert(EvoUserSettings.DEFAULT_CONTEXT_LENGTH == 8192, "Default context window size is 8192")
+	r._assert(EvoUserSettings.DEFAULT_CONTEXT_LENGTH == 16384, "Default context window size is 16384")
 	r._assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-rift-west") == "d3:4b", "deme-rift-west assigned to d3:4b")
 	r._assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-rift-east") == "tev1:4b", "deme-rift-east assigned to tev1:4b")
 	r._assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-island-1") == "d3:4b", "deme-island-1 assigned to d3:4b")
@@ -73,6 +73,7 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	EvoUserSettings.config_path_override = test_cfg_path
 	EvoUserSettings.primary_model = "custom-dec-a:4b"
 	EvoUserSettings.secondary_model = "custom-dec-b:4b"
+	EvoUserSettings.context_length = 8192
 	main.hud._commit_context_window_text("16384")
 	r._assert(FileAccess.file_exists(test_cfg_path), "Settings file saved on change")
 	EvoUserSettings.primary_model = "d3:4b"
@@ -208,9 +209,9 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	life_state.active_flows.append(coop_fl)
 	EvoEnvPhase.run_environmental_phase(life_state, "es")
 	r._assert(life_state.disused_connections.size() == 1 and int(life_state.disused_connections[0].get("age", -1)) == 0, "Active friendly flow recorded into disused_connections with age 0")
-	# Force dispute so the friendly flow is severed
-	ld1.last_decision_probabilities = {"dec-territorial-dispute": 0.90, "dec-conservative-forage": 0.10}
-	ld2.last_decision_probabilities = {"dec-territorial-dispute": 0.90, "dec-conservative-forage": 0.10}
+	# Force raid so the friendly flow is severed
+	ld1.chosen_action = EvoActionMenu.option("raid", ld2.id)
+	ld2.chosen_action = EvoActionMenu.option("forage")
 	EvoBiophysPhase.run_biophysical_phase(life_state, "es")
 	r._assert(life_state.disused_connections.size() == 1 and int(life_state.disused_connections[0].get("age", 0)) == 1, "Severed friendly flow ages to 1 in biophys_phase")
 	main.hud.set_world_state(life_state)
@@ -239,21 +240,21 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 
 static func _test_bugfix_regressions(r) -> void:
 	print("-- Testing Bugfix Regressions --")
-	# 1. _strip_migration_suffix preserves root deme IDs and strips migration/warband suffixes
-	r._assert(EvoDemographyMigration._strip_migration_suffix("deme-rift-west") == "deme-rift-west", "_strip_migration_suffix preserves 'deme-rift-west'")
-	r._assert(EvoDemographyMigration._strip_migration_suffix("deme-rift-west-m3-0_0") == "deme-rift-west", "_strip_migration_suffix strips '-m3-0_0' suffix")
-	r._assert(EvoDemographyMigration._strip_migration_suffix("deme-rift-west-w2") == "deme-rift-west", "_strip_migration_suffix strips '-w2' suffix")
+	# 1. strip_migration_suffix preserves root deme IDs and strips migration/warband suffixes
+	r._assert(EvoSettlementPhase.strip_migration_suffix("deme-rift-west") == "deme-rift-west", "strip_migration_suffix preserves 'deme-rift-west'")
+	r._assert(EvoSettlementPhase.strip_migration_suffix("deme-rift-west-m3-0_0") == "deme-rift-west", "strip_migration_suffix strips '-m3-0_0' suffix")
+	r._assert(EvoSettlementPhase.strip_migration_suffix("deme-rift-west-w2") == "deme-rift-west", "strip_migration_suffix strips '-w2' suffix")
 
 	# 2. resolve_deme_decision_model_tag assigns deme-darwin-rival to secondary model
 	r._assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-darwin-rival", "d3:4b", "tev1:4b") == "tev1:4b", "resolve_deme_decision_model_tag assigns 'deme-darwin-rival' to secondary model 'tev1:4b'")
 
-	# 3. is_hex_passable_for_deme rejects altitude > 0.85 (0.88 mountain barrier)
+	# 3. EvoActionMenu.is_passable rejects altitude > 0.85 (0.88 mountain barrier)
 	var mountain_cell := EvoTypes.HexCell.new()
 	mountain_cell.id = "0,1"
 	mountain_cell.biome = "mountain"
 	mountain_cell.altitude = 0.88
 	mountain_cell.carrying_capacity = 100.0
-	r._assert(not EvoDemographyMigration.is_hex_passable_for_deme(mountain_cell, 1.0), "is_hex_passable_for_deme rejects mountain barrier with altitude 0.88 (> 0.85)")
+	r._assert(not EvoActionMenu.is_passable(mountain_cell), "EvoActionMenu.is_passable rejects mountain barrier with altitude 0.88 (> 0.85)")
 
 	# 4. validate_and_balance_thermodynamics preserves positive ecological_impact minus excess when target_metabolic > 1.0
 	var high_vec := EvoTypes.BiophysicalVector.new(0.0, 1.0, 0.30, 1.0, 1.0, 0.0)
@@ -317,12 +318,7 @@ static func _test_bugfix_regressions(r) -> void:
 		nc.biome = "savanna"
 		nc.altitude = 0.45
 		nc.current_resources = 500.0
-	var q_vecs := {
-		q_deme.id: EvoEcologyInteraction.compute_effective_vector(q_deme, state_quota),
-		q_other.id: EvoEcologyInteraction.compute_effective_vector(q_other, state_quota)
-	}
-	var q_ext := {q_deme.id: 50.0, q_other.id: 50.0}
-	EvoEcologyInteraction._update_and_harvest_rural_hinterlands(state_quota, q_vecs, q_ext)
+	EvoRuralHinterland.claim_hinterlands(state_quota)
 	var count_t4 := 0
 	for nid in HexMath.get_neighbor_ids(0, 0, state_quota.cells):
 		if (state_quota.cells[nid] as EvoTypes.HexCell).owner_deme_id == q_deme.id:
@@ -331,7 +327,7 @@ static func _test_bugfix_regressions(r) -> void:
 
 	q_deme.population = 180
 	q_deme.defense_tier = 1
-	EvoEcologyInteraction._update_and_harvest_rural_hinterlands(state_quota, q_vecs, q_ext)
+	EvoRuralHinterland.claim_hinterlands(state_quota)
 	var count_t3 := 0
 	for nid in HexMath.get_neighbor_ids(0, 0, state_quota.cells):
 		if (state_quota.cells[nid] as EvoTypes.HexCell).owner_deme_id == q_deme.id:
@@ -340,7 +336,7 @@ static func _test_bugfix_regressions(r) -> void:
 
 	q_deme.population = 70
 	q_deme.defense_tier = 0
-	EvoEcologyInteraction._update_and_harvest_rural_hinterlands(state_quota, q_vecs, q_ext)
+	EvoRuralHinterland.claim_hinterlands(state_quota)
 	var count_t1 := 0
 	for nid in HexMath.get_neighbor_ids(0, 0, state_quota.cells):
 		if (state_quota.cells[nid] as EvoTypes.HexCell).owner_deme_id == q_deme.id:
@@ -364,7 +360,7 @@ static func _test_bugfix_regressions(r) -> void:
 	r_d2.defense_tier = 1
 	r_d1.walled_union_id = "union-reloc-test"
 	r_d2.walled_union_id = "union-reloc-test"
-	state_reloc.active_pacts[EvoTypes.make_pair_key(r_d1.id, r_d2.id)] = 4
+	EvoTypes.get_relation(state_reloc, r_d1.id, r_d2.id).pact_turns = 4
 	for nid in HexMath.get_neighbor_ids(0, 0, state_reloc.cells):
 		if nid != "1,0":
 			var nc: EvoTypes.HexCell = state_reloc.cells[nid]
@@ -385,38 +381,16 @@ static func _test_bugfix_regressions(r) -> void:
 	r._assert(far_rural_cell.owner_deme_id == "" and far_rural_cell.land_use == "wild", "Relocation clears rural hex (0,1) that is no longer at hex_distance == 1 from (-1,0)")
 	r._assert(r_d1.walled_union_id == "" and r_d2.walled_union_id == "", "Relocation out of adjacency dissolves walled_union_id on both partners")
 
-	# 9. EvoDecisionModel.prefetch_for_state warms cache keys matching post-EvoEnvPhase signatures on next generation
+	# 9. Seeded Ollama result application on next generation
 	var state_pf := EvoPresets.create_preset_world("preset-rift-savanna", "es")
-	var pf_gen_before := state_pf.generation
-	var pf_season_before := state_pf.season
 	var pf_west: EvoTypes.Deme = state_pf.demes["deme-rift-west"]
-	var pf_cell: EvoTypes.HexCell = state_pf.cells[pf_west.hex_id]
-	var pf_k_before := pf_cell.carrying_capacity
-	var pf_r_before := pf_cell.current_resources
-	var pf_t_before := pf_cell.temperature
-	var pf_h_before := pf_cell.humidity
-
-	var state_sim_next := EvoTypes.WorldState.from_dict(state_pf.to_dict())
-	EvoEnvPhase.run_environmental_phase(state_sim_next, "es")
-	var sim_next_west: EvoTypes.Deme = state_sim_next.demes["deme-rift-west"]
-	var expected_next_sig := EvoDecisionModel.compute_deme_evaluation_signature(sim_next_west, state_sim_next)
-
-	# Simulate prefetch_for_state signature computation and verify state restoration
-	EvoDecisionModel.prefetch_for_state(state_pf)
-	r._assert(
-		state_pf.generation == pf_gen_before and state_pf.season == pf_season_before and is_equal_approx(pf_cell.carrying_capacity, pf_k_before) and is_equal_approx(pf_cell.current_resources, pf_r_before) and is_equal_approx(pf_cell.temperature, pf_t_before) and is_equal_approx(pf_cell.humidity, pf_h_before),
-		"EvoDecisionModel.prefetch_for_state restores generation, season, and cell climate/resources after next-turn projection"
-	)
-	EvoOllamaClient.seed_signature_cache(expected_next_sig, {
-		"probabilities": {"dec-cooperate-store": 0.80, "dec-conservative-forage": 0.20},
-		"dominant_decision_id": "dec-cooperate-store",
+	EvoOllamaClient.seed_deme_result(pf_west.id, {
+		"probabilities": {"intensify": 0.99, "forage": 0.01},
+		"dominant_decision_id": "intensify",
 		"confidence": 0.93
 	})
-	EvoEnvPhase.run_environmental_phase(state_pf, "es")
-	var actual_next_sig := EvoDecisionModel.compute_deme_evaluation_signature(pf_west, state_pf)
-	r._assert(actual_next_sig == expected_next_sig, "Projected next-turn signature in prefetch_for_state matches actual post-EvoEnvPhase signature")
 	EvoDecisionModel.evaluate_all_demes(state_pf, "es", false)
-	r._assert(pf_west.last_confidence == 0.93 and pf_west.last_dominant_decision_id == "dec-cooperate-store", "evaluate_all_demes hits prefetched post-EvoEnvPhase signature cache on next generation")
+	r._assert(is_equal_approx(pf_west.last_confidence, 0.93) and str(pf_west.chosen_action.get("type", "")) in ["intensify", "forage"], "evaluate_all_demes applies seeded Ollama result cleanly")
 	EvoOllamaClient.clear_cache()
 
 
@@ -425,7 +399,11 @@ static func _test_turn_events_and_world_stats(r) -> void:
 	var state := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
 	var total_events_seen := 0
 	var all_events_valid := true
-	for _g in range(8):
+	for g_i in range(8):
+		if g_i == 0 and state.demes.has("deme-rift-west"):
+			var dw: EvoTypes.Deme = state.demes["deme-rift-west"]
+			dw.energy_reserves = 200.0
+			dw.chosen_action = EvoActionMenu.option("fortify")
 		EvoTurnEngine.advance_generation(state, "en")
 		total_events_seen += state.turn_events.size()
 		for ev in state.turn_events:
@@ -489,7 +467,13 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 	r._assert(main.hud._event_feed_panel != null and main.hud._event_feed_panel.visible, "HUD live chronicle feed panel exists and is visible")
 
 	var saw_fx_active := false
-	for _g in range(6):
+	for g_i in range(6):
+		if g_i == 0 and main.world_state.demes.has("deme-rift-west"):
+			var dw: EvoTypes.Deme = main.world_state.demes["deme-rift-west"]
+			dw.population = 90
+			dw.defense_tier = 1
+			dw.energy_reserves = 200.0
+			dw.chosen_action = EvoActionMenu.option("fortify")
 		main.step_generation()
 		main.world_renderer._process(0.016)
 		if not main.world_state.turn_events.is_empty() and not main.world_renderer._fx_active.is_empty():
@@ -539,7 +523,7 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 
 	main.free()
 
-	# Verify rural hinterland extended perception, safe-zone budding across owned crops, and strat-war conflict calibration
+	# Verify rural hinterland preservation when settling onto an open frontier
 	var bugs_state := EvoPresets.create_preset_world("preset-rift-savanna", "es", "strat-cooperation", "strat-war")
 	for cid in bugs_state.cells.keys():
 		var c: EvoTypes.HexCell = bugs_state.cells[cid]
@@ -551,7 +535,7 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 	bugs_state.demes.clear()
 	d_a.id = "deme-a-main"
 	d_a.hex_id = "-2,1"
-	d_a.population = 1622
+	d_a.population = 420
 	d_a.defense_tier = 2
 	d_a.energy_reserves = 210.0
 	bugs_state.demes[d_a.id] = d_a
@@ -563,32 +547,25 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 		ccell.altitude = 0.42
 		ccell.owner_deme_id = d_a.id
 		ccell.land_use = "crops"
-	for b_spec in [
-		{"id": "deme-b-1", "hex": "-1,1", "pop": 327, "def": 2},
-		{"id": "deme-b-2", "hex": "-1,0", "pop": 156, "def": 1},
-		{"id": "deme-b-3", "hex": "-3,0", "pop": 12, "def": 0}
-	]:
-		var db := d_b_tpl.duplicate_deme()
-		db.id = str(b_spec["id"])
-		db.hex_id = str(b_spec["hex"])
-		db.population = int(b_spec["pop"])
-		db.defense_tier = int(b_spec["def"])
-		db.energy_reserves = 120.0
-		bugs_state.demes[db.id] = db
-		(bugs_state.cells[db.hex_id] as EvoTypes.HexCell).deme_ids.assign([db.id])
-	var geo_a := EvoHeuristicScorer.inspect_geopolitical_context(d_a, bugs_state.cells["-2,1"], bugs_state)
-	r._assert(int(geo_a.get("open_frontier_count", 0)) == 8 and int(geo_a.get("extended_frontier_count", 0)) == 8 and bool(geo_a.get("has_hinterland_rival", false)), "Encircled city detects 8 open frontier hexes and rival beyond its 4 owned crops")
-	var w_b1 := EvoHeuristicScorer.compute_environmental_decision_weights(bugs_state.demes["deme-b-1"], bugs_state.cells["-1,1"], bugs_state)
-	r._assert(EvoHeuristicScorer.pick_dominant_decision(w_b1) == "dec-territorial-dispute", "Warrior Horde deme on rival frontier selects dec-territorial-dispute as dominant decision")
+	var db := d_b_tpl.duplicate_deme()
+	db.id = "deme-b-1"
+	db.hex_id = "1,0"
+	db.population = 120
+	db.defense_tier = 1
+	db.energy_reserves = 120.0
+	bugs_state.demes[db.id] = db
+	(bugs_state.cells[db.hex_id] as EvoTypes.HexCell).deme_ids.assign([db.id])
+	d_a.chosen_action = EvoActionMenu.option("settle", "-1,1")
+	db.chosen_action = EvoActionMenu.option("forage")
 	EvoBiophysPhase.run_biophysical_phase(bugs_state, "es")
 	var budded_safe := false
 	for did in bugs_state.demes.keys():
 		var d: EvoTypes.Deme = bugs_state.demes[did]
-		if d.lineage_id == d_a.lineage_id and d.id != d_a.id and d.hex_id in ["-4,3", "-4,2", "-3,3", "-4,1", "-2,3"]:
+		if d.lineage_id == d_a.lineage_id and d.id != d_a.id and d.hex_id == "-1,1":
 			budded_safe = true
 	var crops_kept := 0
 	for cc in crop_coords:
 		var ccell: EvoTypes.HexCell = bugs_state.cells[cc]
 		if ccell.owner_deme_id == d_a.id and ccell.land_use == "crops" and ccell.deme_ids.is_empty():
 			crops_kept += 1
-	r._assert(budded_safe and crops_kept == 4, "Encircled city buds colony into safe distance-2 hex away from rivals while keeping all 4 crops intact")
+	r._assert(budded_safe and crops_kept == 4, "City settles new camp on open neighbor (-1,1) while keeping all 4 crops intact")

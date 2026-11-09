@@ -10,11 +10,12 @@ const COST_ADJUST_SEA_LEVEL: int = 25
 static func advance_generation(state: EvoTypes.WorldState, lang: String = "es") -> Dictionary:
 	var prev_chronicle_count := state.chronicle.size()
 
+	EvoDecisionModel.apply_completed_live_results(state, lang, -1)
 	EvoEnvPhase.run_environmental_phase(state, lang)
-	EvoDecisionModel.evaluate_all_demes(state, lang, false)
 	EvoBiophysPhase.run_biophysical_phase(state, lang)
 	EvoMilestonePhase.run_milestone_phase(state, lang)
 	EvoTypes.record_turn_stats(state)
+	EvoDecisionModel.evaluate_all_demes(state, lang, true)
 
 	var new_entries: Array[EvoTypes.ChronicleEntry] = []
 	var has_milestone := false
@@ -31,8 +32,6 @@ static func advance_generation(state: EvoTypes.WorldState, lang: String = "es") 
 		elif entry.event_type in ["total_extinction", "single_survivor", "ecological_equilibrium"]:
 			has_macro_outcome = true
 			outcome_entry = entry
-
-	EvoDecisionModel.prefetch_for_state(state)
 
 	return {
 		"generation": state.generation,
@@ -54,34 +53,7 @@ static func _spend_points(state: EvoTypes.WorldState, cost: int) -> void:
 
 
 static func _revalidate_walled_unions(state: EvoTypes.WorldState) -> void:
-	for did in state.demes.keys():
-		var d: EvoTypes.Deme = state.demes[did]
-		if d.walled_union_id != "" and (d.get_village_tier() < 2 or not state.cells.has(d.hex_id)):
-			d.walled_union_id = ""
-	var changed := true
-	while changed:
-		changed = false
-		for did in state.demes.keys():
-			var d: EvoTypes.Deme = state.demes[did]
-			if d.walled_union_id == "":
-				continue
-			var d_cell: EvoTypes.HexCell = state.cells[d.hex_id]
-			var has_adjacent_partner := false
-			for nid in HexMath.get_neighbor_ids(d_cell.q, d_cell.r, state.cells):
-				var ncell: EvoTypes.HexCell = state.cells[nid]
-				for oid in ncell.deme_ids:
-					if oid != d.id and state.demes.has(oid):
-						var od: EvoTypes.Deme = state.demes[oid]
-						if od.population > 0 and od.walled_union_id == d.walled_union_id and od.get_village_tier() >= 2:
-							var pk := EvoTypes.make_pair_key(d.id, od.id)
-							if int(state.active_pacts.get(pk, 0)) >= 0:
-								has_adjacent_partner = true
-								break
-				if has_adjacent_partner:
-					break
-			if not has_adjacent_partner:
-				d.walled_union_id = ""
-				changed = true
+	EvoSettlementPhase.revalidate_walled_unions(state)
 
 
 static func _apply_biome_climate_defaults(cell: EvoTypes.HexCell, biome_id: String, reset_to_healthy: bool = false) -> void:
@@ -148,6 +120,7 @@ static func apply_set_biome(
 		return false
 	_spend_points(state, COST_SET_BIOME)
 	EvoEnvPhase.resolve_submerged_demes(state, lang)
+	EvoDecisionModel.evaluate_all_demes(state, lang, true)
 	return true
 
 
@@ -208,13 +181,15 @@ static func apply_adjust_altitude(
 		return false
 	_spend_points(state, COST_ADJUST_ALTITUDE)
 	EvoEnvPhase.resolve_submerged_demes(state, lang)
+	EvoDecisionModel.evaluate_all_demes(state, lang, true)
 	return true
 
 
 static func apply_adjust_carrying_capacity(
 	state: EvoTypes.WorldState,
 	hex_ids: Array[String],
-	factor_delta: float
+	factor_delta: float,
+	lang: String = "es"
 ) -> bool:
 	if hex_ids.is_empty() or not _can_afford(state, COST_ADJUST_CAPACITY):
 		return false
@@ -248,6 +223,7 @@ static func apply_adjust_carrying_capacity(
 	if not changed:
 		return false
 	_spend_points(state, COST_ADJUST_CAPACITY)
+	EvoDecisionModel.evaluate_all_demes(state, lang, true)
 	return true
 
 
@@ -270,4 +246,5 @@ static func apply_adjust_sea_level(
 		EvoEnvPhase.apply_cell_sea_level_transition(cell, next_sea_level)
 
 	EvoEnvPhase.resolve_submerged_demes(state, lang)
+	EvoDecisionModel.evaluate_all_demes(state, lang, true)
 	return true

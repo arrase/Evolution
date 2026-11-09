@@ -362,34 +362,54 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		"🤝 " + EvoI18n.t(hud._lang, "inspector_pacts") + ":",
 		format_active_pacts_summary(hud._world_state, hud._lang, d)
 	)
+	EvoHudInspectorFormatters.add_sheet_kv(
+		m_vbox,
+		EvoUiStyle.tr_text(hud._lang, "⚖️ Reputación:", "⚖️ Reputation:"),
+		"%+.2f (%s)" % [d.reputation, EvoRelations.reputation_word(d.reputation)]
+	)
 
-	# Decision Model Intention Section (Top 3 probabilities, dominant marked with ★)
+	# Action Policy Section (Top 3 action options, chosen action marked with ★)
 	var dec_title := Label.new()
-	dec_title.text = EvoUiStyle.tr_text(hud._lang, "🧠 Intención Dominante:", "🧠 Dominant Intention:")
+	dec_title.text = EvoUiStyle.tr_text(hud._lang, "🧠 Acción Elegida:", "🧠 Chosen Action:")
 	dec_title.add_theme_font_size_override("font_size", 12)
 	dec_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._deme_sheet_vbox.add_child(dec_title)
 
-	var prob_keys := d.last_decision_probabilities.keys()
+	var chosen_key := str(d.chosen_action["key"])
+	var prob_keys := d.action_probabilities.keys()
 	prob_keys.sort_custom(func(a: Variant, b: Variant) -> bool:
-		return float(d.last_decision_probabilities[a]) > float(d.last_decision_probabilities[b])
+		var ka := str(a)
+		var kb := str(b)
+		if ka == chosen_key and kb != chosen_key:
+			return true
+		if kb == chosen_key and ka != chosen_key:
+			return false
+		return float(d.action_probabilities[a]) > float(d.action_probabilities[b])
 	)
 	for i in range(mini(3, prob_keys.size())):
-		var dec_id := str(prob_keys[i])
-		var prob: float = float(d.last_decision_probabilities[dec_id])
-		var dec_lbl_str := dec_id
-		if hud._world_state.decisions_catalog.has(dec_id):
-			dec_lbl_str = EvoI18n.decision_name(hud._lang, hud._world_state.decisions_catalog[dec_id])
-		var is_dom := (dec_id == d.last_dominant_decision_id or (d.last_dominant_decision_id == "" and i == 0))
-		if is_dom:
-			dec_lbl_str = "★ " + dec_lbl_str
+		var act_key := str(prob_keys[i])
+		var prob := float(d.action_probabilities[act_key])
+		var parsed := EvoActionMenu.parse_key(act_key)
+		var act_type := str(parsed["type"])
+		var act_target := str(parsed["target"])
+		var act_lbl_str := act_type
+		if hud._world_state.decisions_catalog.has(act_type):
+			act_lbl_str = EvoI18n.decision_name(hud._lang, hud._world_state.decisions_catalog[act_type])
+		if act_target != "":
+			if hud._world_state.demes.has(act_target):
+				act_lbl_str += " → " + EvoHudInspectorFormatters.format_short_deme_label(hud._world_state.demes[act_target])
+			else:
+				act_lbl_str += " → (%s)" % act_target
+		var is_chosen := (act_key == chosen_key)
+		if is_chosen:
+			act_lbl_str = "★ " + act_lbl_str
 
 		EvoHudInspectorFormatters.add_milestone_bar(
 			hud._deme_sheet_vbox,
-			dec_lbl_str,
+			act_lbl_str,
 			"%d%%" % int(round(prob * 100.0)),
 			prob * 100.0,
-			EvoUiStyle.COLOR_GOLD_BEVEL if is_dom else EvoUiStyle.COLOR_SEPIA
+			EvoUiStyle.COLOR_GOLD_BEVEL if is_chosen else EvoUiStyle.COLOR_SEPIA
 		)
 
 	# Village Relations & Roads Summary
@@ -425,14 +445,22 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 			r_btn.pressed.connect(hud._on_modal_jump_to_hex.bind(target_hex, target_deme))
 		rel_vbox.add_child(r_btn)
 
-	# Naturalist's Note (`last_justification`)
+	# Outcome, Forecast & Memory Card
 	var just_card := PanelContainer.new()
 	just_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 6))
 	hud._deme_sheet_vbox.add_child(just_card)
 
 	var just_lbl := Label.new()
-	var just_txt := d.last_justification if d.last_justification != "" else EvoUiStyle.tr_text(hud._lang, "Evaluación inicial de hábitat.", "Initial habitat evaluation.")
-	just_lbl.text = "💬 " + just_txt
+	var note_parts: Array[String] = []
+	if d.action_forecasts.has(chosen_key):
+		note_parts.append("🎯 " + str(d.action_forecasts[chosen_key]))
+	if d.last_outcome != "":
+		note_parts.append("📜 " + d.last_outcome)
+	if not d.memory.is_empty():
+		var recent_mem := d.memory.slice(maxi(0, d.memory.size() - 3), d.memory.size())
+		note_parts.append("🧠 " + " | ".join(recent_mem))
+	var just_txt := "\n".join(note_parts) if not note_parts.is_empty() else EvoUiStyle.tr_text(hud._lang, "Evaluación inicial de hábitat.", "Initial habitat evaluation.")
+	just_lbl.text = just_txt
 	just_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	just_lbl.add_theme_font_size_override("font_size", 10)
 	just_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)

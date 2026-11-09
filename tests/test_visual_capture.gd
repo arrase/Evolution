@@ -84,7 +84,7 @@ func _run_captures() -> void:
 		main.step_generation()
 	if not main.world_state.demes.is_empty():
 		var first_d: EvoTypes.Deme = main.world_state.demes.values()[0]
-		first_d.baldwin_counters[first_d.last_dominant_decision_id] = 8
+		first_d.baldwin_counters["fortify"] = 8
 		first_d.innovation_counter = 1.1
 		EvoMilestonePhase.run_milestone_phase(main.world_state, main.lang)
 		main.hud.refresh(main.world_state)

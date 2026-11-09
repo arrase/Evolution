@@ -2,6 +2,113 @@ class_name EvoMilestonePhase
 extends RefCounted
 
 
+static func _slugify(text: String) -> String:
+	var lower := text.to_lower()
+	var out := ""
+	var prev_dash := false
+	for i in range(lower.length()):
+		var ch := lower[i]
+		var is_alnum := (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9")
+		if is_alnum:
+			out += ch
+			prev_dash = false
+		elif not prev_dash and out.length() > 0:
+			out += "-"
+			prev_dash = true
+	out = out.trim_suffix("-")
+	if out.length() > 28:
+		out = out.substr(0, 28).trim_suffix("-")
+	return out if out.length() > 0 else "adaptation"
+
+
+static func synthesize_milestone_trait(
+	state: EvoTypes.WorldState,
+	deme: EvoTypes.Deme,
+	trigger_type: String,
+	lang: String = "es"
+) -> EvoTypes.TraitDef:
+	var is_en := lang == "en"
+	var category := "cultural" if trigger_type == "cultural_innovation" else "biological"
+	var cell: EvoTypes.HexCell = state.cells[deme.hex_id] if state.cells.has(deme.hex_id) else EvoTypes.HexCell.new()
+	var biome_label := EvoI18n.biome_name(lang, cell.biome)
+
+	var base_name := ""
+	if category == "cultural":
+		base_name = "Cooperative Ecological Tradition" if is_en else "Tradición Ecológica Cooperativa"
+	elif trigger_type == "allopatric_speciation":
+		base_name = "Allopatric Divergence" if is_en else "Divergencia Alopátrica"
+	else:
+		base_name = "Adaptive Homeostasis" if is_en else "Homeostasis Adaptativa"
+
+	var candidate_name := "%s (%s)" % [base_name, biome_label]
+	if candidate_name.length() > 60:
+		candidate_name = candidate_name.substr(0, 60)
+
+	var existing_names: Dictionary = {}
+	for tid in state.traits_catalog.keys():
+		var t: EvoTypes.TraitDef = state.traits_catalog[tid]
+		existing_names[t.name.to_lower()] = true
+
+	var final_name := candidate_name
+	var suffix := 2
+	while existing_names.has(final_name.to_lower()):
+		var suffix_str := " #%d" % suffix
+		final_name = candidate_name.substr(0, max(1, 60 - suffix_str.length())) + suffix_str
+		suffix += 1
+
+	var baldwin_dec_id := str(deme.get_meta("baldwin_decision_id", "")) if deme.has_meta("baldwin_decision_id") else ""
+	if baldwin_dec_id == "":
+		baldwin_dec_id = str(deme.chosen_action["type"])
+
+	var raw_vec: EvoTypes.BiophysicalVector
+	if category == "cultural":
+		raw_vec = EvoTypes.BiophysicalVector.new(0.05, 0.28, 0.20, 0.12, 0.18, 0.35)
+	elif trigger_type == "baldwin_assimilation" and baldwin_dec_id != "" and state.decisions_catalog.has(baldwin_dec_id):
+		var dom_dec: EvoTypes.DecisionDef = state.decisions_catalog[baldwin_dec_id]
+		var dv := dom_dec.vector
+		raw_vec = EvoTypes.BiophysicalVector.new(
+			maxf(0.10, dv.metabolic_cost * 0.70),
+			clampf(maxf(0.15, dv.extraction_efficiency * 0.80), 0.0, 0.85),
+			clampf(dv.ecological_impact * 0.60, -0.50, 0.50),
+			clampf(maxf(0.10, dv.spatial_mobility * 0.80), 0.0, 0.85),
+			clampf(maxf(0.10, dv.social_cohesion * 0.80), 0.0, 0.85),
+			clampf(maxf(0.20, dv.transmission_threshold * 0.80), 0.10, 0.85)
+		)
+	else:
+		raw_vec = EvoTypes.BiophysicalVector.new(0.18, 0.35, 0.10, 0.30, 0.20, 0.20)
+	var balanced_vec := EvoThermodynamics.validate_and_balance_thermodynamics(raw_vec, false)
+
+	var slug := _slugify(final_name)
+	var sanitized_deme := _slugify(deme.id)
+	var base_id := "emergent-%d-%s" % [state.generation, slug]
+	var trait_id := base_id if not state.traits_catalog.has(base_id) else "%s-%s" % [base_id, sanitized_deme]
+	var id_suffix := 2
+	while state.traits_catalog.has(trait_id):
+		trait_id = "%s-%s-%d" % [base_id, sanitized_deme, id_suffix]
+		id_suffix += 1
+
+	var dom_name := baldwin_dec_id if trigger_type == "baldwin_assimilation" else str(deme.chosen_action["type"])
+	if state.decisions_catalog.has(dom_name):
+		dom_name = EvoI18n.decision_name(lang, state.decisions_catalog[dom_name])
+
+	var desc := (
+		"Emergent adaptation consolidating sustained behavioral selection in %s (%s)." % [biome_label, dom_name]
+		if is_en
+		else "Adaptación emergente que consolida la selección conductual sostenida en %s (%s)." % [biome_label, dom_name]
+	)
+
+	var trait_def := EvoTypes.TraitDef.new()
+	trait_def.id = trait_id
+	trait_def.name = final_name
+	trait_def.category = category
+	trait_def.origin = "emergent"
+	trait_def.description = desc
+	trait_def.vector = balanced_vec
+	trait_def.mutually_exclusive_with = []
+	trait_def.enables_cultural_transmission = false
+	return trait_def
+
+
 static func _compute_set_divergence(set_a: Dictionary, set_b: Dictionary) -> float:
 	var union_set: Dictionary = set_a.duplicate()
 	for k in set_b.keys():
@@ -61,6 +168,7 @@ static func run_milestone_phase(
 		if not state.cells.has(deme.hex_id):
 			continue
 		var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
+		var action_type := str(deme.chosen_action["type"])
 
 		var emergent_bio_count: int = 0
 		for tid in deme.biological_trait_ids:
@@ -105,14 +213,13 @@ static func run_milestone_phase(
 					"priority": 0,
 					"trigger_type": "allopatric_speciation",
 					"deme_id": deme.id,
-					"decision_id": deme.last_dominant_decision_id
+					"decision_id": action_type
 				})
 
 		var triggered_baldwin_dec := ""
 		for dec_id in deme.baldwin_counters.keys():
 			var cnt: int = int(deme.baldwin_counters[dec_id])
-			var prob: float = float(deme.last_decision_probabilities[dec_id]) if deme.last_decision_probabilities.has(dec_id) else 0.0
-			if dec_id != "dec-conservative-forage" and cnt >= 8 and (prob >= 0.35 or deme.last_dominant_decision_id == dec_id):
+			if str(dec_id) != "forage" and cnt >= 8:
 				triggered_baldwin_dec = str(dec_id)
 				break
 
@@ -124,12 +231,12 @@ static func run_milestone_phase(
 				"decision_id": triggered_baldwin_dec
 			})
 
-		if deme.innovation_counter >= 1.0 and EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog) and emergent_cul_count < 2 and deme.last_energy_delta >= 0.0:
+		if deme.innovation_counter >= 1.0 and EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog) and emergent_cul_count < 2 and (deme.last_energy_delta >= 0.0 or deme.energy_reserves >= 35.0):
 			candidates.append({
 				"priority": 2,
 				"trigger_type": "cultural_innovation",
 				"deme_id": deme.id,
-				"decision_id": deme.last_dominant_decision_id
+				"decision_id": action_type
 			})
 
 	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
@@ -145,7 +252,7 @@ static func run_milestone_phase(
 		if state.demes.has(target_id):
 			var deme: EvoTypes.Deme = state.demes[target_id]
 			deme.set_meta("baldwin_decision_id", dec_id)
-			var new_trait := EvoDecisionModel.synthesize_milestone_trait(state, deme, trigger_type, lang)
+			var new_trait := synthesize_milestone_trait(state, deme, trigger_type, lang)
 			state.traits_catalog[new_trait.id] = new_trait
 
 			if new_trait.category == "biological":
@@ -176,8 +283,8 @@ static func run_milestone_phase(
 				var old_lineage_id := deme.lineage_id
 				ancestor_hex_id = (state.lineage_tree[old_lineage_id] as EvoTypes.LineageNode).founder_hex_id if state.lineage_tree.has(old_lineage_id) else deme.hex_id
 				deme.isolation_turns = 0
-				var slug := EvoDecisionModel._slugify(new_trait.name)
-				var san_deme := EvoDecisionModel._slugify(deme.id)
+				var slug := _slugify(new_trait.name)
+				var san_deme := _slugify(deme.id)
 				var base_lin_id := "lineage-%d-%s" % [state.generation, slug]
 				var new_lin_id := base_lin_id if not state.lineage_tree.has(base_lin_id) else "%s-%s" % [base_lin_id, san_deme]
 				var l_suf := 2
@@ -265,7 +372,7 @@ static func run_milestone_phase(
 	for did in state.demes.keys():
 		living_demes.append(state.demes[did])
 	var survivor := living_demes[0]
-	var survivor_root_id := EvoDemographyMigration._strip_migration_suffix(survivor.id)
+	var survivor_root_id := EvoSettlementPhase.strip_migration_suffix(survivor.id)
 
 	var ancestor_lineages: Dictionary = {survivor.lineage_id: true}
 	var cur_lid := survivor.lineage_id
@@ -289,7 +396,7 @@ static func run_milestone_phase(
 			had_chronicle_this_turn = true
 		if e.event_type == "extinction":
 			has_prior_extinction = true
-			var e_root_id := EvoDemographyMigration._strip_migration_suffix(e.deme_id)
+			var e_root_id := EvoSettlementPhase.strip_migration_suffix(e.deme_id)
 			if not ancestor_lineages.has(e.lineage_id) or (e_root_id != survivor_root_id and e_root_id == e.deme_id):
 				has_non_migrant_extinction = true
 		elif e.event_type == "single_survivor":

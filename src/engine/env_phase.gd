@@ -2,18 +2,17 @@ class_name EvoEnvPhase
 extends RefCounted
 
 
-static func _prune_stale_pacts(state: EvoTypes.WorldState) -> void:
-	if state.active_pacts.is_empty():
+static func _prune_stale_relations(state: EvoTypes.WorldState) -> void:
+	if state.relations.is_empty():
 		return
-	var sep := EvoTypes.make_pair_key("a", "b").trim_prefix("a").trim_suffix("b")
 	var stale_keys: Array[String] = []
-	for pk_var in state.active_pacts.keys():
+	for pk_var in state.relations.keys():
 		var pk := str(pk_var)
-		var parts := pk.split(sep)
+		var parts := pk.split("__")
 		if parts.size() != 2 or not state.demes.has(parts[0]) or not state.demes.has(parts[1]):
 			stale_keys.append(pk)
 	for pk in stale_keys:
-		state.active_pacts.erase(pk)
+		state.relations.erase(pk)
 
 
 static func apply_cell_sea_level_transition(cell: EvoTypes.HexCell, sea_level: float) -> bool:
@@ -56,57 +55,8 @@ static func step_cell_seasonal_climate(
 	cell.current_resources = next_r
 
 
-static func project_next_turn_climate_in_place(state: EvoTypes.WorldState) -> Dictionary:
-	var prev_gen := state.generation
-	var prev_season := state.season
-	state.generation = prev_gen + 1
-	state.season = "dry_cold" if prev_season == "wet_warm" else "wet_warm"
-	var gamma_season: float = 1.20 if state.season == "wet_warm" else 0.75
-	var delta_temp: float = 0.04 if state.season == "wet_warm" else -0.04
-	var delta_hum: float = 0.05 if state.season == "wet_warm" else -0.05
-
-	var collapsed_prev_gen_hexes: Dictionary = {}
-	for i in range(state.chronicle.size() - 1, -1, -1):
-		var entry := state.chronicle[i]
-		if entry.generation < prev_gen:
-			break
-		if entry.event_type == "tragedy_of_commons" and entry.generation == prev_gen:
-			collapsed_prev_gen_hexes[entry.hex_id] = true
-
-	var saved_cells: Dictionary = {}
-	for did in state.demes.keys():
-		var d: EvoTypes.Deme = state.demes[did]
-		var cid := d.hex_id
-		if saved_cells.has(cid) or not state.cells.has(cid):
-			continue
-		var cell: EvoTypes.HexCell = state.cells[cid]
-		if cell.biome == "ocean":
-			continue
-		saved_cells[cid] = [cell.carrying_capacity, cell.current_resources, cell.temperature, cell.humidity]
-		step_cell_seasonal_climate(cell, delta_temp, delta_hum, gamma_season, collapsed_prev_gen_hexes.has(cid))
-
-	return {
-		"generation": prev_gen,
-		"season": prev_season,
-		"cells": saved_cells
-	}
-
-
-static func restore_projected_climate(state: EvoTypes.WorldState, snapshot: Dictionary) -> void:
-	state.generation = int(snapshot["generation"])
-	state.season = str(snapshot["season"])
-	var saved_cells: Dictionary = snapshot["cells"]
-	for cid in saved_cells.keys():
-		var cell: EvoTypes.HexCell = state.cells[cid]
-		var sv: Array = saved_cells[cid]
-		cell.carrying_capacity = float(sv[0])
-		cell.current_resources = float(sv[1])
-		cell.temperature = float(sv[2])
-		cell.humidity = float(sv[3])
-
-
 static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "es") -> void:
-	_prune_stale_pacts(state)
+	_prune_stale_relations(state)
 
 	var prev_generation := state.generation
 	var next_generation := state.generation + 1
@@ -117,10 +67,12 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 	var prev_exchange_conns: Array[Dictionary] = []
 	var conn_idx_by_pair: Dictionary = {}
 	for existing_conn in state.disused_connections:
+		var next_age := int(existing_conn["age"]) + 1
+		if next_age > 2:
+			continue
 		var c_copy := existing_conn.duplicate()
-		c_copy["age"] = int(existing_conn.get("age", 0)) + 1
-		c_copy["broken_gen"] = int(existing_conn.get("broken_gen", prev_generation))
-		var pk := EvoTypes.make_pair_key(str(c_copy.get("from_deme_id", "")), str(c_copy.get("to_deme_id", "")))
+		c_copy["age"] = next_age
+		var pk := EvoTypes.make_pair_key(str(c_copy["from_deme_id"]), str(c_copy["to_deme_id"]))
 		conn_idx_by_pair[pk] = prev_exchange_conns.size()
 		prev_exchange_conns.append(c_copy)
 	for fl in state.active_flows:
@@ -159,7 +111,7 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 			biome_changed_hexes[cell.id] = true
 
 	resolve_submerged_demes(state, lang)
-	_prune_stale_pacts(state)
+	_prune_stale_relations(state)
 
 	var delta_temp: float = 0.04 if state.season == "wet_warm" else -0.04
 	var delta_hum: float = 0.05 if state.season == "wet_warm" else -0.05
@@ -247,14 +199,7 @@ static func resolve_submerged_demes(state: EvoTypes.WorldState, lang: String = "
 					if rcell.owner_deme_id == deme_id:
 						rcell.owner_deme_id = ""
 						rcell.land_use = "wild"
-				var drowned_pacts: Array[String] = []
-				for pk_var in state.active_pacts.keys():
-					var pk := str(pk_var)
-					var parts := pk.split("__")
-					if parts.size() == 2 and (parts[0] == deme_id or parts[1] == deme_id):
-						drowned_pacts.append(pk)
-				for pk in drowned_pacts:
-					state.active_pacts.erase(pk)
+				EvoTypes.erase_deme_relations(state, deme_id)
 				if not state.recent_extinction_hexes.has(cell.id):
 					state.recent_extinction_hexes.append(cell.id)
 
@@ -272,18 +217,10 @@ static func resolve_submerged_demes(state: EvoTypes.WorldState, lang: String = "
 				entry.deme_id = deme.id
 				entry.lineage_id = deme.lineage_id
 				state.chronicle.append(entry)
+				EvoSettlementPhase.mark_lineage_if_extinct(state, deme.lineage_id)
 
-				var has_relatives := false
-				for rem_id in state.demes.keys():
-					var rem: EvoTypes.Deme = state.demes[rem_id]
-					if rem.lineage_id == deme.lineage_id:
-						has_relatives = true
-						break
-				if not has_relatives and state.lineage_tree.has(deme.lineage_id):
-					(state.lineage_tree[deme.lineage_id] as EvoTypes.LineageNode).extinct_generation = state.generation
-
-	EvoTurnEngine._revalidate_walled_unions(state)
-	EvoEcologyInteraction.enforce_rural_hinterland_quotas(state)
+	EvoSettlementPhase.revalidate_walled_unions(state)
+	EvoRuralHinterland.enforce_rural_hinterland_quotas(state)
 
 	var valid_flows: Array[EvoTypes.HexEdgeFlow] = []
 	for fl in state.active_flows:
@@ -306,12 +243,12 @@ static func resolve_submerged_demes(state: EvoTypes.WorldState, lang: String = "
 
 	var valid_conns: Array[Dictionary] = []
 	for conn in state.disused_connections:
-		var fa := str(conn.get("from_deme_id", ""))
-		var fb := str(conn.get("to_deme_id", ""))
+		var fa := str(conn["from_deme_id"])
+		var fb := str(conn["to_deme_id"])
 		if (fa != "" and not state.demes.has(fa)) or (fb != "" and not state.demes.has(fb)):
 			continue
-		var ha := str(conn.get("from_hex_id", ""))
-		var hb := str(conn.get("to_hex_id", ""))
+		var ha := str(conn["from_hex_id"])
+		var hb := str(conn["to_hex_id"])
 		if (state.cells.has(ha) and (state.cells[ha] as EvoTypes.HexCell).biome == "ocean") or (state.cells.has(hb) and (state.cells[hb] as EvoTypes.HexCell).biome == "ocean"):
 			continue
 		valid_conns.append(conn)

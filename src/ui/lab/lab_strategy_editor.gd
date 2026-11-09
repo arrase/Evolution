@@ -3,6 +3,20 @@ extends RefCounted
 
 
 static func build_strategy_form(modal: Control, form_vbox: VBoxContainer) -> void:
+	modal._doctrine_row = HBoxContainer.new()
+	modal._doctrine_row.add_theme_constant_override("separation", 8)
+	form_vbox.add_child(modal._doctrine_row)
+
+	modal._doctrine_lbl = Label.new()
+	modal._doctrine_lbl.custom_minimum_size = Vector2(110, 0)
+	modal._doctrine_row.add_child(modal._doctrine_lbl)
+
+	modal.doctrine_edit = TextEdit.new()
+	modal.doctrine_edit.custom_minimum_size = Vector2(0, 52)
+	modal.doctrine_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	modal.doctrine_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	modal._doctrine_row.add_child(modal.doctrine_edit)
+
 	modal._strategy_emblem_row = HBoxContainer.new()
 	modal._strategy_emblem_row.add_theme_constant_override("separation", 10)
 	form_vbox.add_child(modal._strategy_emblem_row)
@@ -114,6 +128,11 @@ static func init_new_strategy(modal: Control) -> void:
 		"Doctrina bio-cultural diseñada en el laboratorio para el duelo de estrategias.",
 		"Bio-cultural doctrine crafted in the laboratory for the strategy duel."
 	)
+	modal.doctrine_edit.text = EvoUiStyle.tr_text(
+		modal._lang,
+		"Busca hacer crecer el linaje mediante alianzas recíprocas, comercio de excedentes y defensa firme ante agresores.",
+		"Grow the lineage through reciprocal alliances, surplus trade, and firm defense against aggressors."
+	)
 	select_strategy_icon(modal, "🛡️")
 	modal.strategy_color_picker.color = Color("#10B981")
 	rebuild_strategy_trait_checks(modal)
@@ -124,6 +143,7 @@ static func save_strategy(modal: Control, clean_name: String, clean_desc: String
 	var strat := build_strategy_from_form(modal)
 	strat.name = clean_name
 	strat.description = clean_desc
+	strat.doctrine = modal.doctrine_edit.text.strip_edges()
 	strat.origin = "user"
 	if modal._world_state != null:
 		modal._world_state.strategies_catalog[strat.id] = strat
@@ -139,6 +159,7 @@ static func save_strategy(modal: Control, clean_name: String, clean_desc: String
 
 
 static func refresh_strategy_and_inject_labels(modal: Control, is_strat: bool) -> void:
+	modal._doctrine_lbl.text = EvoUiStyle.tr_text(modal._lang, "Doctrina:", "Doctrine:")
 	modal._strategy_icon_lbl.text = EvoI18n.t(modal._lang, "lab_strat_icon") + ":"
 	modal._strategy_color_lbl.text = EvoI18n.t(modal._lang, "lab_strat_color") + ":"
 	modal._strategy_traits_title_lbl.text = EvoI18n.t(modal._lang, "lab_strat_traits")
@@ -146,6 +167,7 @@ static func refresh_strategy_and_inject_labels(modal: Control, is_strat: bool) -
 	modal.use_strategy_a_button.text = EvoI18n.t(modal._lang, "lab_use_strat_a")
 	modal.use_strategy_b_button.text = EvoI18n.t(modal._lang, "lab_use_strat_b")
 
+	modal._doctrine_row.visible = is_strat
 	modal._strategy_emblem_row.visible = is_strat
 	modal._strategy_traits_card.visible = is_strat
 	modal._strategy_vector_card.visible = is_strat
@@ -330,6 +352,7 @@ static func build_strategy_from_form(modal: Control) -> EvoTypes.StrategyDef:
 	if strat.name == "":
 		strat.name = "Custom Strategy"
 	strat.description = modal.desc_edit.text.strip_edges()
+	strat.doctrine = modal.doctrine_edit.text.strip_edges()
 	strat.icon = get_selected_strategy_icon(modal)
 	strat.color = "#" + modal.strategy_color_picker.color.to_html(false).to_upper()
 
@@ -430,7 +453,7 @@ static func get_selected_strategy_icon(modal: Control) -> String:
 
 static func is_strategy_form_dirty(modal: Control, existing: EvoTypes.StrategyDef) -> bool:
 	var form_strat := build_strategy_from_form(modal)
-	if form_strat.id != existing.id or form_strat.name != existing.name or form_strat.description != existing.description:
+	if form_strat.id != existing.id or form_strat.name != existing.name or form_strat.description != existing.description or form_strat.doctrine != existing.doctrine:
 		return true
 	if form_strat.icon != existing.icon or form_strat.color.to_upper() != existing.color.to_upper():
 		return true
@@ -468,6 +491,7 @@ static func on_catalog_strategy_clicked(modal: Control, strategy_id: String) -> 
 	modal.id_edit.text = strat.id
 	modal.name_edit.text = EvoI18n.strategy_name(modal._lang, strat)
 	modal.desc_edit.text = EvoI18n.strategy_description(modal._lang, strat)
+	modal.doctrine_edit.text = EvoI18n.strategy_doctrine(modal._lang, strat)
 	select_strategy_icon(modal, strat.icon)
 	modal.strategy_color_picker.color = Color.from_string(strat.color, Color("#10B981"))
 

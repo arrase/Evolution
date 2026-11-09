@@ -36,12 +36,12 @@ var _custom_counter: int = 0
 var tab_strategy_btn: Button
 var tab_bio_btn: Button
 var tab_cul_btn: Button
-var tab_dec_btn: Button
 var item_list: VBoxContainer
 var new_item_button: Button
 var id_edit: LineEdit
 var name_edit: LineEdit
 var desc_edit: TextEdit
+var doctrine_edit: TextEdit
 var enables_culture_check: CheckBox
 var sliders: Dictionary = {}
 var balance_bar: ProgressBar
@@ -67,9 +67,8 @@ var _form_header_lbl: Label
 var _id_lbl: Label
 var _name_lbl: Label
 var _desc_lbl: Label
-var _archetype_row: HBoxContainer
-var _archetype_lbl: Label
-var _archetype_option: OptionButton
+var _doctrine_row: HBoxContainer
+var _doctrine_lbl: Label
 
 var _strategy_emblem_row: HBoxContainer
 var _strategy_icon_lbl: Label
@@ -145,7 +144,7 @@ func _build_ui() -> void:
 	_close_btn.pressed.connect(close_modal)
 	header_hbox.add_child(_close_btn)
 
-	# 4 Tabs bar
+	# 3 Tabs bar
 	var tabs_hbox := HBoxContainer.new()
 	tabs_hbox.add_theme_constant_override("separation", 8)
 	main_vbox.add_child(tabs_hbox)
@@ -161,10 +160,6 @@ func _build_ui() -> void:
 	tab_cul_btn = Button.new()
 	tab_cul_btn.pressed.connect(_switch_tab.bind("cultural"))
 	tabs_hbox.add_child(tab_cul_btn)
-
-	tab_dec_btn = Button.new()
-	tab_dec_btn.pressed.connect(_switch_tab.bind("decision"))
-	tabs_hbox.add_child(tab_dec_btn)
 
 	# Body split: Left catalog list + Right editor
 	var body_hbox := HBoxContainer.new()
@@ -276,7 +271,6 @@ func _build_ui() -> void:
 	_feedback_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)
 	form_vbox.add_child(_feedback_lbl)
 
-	_rebuild_archetype_options()
 	_rebuild_strategy_trait_checks()
 	_start_new_item()
 
@@ -291,7 +285,6 @@ func setup(state: EvoTypes.WorldState, lang: String = "es", selected_deme_id: St
 	elif _world_state != null and not _world_state.demes.has(_selected_deme_id):
 		_selected_deme_id = str(_world_state.demes.keys()[0]) if not _world_state.demes.is_empty() else ""
 	_feedback_lbl.text = ""
-	_rebuild_archetype_options()
 	_rebuild_inject_deme_options()
 	_rebuild_strategy_trait_checks()
 	if _selected_id == "":
@@ -330,7 +323,6 @@ func set_language(lang: String) -> void:
 	_lang = lang
 	if _title_label == null:
 		return
-	_rebuild_archetype_options()
 	_rebuild_inject_deme_options()
 	var checked_ids := _get_checked_strategy_trait_ids()
 	_rebuild_strategy_trait_checks()
@@ -430,19 +422,17 @@ func _update_labels() -> void:
 
 	_title_label.text = EvoUiStyle.tr_text(
 		_lang,
-		"⚗️ Forja de Estrategias, Rasgos y Decisiones — Laboratorio Evolutivo",
-		"⚗️ Strategy, Trait & Decision Forge — Evolutionary Laboratory"
+		"⚗️ Forja de Estrategias y Rasgos — Laboratorio Evolutivo",
+		"⚗️ Strategy & Trait Forge — Evolutionary Laboratory"
 	)
 	_close_btn.text = EvoUiStyle.tr_text(_lang, "✕ Cerrar", "✕ Close")
 	tab_strategy_btn.text = EvoI18n.t(_lang, "lab_tab_strat")
 	tab_bio_btn.text = EvoUiStyle.tr_text(_lang, "🧬 Rasgos Biológicos", "🧬 Biological Traits")
 	tab_cul_btn.text = EvoUiStyle.tr_text(_lang, "🔥 Tradiciones Culturales", "🔥 Cultural Traditions")
-	tab_dec_btn.text = EvoUiStyle.tr_text(_lang, "⚖️ Decisiones Conductuales", "⚖️ Behavioral Decisions")
 
 	EvoUiStyle.apply_button_active(tab_strategy_btn, _current_tab == "strategy")
 	EvoUiStyle.apply_button_active(tab_bio_btn, _current_tab == "biological")
 	EvoUiStyle.apply_button_active(tab_cul_btn, _current_tab == "cultural")
-	EvoUiStyle.apply_button_active(tab_dec_btn, _current_tab == "decision")
 
 	new_item_button.text = EvoI18n.t(_lang, "lab_new_strat") if is_strat else EvoUiStyle.tr_text(_lang, "+ Crear Nuevo", "+ Create New")
 	_id_lbl.text = "ID:"
@@ -488,16 +478,6 @@ func _rebuild_catalog_list() -> void:
 			btn.add_theme_stylebox_override("hover", EvoUiStyle.make_button_style(bg_col.lightened(0.08), accent_col, 3))
 			btn.pressed.connect(_on_catalog_strategy_clicked.bind(strat.id))
 			item_list.add_child(btn)
-	elif _current_tab == "decision":
-		for dec_id in _world_state.decisions_catalog.keys():
-			var dec: EvoTypes.DecisionDef = _world_state.decisions_catalog[dec_id]
-			var btn := Button.new()
-			btn.text = "%s [%s]" % [EvoI18n.decision_name(_lang, dec), dec.archetype]
-			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-			EvoUiStyle.apply_button_active(btn, _selected_id == dec.id)
-			btn.pressed.connect(_on_catalog_decision_clicked.bind(dec.id))
-			item_list.add_child(btn)
 	else:
 		for t_id in _world_state.traits_catalog.keys():
 			var t: EvoTypes.TraitDef = _world_state.traits_catalog[t_id]
@@ -517,8 +497,6 @@ func _load_selected_item_into_form() -> void:
 		return
 	if _current_tab == "strategy" and _world_state.strategies_catalog.has(_selected_id):
 		_on_catalog_strategy_clicked(_selected_id)
-	elif _current_tab == "decision" and _world_state.decisions_catalog.has(_selected_id):
-		_on_catalog_decision_clicked(_selected_id)
 	elif _world_state.traits_catalog.has(_selected_id):
 		_on_catalog_trait_clicked(_selected_id)
 
@@ -571,16 +549,8 @@ func _auto_balance_vector() -> void:
 	EvoLabThermoForm.auto_balance_vector(self)
 
 
-func _rebuild_archetype_options() -> void:
-	EvoLabThermoForm.rebuild_archetype_options(self)
-
-
 func _on_catalog_trait_clicked(trait_id: String) -> void:
 	EvoLabThermoForm.on_catalog_trait_clicked(self, trait_id)
-
-
-func _on_catalog_decision_clicked(decision_id: String) -> void:
-	EvoLabThermoForm.on_catalog_decision_clicked(self, decision_id)
 
 
 func _set_vector_to_sliders(vec: EvoTypes.BiophysicalVector) -> void:

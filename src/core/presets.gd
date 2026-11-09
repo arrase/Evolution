@@ -54,6 +54,8 @@ static func create_preset_world(
 
 	state.strategy_a_id = strategy_a_id if state.strategies_catalog.has(strategy_a_id) else "strat-cooperation"
 	state.strategy_b_id = strategy_b_id if state.strategies_catalog.has(strategy_b_id) else "strat-war"
+	state.rng_seed = int(absi(("%s|%s|%s" % [preset_id, state.strategy_a_id, state.strategy_b_id]).hash())) + 1
+	state.rng.seed = state.rng_seed
 
 	var is_en := lang == "en"
 
@@ -64,11 +66,11 @@ static func create_preset_world(
 	else:
 		_build_rift_savanna(state, lang, is_en)
 
+	EvoRuralHinterland.claim_hinterlands(state)
 	for did in state.demes.keys():
 		var d: EvoTypes.Deme = state.demes[did]
-		EvoCatalog.compute_strategy_baseline_probabilities(d, state.traits_catalog)
 		state.previous_populations[did] = d.population
-	EvoDecisionModel.evaluate_all_demes(state, lang)
+	EvoDecisionModel.evaluate_all_demes(state, lang, true)
 	return state
 
 

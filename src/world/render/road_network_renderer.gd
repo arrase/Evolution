@@ -14,40 +14,16 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 	var v_positions := PackedVector2Array()
 	var deme_village: Dictionary = {}
 	var deme_road_stance: Dictionary = {}
-	var catalog: Dictionary = state.decisions_catalog
 	for v in r._villages:
 		v_positions.append(v["pos"] as Vector2)
 		var did: String = v["deme_id"]
 		deme_village[did] = v
 		if state.demes.has(did):
-			var d: EvoTypes.Deme = state.demes[did]
-			var p_disp := 0.0
-			var p_over := 0.0
-			var p_coop := 0.0
-			for dec_id in d.last_decision_probabilities.keys():
-				var prob := float(d.last_decision_probabilities[dec_id])
-				var arch := ""
-				if catalog.has(dec_id):
-					arch = (catalog[dec_id] as EvoTypes.DecisionDef).archetype
-				else:
-					var s := str(dec_id)
-					if s.contains("dispute"):
-						arch = "dispute"
-					elif s.contains("overexploit"):
-						arch = "overexploit"
-					elif s.contains("cooperate") or s.contains("exchange"):
-						arch = "cooperate"
-				if arch == "dispute":
-					p_disp += prob
-				elif arch == "overexploit":
-					p_over += prob
-				elif arch == "cooperate" or arch == "exchange":
-					p_coop += prob
 			var dom_arch: String = v["archetype"]
 			deme_road_stance[did] = {
 				"arch": dom_arch,
-				"conflict": p_disp >= DISPUTE_FRONT_MIN_PROB or p_over >= 0.30 or dom_arch == "dispute" or dom_arch == "overexploit",
-				"coop": p_coop >= 0.14 or dom_arch == "cooperate" or dom_arch == "exchange"
+				"conflict": dom_arch in ["dispute", "raid", "war", "betrayal", "overexploit"],
+				"coop": dom_arch in ["cooperate", "exchange", "pact"]
 			}
 	r.set_meta("_v_pos_cache", v_positions)
 	r.set_meta("_deme_v_cache", deme_village)

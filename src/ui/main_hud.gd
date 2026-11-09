@@ -537,7 +537,7 @@ func _on_village_cycle_pressed(step: int) -> void:
 
 func _inject_trait_into_deme(deme_id: String, trait_id: String) -> void:
 	if _world_state != null:
-		EvoCatalog.inject_trait_into_deme(_world_state, deme_id, trait_id, _lang)
+		EvoCatalog.inject_trait_into_deme(_world_state, deme_id, trait_id)
 	inject_trait_requested.emit(deme_id, trait_id)
 	refresh(_world_state)
 

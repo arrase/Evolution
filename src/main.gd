@@ -59,16 +59,13 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	if world_state == null:
 		return
-	var prev_rev := _last_model_revision
 	var async_res := EvoDecisionModel.apply_completed_live_results(world_state, lang, _last_model_revision)
 	_last_model_revision = int(async_res["revision"])
 	if bool(async_res["updated"]):
 		hud.refresh_inspector_only(world_state)
 		world_renderer.refresh_village_decisions()
-		if bool(async_res.get("dom_changed", true)):
+		if bool(async_res["dom_changed"]):
 			world_renderer.refresh_overlay(world_state)
-	if _last_model_revision != prev_rev and EvoOllamaClient.needs_prefetch():
-		EvoDecisionModel.prefetch_for_state(world_state)
 
 	if not is_playing:
 		return
@@ -159,17 +156,12 @@ func load_preset(preset_id: String, strategy_a_id: String = "", strategy_b_id: S
 	EvoOllamaClient.clear_cache()
 
 	var preserved_traits: Dictionary = {}
-	var preserved_decisions: Dictionary = {}
 	var preserved_strategies: Dictionary = {}
 	if world_state != null:
 		for tid in world_state.traits_catalog.keys():
 			var tr: EvoTypes.TraitDef = world_state.traits_catalog[tid]
 			if tr.origin in ["user", "custom"]:
 				preserved_traits[tid] = tr.duplicate_trait()
-		for did in world_state.decisions_catalog.keys():
-			var dec: EvoTypes.DecisionDef = world_state.decisions_catalog[did]
-			if dec.origin in ["user", "custom"]:
-				preserved_decisions[did] = dec.duplicate_decision()
 		for sid in world_state.strategies_catalog.keys():
 			var strat: EvoTypes.StrategyDef = world_state.strategies_catalog[sid]
 			if strat.origin in ["user", "custom"]:
@@ -188,9 +180,6 @@ func load_preset(preset_id: String, strategy_a_id: String = "", strategy_b_id: S
 	for tid in preserved_traits.keys():
 		if not world_state.traits_catalog.has(tid):
 			world_state.traits_catalog[tid] = preserved_traits[tid]
-	for did in preserved_decisions.keys():
-		if not world_state.decisions_catalog.has(did):
-			world_state.decisions_catalog[did] = preserved_decisions[did]
 	for sid in preserved_strategies.keys():
 		if not world_state.strategies_catalog.has(sid):
 			world_state.strategies_catalog[sid] = preserved_strategies[sid]
@@ -221,7 +210,6 @@ func load_preset(preset_id: String, strategy_a_id: String = "", strategy_b_id: S
 	hud.set_playing_state(false)
 	hud.setup(world_state, lang)
 	world_renderer.refresh()
-	EvoDecisionModel.prefetch_for_state(world_state)
 
 
 func set_matchup_strategies(strategy_a_id: String, strategy_b_id: String) -> void:
@@ -250,7 +238,6 @@ func _reapply_starting_strategies() -> void:
 		if world_state.demes.has(did):
 			EvoCatalog.apply_strategy_to_deme(world_state, world_state.demes[did], world_state.strategy_b_id)
 	EvoDecisionModel.evaluate_all_demes(world_state, lang)
-	EvoDecisionModel.prefetch_for_state(world_state)
 
 
 func _on_strategy_saved(strategy_id: String) -> void:
@@ -258,7 +245,6 @@ func _on_strategy_saved(strategy_id: String) -> void:
 		return
 	EvoUserSettings.save_user_catalog(world_state)
 	EvoOllamaClient.clear_cache()
-	EvoDecisionModel.invalidate_state_caches(world_state)
 	if world_state.generation == 0 and (strategy_id == world_state.strategy_a_id or strategy_id == world_state.strategy_b_id):
 		if strategy_id == world_state.strategy_a_id:
 			for did in SLOT_A_DEME_IDS:
@@ -283,7 +269,7 @@ func _on_strategy_saved(strategy_id: String) -> void:
 					var lin: EvoTypes.LineageNode = world_state.lineage_tree[d.lineage_id]
 					if lin.divergence_reason != "allopatric_speciation":
 						lin.color = strat.color
-	EvoDecisionModel.prefetch_for_state(world_state)
+		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 	hud.refresh(world_state)
 	world_renderer.refresh()
 
@@ -357,8 +343,6 @@ func _apply_brush_at_hex(hex_id: String) -> void:
 		applied = EvoTurnEngine.apply_adjust_carrying_capacity(world_state, target_hexes, delta_k)
 
 	if applied:
-		EvoDecisionModel.invalidate_state_caches(world_state)
-		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 		if world_renderer.selected_deme_id != "" and world_state.demes.has(world_renderer.selected_deme_id) and (world_state.demes[world_renderer.selected_deme_id] as EvoTypes.Deme).hex_id != hex_id:
 			_sync_selection_after_world_mutation()
 		else:
@@ -426,7 +410,6 @@ func _on_state_imported(new_state: EvoTypes.WorldState) -> void:
 	world_renderer.highlighted_lineage_id = ""
 	hud._selected_hex_id = world_renderer.selected_hex_id
 	EvoDecisionModel.evaluate_all_demes(world_state, hud._lang if hud != null else lang)
-	EvoDecisionModel.prefetch_for_state(world_state)
 	world_renderer.set_world_state(world_state)
 	hud.refresh(world_state)
 
@@ -502,8 +485,6 @@ func _on_sea_level_change_requested(delta: float) -> void:
 	if world_state == null:
 		return
 	if EvoTurnEngine.apply_adjust_sea_level(world_state, delta, lang):
-		EvoDecisionModel.invalidate_state_caches(world_state)
-		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 		_sync_selection_after_world_mutation()
 		hud.refresh(world_state)
 		world_renderer.refresh()
@@ -542,9 +523,7 @@ func _on_lineage_highlight_requested(lineage_id: String) -> void:
 
 func _on_inject_trait_requested(_deme_id: String, _trait_id: String) -> void:
 	if world_state != null:
-		EvoDecisionModel.invalidate_state_caches(world_state)
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
-		EvoDecisionModel.prefetch_for_state(world_state)
 		hud.refresh(world_state)
 	world_renderer.refresh()
 
@@ -556,8 +535,6 @@ func _on_catalog_item_saved(item_type: String, item_data: Variant = null) -> voi
 			_on_strategy_saved(str((item_data as Dictionary)["id"]))
 			return
 		EvoOllamaClient.clear_cache()
-		EvoDecisionModel.invalidate_state_caches(world_state)
 		EvoDecisionModel.evaluate_all_demes(world_state, hud._lang if hud != null else lang)
-		EvoDecisionModel.prefetch_for_state(world_state)
 		hud.refresh(world_state)
 		world_renderer.refresh()

@@ -439,17 +439,16 @@ static func build_geopolitics_by_deme(state: EvoTypes.WorldState) -> Dictionary:
 			"in_merge": d.merged_count > 0 or d.walled_union_id != "",
 			"geo_icons": empty_icons
 		}
-	for pk_var in state.active_pacts.keys():
-		var turns := int(state.active_pacts[pk_var])
-		if turns >= 2 or turns < 0:
+	for pk_var in state.relations.keys():
+		var rel: EvoTypes.Relation = state.relations[pk_var]
+		if rel.pact_turns > 0 or rel.feud_turns > 0:
 			var pk := str(pk_var)
-			var sep := "__" if pk.contains("__") else "|"
-			var parts := pk.split(sep)
+			var parts := pk.split("__")
 			if parts.size() == 2 and geo_by_deme.has(parts[0]) and geo_by_deme.has(parts[1]):
-				if turns >= 2:
+				if rel.pact_turns > 0:
 					geo_by_deme[parts[0]]["has_pact"] = true
 					geo_by_deme[parts[1]]["has_pact"] = true
-				else:
+				if rel.feud_turns > 0:
 					geo_by_deme[parts[0]]["has_vendetta"] = true
 					geo_by_deme[parts[1]]["has_vendetta"] = true
 	for flow in state.active_flows:
@@ -501,30 +500,11 @@ static func build_geopolitics_by_deme(state: EvoTypes.WorldState) -> Dictionary:
 
 
 static func get_deme_dominant_archetype(r: Node2D, deme: EvoTypes.Deme) -> String:
+	var action_type := str(deme.chosen_action["type"])
 	var catalog: Dictionary = r.world_state.decisions_catalog
-	if catalog.has(deme.last_dominant_decision_id):
-		var dec: EvoTypes.DecisionDef = catalog[deme.last_dominant_decision_id]
+	if catalog.has(action_type):
+		var dec: EvoTypes.DecisionDef = catalog[action_type]
 		return dec.archetype
-	if deme.last_dominant_decision_id.contains("war"):
-		return "war"
-	if deme.last_dominant_decision_id.contains("raid"):
-		return "raid"
-	if deme.last_dominant_decision_id.contains("pact"):
-		return "pact"
-	if deme.last_dominant_decision_id.contains("betrayal"):
-		return "betrayal"
-	if deme.last_dominant_decision_id.contains("overexploit"):
-		return "overexploit"
-	if deme.last_dominant_decision_id.contains("migration"):
-		return "migrate"
-	if deme.last_dominant_decision_id.contains("cooperate"):
-		return "cooperate"
-	if deme.last_dominant_decision_id.contains("exchange"):
-		return "exchange"
-	if deme.last_dominant_decision_id.contains("dispute"):
-		return "dispute"
-	if deme.last_dominant_decision_id.contains("innovate"):
-		return "innovate"
 	return "forage"
 
 

@@ -6,19 +6,7 @@ static func build_thermo_form(modal: Control, form_vbox: VBoxContainer) -> void:
 	modal.enables_culture_check = CheckBox.new()
 	form_vbox.add_child(modal.enables_culture_check)
 
-	modal._archetype_row = HBoxContainer.new()
-	modal._archetype_row.add_theme_constant_override("separation", 8)
-	form_vbox.add_child(modal._archetype_row)
-
-	modal._archetype_lbl = Label.new()
-	modal._archetype_lbl.custom_minimum_size = Vector2(110, 0)
-	modal._archetype_row.add_child(modal._archetype_lbl)
-
-	modal._archetype_option = OptionButton.new()
-	modal._archetype_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	modal._archetype_row.add_child(modal._archetype_option)
-
-	# 6 Sliders box (for traits & decisions)
+	# 6 Sliders box (for traits)
 	modal._sliders_card = PanelContainer.new()
 	modal._sliders_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 10))
 	form_vbox.add_child(modal._sliders_card)
@@ -106,7 +94,7 @@ static func init_new_trait_or_decision(modal: Control) -> void:
 		)
 		modal.enables_culture_check.button_pressed = false
 		set_vector_to_sliders(modal, EvoTypes.BiophysicalVector.new(0.15, 0.30, 0.05, 0.20, 0.10, 0.20))
-	elif modal._current_tab == "cultural":
+	else:
 		modal.id_edit.text = modal._next_custom_id("cul")
 		modal.name_edit.text = EvoUiStyle.tr_text(modal._lang, "Tradición Artesanal", "Artisanal Tradition")
 		modal.desc_edit.text = EvoUiStyle.tr_text(
@@ -115,16 +103,6 @@ static func init_new_trait_or_decision(modal: Control) -> void:
 			"Socially transmitted cultural practice across generations."
 		)
 		set_vector_to_sliders(modal, EvoTypes.BiophysicalVector.new(0.20, 0.35, 0.15, 0.10, 0.35, 0.45))
-	else:
-		modal.id_edit.text = modal._next_custom_id("dec")
-		modal.name_edit.text = EvoUiStyle.tr_text(modal._lang, "Estrategia Adaptativa", "Adaptive Strategy")
-		modal.desc_edit.text = EvoUiStyle.tr_text(
-			modal._lang,
-			"Patrón conductual colectivo evaluado por las aldeas.",
-			"Collective behavioral pattern evaluated by villages."
-		)
-		select_archetype(modal, "custom")
-		set_vector_to_sliders(modal, EvoTypes.BiophysicalVector.new(0.20, 0.35, 0.10, 0.15, 0.20, 0.25))
 
 
 static func save_trait_or_decision(modal: Control, clean_name: String, clean_desc: String) -> void:
@@ -134,49 +112,28 @@ static func save_trait_or_decision(modal: Control, clean_name: String, clean_des
 	set_vector_to_sliders(modal, final_vec)
 	update_thermodynamics_preview(modal)
 
-	if modal._current_tab == "decision":
-		var dec := EvoTypes.DecisionDef.new()
-		dec.id = modal._resolve_target_id("dec")
-		dec.name = clean_name
-		dec.description = clean_desc
-		dec.archetype = get_selected_archetype(modal)
-		dec.origin = "user"
-		dec.vector = final_vec
-		if modal._world_state != null and modal._world_state.decisions_catalog.has(dec.id):
-			var prev_dec: EvoTypes.DecisionDef = modal._world_state.decisions_catalog[dec.id]
-			dec.required_trait_ids = prev_dec.required_trait_ids.duplicate()
-		if modal._world_state != null:
-			modal._world_state.decisions_catalog[dec.id] = dec
-			EvoUserSettings.save_user_catalog(modal._world_state)
-		modal._selected_id = dec.id
-		modal.id_edit.text = dec.id
-		modal.catalog_item_saved.emit("decision", dec.to_dict())
-		modal._rebuild_catalog_list()
-		modal._update_labels()
-		modal._show_saved_feedback(dec.id)
-	else:
-		var prefix := "bio" if modal._current_tab == "biological" else "cul"
-		var tr := EvoTypes.TraitDef.new()
-		tr.id = modal._resolve_target_id(prefix)
-		tr.name = clean_name
-		tr.description = clean_desc
-		tr.category = modal._current_tab
-		tr.origin = "user"
-		tr.vector = final_vec
-		tr.enables_cultural_transmission = modal.enables_culture_check.button_pressed if modal._current_tab == "biological" else false
-		if modal._world_state != null and modal._world_state.traits_catalog.has(tr.id):
-			var prev_tr: EvoTypes.TraitDef = modal._world_state.traits_catalog[tr.id]
-			tr.mutually_exclusive_with = prev_tr.mutually_exclusive_with.duplicate()
-		if modal._world_state != null:
-			modal._world_state.traits_catalog[tr.id] = tr
-			EvoUserSettings.save_user_catalog(modal._world_state)
-		modal._selected_id = tr.id
-		modal.id_edit.text = tr.id
-		modal._rebuild_strategy_trait_checks()
-		modal.catalog_item_saved.emit("trait", tr.to_dict())
-		modal._rebuild_catalog_list()
-		modal._update_labels()
-		modal._show_saved_feedback(tr.id)
+	var prefix := "bio" if modal._current_tab == "biological" else "cul"
+	var tr := EvoTypes.TraitDef.new()
+	tr.id = modal._resolve_target_id(prefix)
+	tr.name = clean_name
+	tr.description = clean_desc
+	tr.category = modal._current_tab
+	tr.origin = "user"
+	tr.vector = final_vec
+	tr.enables_cultural_transmission = modal.enables_culture_check.button_pressed if modal._current_tab == "biological" else false
+	if modal._world_state != null and modal._world_state.traits_catalog.has(tr.id):
+		var prev_tr: EvoTypes.TraitDef = modal._world_state.traits_catalog[tr.id]
+		tr.mutually_exclusive_with = prev_tr.mutually_exclusive_with.duplicate()
+	if modal._world_state != null:
+		modal._world_state.traits_catalog[tr.id] = tr
+		EvoUserSettings.save_user_catalog(modal._world_state)
+	modal._selected_id = tr.id
+	modal.id_edit.text = tr.id
+	modal._rebuild_strategy_trait_checks()
+	modal.catalog_item_saved.emit("trait", tr.to_dict())
+	modal._rebuild_catalog_list()
+	modal._update_labels()
+	modal._show_saved_feedback(tr.id)
 
 
 static func refresh_thermo_labels(modal: Control, is_strat: bool) -> void:
@@ -185,10 +142,8 @@ static func refresh_thermo_labels(modal: Control, is_strat: bool) -> void:
 		"Habilita transmisión cultural (enablesCulturalTransmission)",
 		"Enables cultural transmission (enablesCulturalTransmission)"
 	)
-	modal._archetype_lbl.text = EvoUiStyle.tr_text(modal._lang, "Arquetipo:", "Archetype:")
 
 	modal.enables_culture_check.visible = (modal._current_tab == "biological")
-	modal._archetype_row.visible = (modal._current_tab == "decision")
 	modal._sliders_card.visible = not is_strat
 	modal._thermo_card.visible = not is_strat
 
@@ -227,19 +182,6 @@ static func auto_balance_vector(modal: Control) -> void:
 	update_thermodynamics_preview(modal)
 
 
-static func rebuild_archetype_options(modal: Control) -> void:
-	if modal._archetype_option == null:
-		return
-	var prev_idx := maxi(0, modal._archetype_option.selected)
-	modal._archetype_option.clear()
-	for i in range(EvoTypes.ARCHETYPES.size()):
-		var arch: String = EvoTypes.ARCHETYPES[i]
-		modal._archetype_option.add_item(EvoUiStyle.get_archetype_label(arch, modal._lang), i)
-		modal._archetype_option.set_item_metadata(i, arch)
-	if prev_idx < modal._archetype_option.item_count:
-		modal._archetype_option.select(prev_idx)
-
-
 static func on_catalog_trait_clicked(modal: Control, trait_id: String) -> void:
 	if modal._world_state == null or not modal._world_state.traits_catalog.has(trait_id):
 		return
@@ -250,22 +192,6 @@ static func on_catalog_trait_clicked(modal: Control, trait_id: String) -> void:
 	modal.desc_edit.text = EvoI18n.trait_description(modal._lang, tr)
 	modal.enables_culture_check.button_pressed = tr.enables_cultural_transmission
 	set_vector_to_sliders(modal, tr.vector)
-	modal._feedback_lbl.text = ""
-	modal._update_labels()
-	modal._rebuild_catalog_list()
-	update_thermodynamics_preview(modal)
-
-
-static func on_catalog_decision_clicked(modal: Control, decision_id: String) -> void:
-	if modal._world_state == null or not modal._world_state.decisions_catalog.has(decision_id):
-		return
-	var dec: EvoTypes.DecisionDef = modal._world_state.decisions_catalog[decision_id]
-	modal._selected_id = dec.id
-	modal.id_edit.text = dec.id
-	modal.name_edit.text = EvoI18n.decision_name(modal._lang, dec)
-	modal.desc_edit.text = EvoI18n.decision_description(modal._lang, dec)
-	select_archetype(modal, dec.archetype)
-	set_vector_to_sliders(modal, dec.vector)
 	modal._feedback_lbl.text = ""
 	modal._update_labels()
 	modal._rebuild_catalog_list()
@@ -338,20 +264,6 @@ static func update_thermodynamics_preview(modal: Control) -> void:
 			"⚠ Uncompensated advantage: saving will auto-balance to Metabolic Cost = %+.2f, Eco Impact = %+.2f." % [bal_vec.metabolic_cost, bal_vec.ecological_impact]
 		)
 		modal.balance_status_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_AMBER_WARN)
-
-
-static func select_archetype(modal: Control, archetype: String) -> void:
-	for i in range(modal._archetype_option.item_count):
-		if str(modal._archetype_option.get_item_metadata(i)) == archetype:
-			modal._archetype_option.select(i)
-			return
-
-
-static func get_selected_archetype(modal: Control) -> String:
-	var idx: int = modal._archetype_option.selected
-	if idx >= 0 and idx < modal._archetype_option.item_count:
-		return str(modal._archetype_option.get_item_metadata(idx))
-	return "custom"
 
 
 static func on_slider_value_changed(modal: Control, _val: float, _key: String) -> void:

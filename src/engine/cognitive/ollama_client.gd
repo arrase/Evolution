@@ -6,12 +6,12 @@ const DEFAULT_OLLAMA_PORT: int = 11434
 const STATUS_TIMEOUT_MS: int = 1500
 const EVAL_TIMEOUT_MS: int = 60000
 const PULL_STALL_TIMEOUT_MS: int = 60000
-const SYSTEM_ONE_INSTRUCTIONS: String = "Evaluate the ecological, energetic, and social state of the deme and its passable neighbors to score each behavioral decision."
+const MAX_CONCURRENT_JOBS: int = 8
 
 static var _mutex := Mutex.new()
 static var _cached_ollama_status: Dictionary = {}
-static var _live_signature_cache: Dictionary = {}
-static var _pending_jobs_by_sig: Dictionary = {}
+static var _results_by_deme: Dictionary = {}
+static var _pending_jobs: Array[Dictionary] = []
 static var _cache_epoch: int = 0
 static var _active_worker_epoch: int = -1
 static var _worker_task_id: int = -1
@@ -22,7 +22,7 @@ static var _status_reprobe_requested: bool = false
 static var _status_task_id: int = -1
 static var _shutdown_requested: bool = false
 static var _completed_revision: int = 0
-static var _newly_completed_sigs: Dictionary = {}
+static var _newly_completed: Dictionary = {}
 
 static var _pull_task_id: int = -1
 static var _pull_running: bool = false
@@ -64,9 +64,9 @@ static func _default_ollama_status() -> Dictionary:
 static func clear_cache() -> void:
 	_mutex.lock()
 	_cache_epoch += 1
-	_live_signature_cache.clear()
-	_pending_jobs_by_sig.clear()
-	_newly_completed_sigs.clear()
+	_results_by_deme.clear()
+	_pending_jobs.clear()
+	_newly_completed.clear()
 	_mutex.unlock()
 
 
@@ -393,186 +393,54 @@ static func _resolve_ollama_model_for_tag(desired: String, status: Dictionary) -
 	return s_tag
 
 
-static func build_live_job(sig: String, rep: EvoTypes.Deme, state: EvoTypes.WorldState) -> Dictionary:
-	if not state.cells.has(rep.hex_id):
-		return {}
-	var eligible_decisions := EvoHeuristicScorer.get_eligible_decisions(rep, state.decisions_catalog, state.traits_catalog, state)
-	var eligible_ids: Array[String] = []
-	for dec in eligible_decisions:
-		eligible_ids.append(dec.id)
-	if eligible_ids.is_empty():
-		return {}
-	var cell: EvoTypes.HexCell = state.cells[rep.hex_id]
-	var preferred_tag := rep.decision_model_tag if rep.decision_model_tag != "" else EvoHeuristicScorer.resolve_deme_decision_model_tag(rep.id)
-	var top_prior := EvoHeuristicScorer.build_top_strategy_prior(rep, cell, state)
-	var geo_summary := EvoHeuristicScorer.build_geopolitics_summary(rep, cell, state)
-	return {
-		"sig": sig,
-		"preferred_tag": preferred_tag,
-		"briefing": EvoHeuristicScorer.build_compact_system_one_state(rep, state, top_prior, geo_summary),
-		"strategy_traits_prior": top_prior,
-		"geopolitics": geo_summary,
-		"memory": str(geo_summary.get("memory", "quiet")),
-		"criteria": EvoHeuristicScorer.build_compact_decision_criteria(eligible_decisions),
-		"eligible_ids": eligible_ids
-	}
-
-
 static func _can_enqueue_locked() -> bool:
 	if _shutdown_requested:
 		return false
 	if not _status_probed:
 		return true
-	return bool(_cached_ollama_status.get("connected", false)) and (
-		bool(_cached_ollama_status.get("primary_ready", false))
-		or bool(_cached_ollama_status.get("secondary_ready", false))
+	return bool(_cached_ollama_status["connected"]) and (
+		bool(_cached_ollama_status["primary_ready"])
+		or bool(_cached_ollama_status["secondary_ready"])
 	)
 
 
-static func needs_prefetch() -> bool:
+## Each job: {deme_id, preferred_tag, briefing, instructions, criteria (action key -> forecast)}.
+static func enqueue_jobs(jobs: Array[Dictionary]) -> void:
 	_mutex.lock()
-	var ok := _can_enqueue_locked() and (not _worker_running or _pending_jobs_by_sig.size() < 16)
+	var can_enqueue := _can_enqueue_locked()
+	if can_enqueue:
+		_pending_jobs.append_array(jobs)
 	_mutex.unlock()
-	return ok
-
-
-static func has_cached_or_can_enqueue(enqueue_missing: bool) -> bool:
-	_mutex.lock()
-	var ok := not _live_signature_cache.is_empty() or (enqueue_missing and _can_enqueue_locked())
-	_mutex.unlock()
-	return ok
-
-
-static func lookup_or_enqueue_single_deme(
-	sig: String,
-	deme: EvoTypes.Deme,
-	state: EvoTypes.WorldState
-) -> Dictionary:
-	var cached_entry: Dictionary = {}
-	var need_enqueue := false
-	_mutex.lock()
-	if _live_signature_cache.has(sig):
-		cached_entry = (_live_signature_cache[sig] as Dictionary).duplicate(true)
-	elif not _pending_jobs_by_sig.has(sig) and _can_enqueue_locked():
-		need_enqueue = true
-	_mutex.unlock()
-
-	if not cached_entry.is_empty():
-		return cached_entry
-
-	if need_enqueue:
-		var job := build_live_job(sig, deme, state)
-		if not job.is_empty():
-			_mutex.lock()
-			if not _live_signature_cache.has(sig) and not _pending_jobs_by_sig.has(sig):
-				_pending_jobs_by_sig[sig] = job
-			_mutex.unlock()
-			_start_worker_if_needed()
-
-	return {}
-
-
-static func seed_signature_cache(sig: String, entry: Dictionary) -> void:
-	_mutex.lock()
-	_live_signature_cache[sig] = entry.duplicate(true)
-	_mutex.unlock()
-
-
-static func sync_and_enqueue_batch(
-	buckets: Dictionary,
-	state: EvoTypes.WorldState,
-	enqueue_missing: bool = true
-) -> Dictionary:
-	var live_results: Dictionary = {}
-	var missing_sigs: Array[String] = []
-	var max_new: int = 0
-	if not buckets.is_empty():
-		_mutex.lock()
-		var can_enq := enqueue_missing and _can_enqueue_locked()
-		if not _worker_running:
-			for pending_sig in _pending_jobs_by_sig.keys():
-				if not buckets.has(pending_sig):
-					_pending_jobs_by_sig.erase(pending_sig)
-		for sig in buckets.keys():
-			if _live_signature_cache.has(sig):
-				live_results[sig] = (_live_signature_cache[sig] as Dictionary).duplicate(true)
-				_newly_completed_sigs.erase(sig)
-			elif can_enq and not _pending_jobs_by_sig.has(sig):
-				missing_sigs.append(str(sig))
-		max_new = maxi(0, 32 - _pending_jobs_by_sig.size())
-		_mutex.unlock()
-
-	var new_jobs: Array[Dictionary] = []
-	for i in range(mini(max_new, missing_sigs.size())):
-		var sig := missing_sigs[i]
-		var rep_deme: EvoTypes.Deme = buckets[sig]["representative"]
-		var job := build_live_job(sig, rep_deme, state)
-		if not job.is_empty():
-			new_jobs.append(job)
-
-	if not new_jobs.is_empty():
-		_mutex.lock()
-		for job in new_jobs:
-			var s := str(job["sig"])
-			if not _live_signature_cache.has(s) and not _pending_jobs_by_sig.has(s):
-				_pending_jobs_by_sig[s] = job
-		_mutex.unlock()
-		_start_worker_if_needed()
-
-	return live_results
-
-
-static func prefetch_for_reps(reps_by_sig: Dictionary, state: EvoTypes.WorldState) -> void:
-	var missing_sigs: Array[String] = []
-	_mutex.lock()
-	var can_enq := _can_enqueue_locked()
-	if not _worker_running:
-		for pending_sig in _pending_jobs_by_sig.keys():
-			if not reps_by_sig.has(pending_sig):
-				_pending_jobs_by_sig.erase(pending_sig)
-	if can_enq and _pending_jobs_by_sig.size() < 32:
-		for sig in reps_by_sig.keys():
-			if not _live_signature_cache.has(sig) and not _pending_jobs_by_sig.has(sig):
-				missing_sigs.append(str(sig))
-				if _pending_jobs_by_sig.size() + missing_sigs.size() >= 32 or missing_sigs.size() >= 16:
-					break
-	_mutex.unlock()
-
-	if missing_sigs.is_empty():
-		return
-
-	var new_jobs: Array[Dictionary] = []
-	for sig in missing_sigs:
-		var job := build_live_job(sig, reps_by_sig[sig], state)
-		if not job.is_empty():
-			new_jobs.append(job)
-
-	if not new_jobs.is_empty():
-		_mutex.lock()
-		for job in new_jobs:
-			var s := str(job["sig"])
-			if not _live_signature_cache.has(s) and not _pending_jobs_by_sig.has(s):
-				_pending_jobs_by_sig[s] = job
-		_mutex.unlock()
+	if can_enqueue:
 		_start_worker_if_needed()
 
 
-static func pop_newly_completed(last_seen_rev: int, enabled: bool) -> Dictionary:
+static func seed_deme_result(deme_id: String, entry: Dictionary) -> void:
+	_mutex.lock()
+	_results_by_deme[deme_id] = entry.duplicate(true)
+	_mutex.unlock()
+
+
+static func take_result(deme_id: String) -> Dictionary:
+	_mutex.lock()
+	var result: Dictionary = (_results_by_deme[deme_id] as Dictionary).duplicate(true) if _results_by_deme.has(deme_id) else {}
+	_mutex.unlock()
+	return result
+
+
+static func pop_newly_completed(last_seen_rev: int) -> Dictionary:
 	_mutex.lock()
 	var current_rev := _completed_revision
-	if current_rev == last_seen_rev or not enabled or _newly_completed_sigs.is_empty():
-		_mutex.unlock()
-		return {"revision": current_rev, "newly_completed": {}}
-	var newly_completed := _newly_completed_sigs.duplicate(true)
-	_newly_completed_sigs.clear()
+	var newly := {} if current_rev == last_seen_rev else _newly_completed.duplicate(true)
+	_newly_completed.clear()
 	_mutex.unlock()
-	return {"revision": current_rev, "newly_completed": newly_completed}
+	return {"revision": current_rev, "newly_completed": newly}
 
 
 static func _start_worker_if_needed() -> void:
 	var task_to_reap: int = -1
 	_mutex.lock()
-	var should_start := not _shutdown_requested and not _worker_running and not _pending_jobs_by_sig.is_empty()
+	var should_start := not _shutdown_requested and not _worker_running and not _pending_jobs.is_empty()
 	if should_start:
 		_worker_running = true
 		_active_worker_epoch = _cache_epoch
@@ -590,68 +458,32 @@ static func _start_worker_if_needed() -> void:
 
 
 static func _run_ollama_worker() -> void:
-	var need_probe := false
-	_mutex.lock()
-	if not _status_probed and not _status_probe_running and not _shutdown_requested:
-		_status_probe_running = true
-		need_probe = true
-	_mutex.unlock()
-
-	if need_probe:
+	if not _status_probed:
 		_probe_ollama_status_sync()
-	else:
-		while not _shutdown_requested:
-			_mutex.lock()
-			var done_probing := _status_probed or not _status_probe_running
-			_mutex.unlock()
-			if done_probing:
-				break
-			OS.delay_msec(2)
-
 	while not _shutdown_requested:
-		var batch: Array[Dictionary] = []
-		var status: Dictionary = {}
-		var batch_epoch: int = 0
-		var ctx_len: int = 8192
-
 		_mutex.lock()
-		if _pending_jobs_by_sig.is_empty() or _shutdown_requested:
+		if _pending_jobs.is_empty() or not _can_enqueue_locked():
+			_pending_jobs.clear()
 			_worker_running = false
 			_active_worker_epoch = -1
 			_mutex.unlock()
 			return
-		status = _cached_ollama_status.duplicate(true)
-		if not status.has("primary_tag"):
-			status["primary_tag"] = EvoUserSettings.primary_model
-		if not status.has("secondary_tag"):
-			status["secondary_tag"] = EvoUserSettings.secondary_model
-		ctx_len = EvoUserSettings.context_length
-		var can_eval := bool(status["connected"]) and (bool(status["primary_ready"]) or bool(status["secondary_ready"]))
-		if not can_eval:
-			_pending_jobs_by_sig.clear()
-			_worker_running = false
-			_active_worker_epoch = -1
-			_mutex.unlock()
-			return
-		batch_epoch = _cache_epoch
+		var status := _cached_ollama_status.duplicate(true)
+		var ctx_len := EvoUserSettings.context_length
+		var batch_epoch := _cache_epoch
 		_active_worker_epoch = batch_epoch
-		var keys := _pending_jobs_by_sig.keys()
-		var count := mini(8, keys.size())
-		for i in range(count):
-			var k := str(keys[i])
-			batch.append(_pending_jobs_by_sig[k])
-			_pending_jobs_by_sig.erase(k)
+		var batch: Array[Dictionary] = _pending_jobs.slice(0, MAX_CONCURRENT_JOBS)
+		_pending_jobs = _pending_jobs.slice(MAX_CONCURRENT_JOBS)
 		_mutex.unlock()
 
 		var batch_results := _evaluate_job_batch_with_ollama(batch, status, ctx_len)
-		if not batch_results.is_empty():
-			_mutex.lock()
-			if _cache_epoch == batch_epoch:
-				for sig_key in batch_results.keys():
-					_live_signature_cache[sig_key] = batch_results[sig_key]
-					_newly_completed_sigs[sig_key] = batch_results[sig_key]
-				_completed_revision += 1
-			_mutex.unlock()
+		_mutex.lock()
+		if _cache_epoch == batch_epoch:
+			for deme_id in batch_results.keys():
+				_results_by_deme[deme_id] = batch_results[deme_id]
+				_newly_completed[deme_id] = batch_results[deme_id]
+			_completed_revision += 1
+		_mutex.unlock()
 
 	_mutex.lock()
 	_worker_running = false
@@ -659,53 +491,58 @@ static func _run_ollama_worker() -> void:
 	_mutex.unlock()
 
 
+static func build_payload(job: Dictionary, model_tag: String, ctx_len: int) -> Dictionary:
+	return {
+		"model": model_tag,
+		"keep_alive": "30m",
+		"options": {"num_ctx": ctx_len},
+		"state": {"briefing": str(job["briefing"])},
+		"questions": {
+			"decision": {
+				"type": "choice",
+				"instructions": str(job["instructions"]),
+				"criteria": job["criteria"]
+			}
+		}
+	}
+
+
+static func normalize_probabilities(raw: Dictionary, keys: Array) -> Dictionary:
+	var total := 0.0
+	var clean: Dictionary = {}
+	for key in keys:
+		var val := float(raw.get(key, 0.0))
+		clean[key] = val if is_finite(val) and val > 0.0 else 0.0
+		total += float(clean[key])
+	if total <= 0.0:
+		return {}
+	for key in keys:
+		clean[key] = float(clean[key]) / total
+	return clean
+
+
 static func _evaluate_job_batch_with_ollama(
 	batch: Array[Dictionary],
 	status: Dictionary,
-	ctx_len: int = 8192
+	ctx_len: int
 ) -> Dictionary:
-	var results_by_sig: Dictionary = {}
+	var results_by_deme: Dictionary = {}
 	var active_jobs: Array[Dictionary] = []
-
 	for item in batch:
-		if _shutdown_requested:
-			break
 		var model_tag := _resolve_ollama_model_for_tag(str(item["preferred_tag"]), status)
-		var payload := {
-			"model": model_tag,
-			"keep_alive": "30m",
-			"options": {
-				"num_ctx": ctx_len
-			},
-			"state": {
-				"briefing": str(item["briefing"]),
-				"strategy_traits_prior": item.get("strategy_traits_prior", {}),
-				"geopolitics": item.get("geopolitics", {}),
-				"memory": str(item.get("memory", "quiet"))
-			},
-			"questions": {
-				"decision": {
-					"type": "choice",
-					"instructions": SYSTEM_ONE_INSTRUCTIONS,
-					"criteria": item["criteria"]
-				}
-			}
-		}
-		var body_str := JSON.stringify(payload)
 		var client := HTTPClient.new()
 		var err := client.connect_to_host(DEFAULT_OLLAMA_HOST, DEFAULT_OLLAMA_PORT)
 		active_jobs.append({
-			"sig": str(item["sig"]),
+			"deme_id": str(item["deme_id"]),
+			"keys": (item["criteria"] as Dictionary).keys(),
 			"client": client,
-			"body": body_str,
-			"eligible_ids": item["eligible_ids"],
+			"body": JSON.stringify(build_payload(item, model_tag, ctx_len)),
 			"stage": "connecting" if err == OK else "failed",
 			"rb": PackedByteArray()
 		})
 
 	var start_ms := Time.get_ticks_msec()
 	var headers := PackedStringArray(["Content-Type: application/json", "Accept: application/json"])
-
 	while not _shutdown_requested and Time.get_ticks_msec() - start_ms <= EVAL_TIMEOUT_MS:
 		var any_active := false
 		for job in active_jobs:
@@ -716,80 +553,52 @@ static func _evaluate_job_batch_with_ollama(
 			var client: HTTPClient = job["client"]
 			client.poll()
 			var st := client.get_status()
-
 			if stage == "connecting":
-				if st in [HTTPClient.STATUS_CONNECTING, HTTPClient.STATUS_RESOLVING]:
-					continue
-				elif st == HTTPClient.STATUS_CONNECTED:
-					var req_err := client.request(HTTPClient.METHOD_POST, "/v1/systemone", headers, str(job["body"]))
-					job["stage"] = "requesting" if req_err == OK else "failed"
-				else:
+				if st == HTTPClient.STATUS_CONNECTED:
+					job["stage"] = "requesting" if client.request(HTTPClient.METHOD_POST, "/v1/systemone", headers, str(job["body"])) == OK else "failed"
+				elif st not in [HTTPClient.STATUS_CONNECTING, HTTPClient.STATUS_RESOLVING]:
 					job["stage"] = "failed"
-			elif stage == "requesting":
-				if st == HTTPClient.STATUS_REQUESTING:
-					continue
-				elif client.has_response() and client.get_response_code() == 200:
-					if st == HTTPClient.STATUS_BODY:
-						var chunk := client.read_response_body_chunk()
-						if chunk.size() > 0:
-							var rb: PackedByteArray = job["rb"]
-							rb.append_array(chunk)
-							job["rb"] = rb
-					if client.get_status() == HTTPClient.STATUS_BODY:
-						job["stage"] = "reading_body"
-					else:
-						job["stage"] = "done" if (job["rb"] as PackedByteArray).size() > 0 else "failed"
-				else:
+			elif st == HTTPClient.STATUS_BODY:
+				if client.get_response_code() != 200:
 					job["stage"] = "failed"
-			elif stage == "reading_body":
-				if st == HTTPClient.STATUS_BODY:
-					var chunk := client.read_response_body_chunk()
-					if chunk.size() > 0:
-						var rb: PackedByteArray = job["rb"]
-						rb.append_array(chunk)
-						job["rb"] = rb
+					continue
+				var chunk := client.read_response_body_chunk()
+				if chunk.size() > 0:
+					var rb: PackedByteArray = job["rb"]
+					rb.append_array(chunk)
+					job["rb"] = rb
 				if client.get_status() != HTTPClient.STATUS_BODY:
 					job["stage"] = "done" if (job["rb"] as PackedByteArray).size() > 0 else "failed"
-
+			elif st != HTTPClient.STATUS_REQUESTING:
+				job["stage"] = "done" if (job["rb"] as PackedByteArray).size() > 0 else "failed"
 		if not any_active:
 			break
 		OS.delay_msec(2)
 
 	for job in active_jobs:
-		var client: HTTPClient = job["client"]
-		client.close()
-		if _shutdown_requested or str(job["stage"]) != "done":
+		(job["client"] as HTTPClient).close()
+		if str(job["stage"]) != "done":
 			continue
-		var raw_text := (job["rb"] as PackedByteArray).get_string_from_utf8()
-		var parsed = JSON.parse_string(raw_text)
-		if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("answers"):
+		var body_str := (job["rb"] as PackedByteArray).get_string_from_utf8()
+		if body_str.is_empty():
 			continue
-		var answers = parsed["answers"]
-		if typeof(answers) != TYPE_DICTIONARY or not answers.has("decision"):
+		var parsed = JSON.parse_string(body_str)
+		if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("answers") or not (parsed["answers"] as Dictionary).has("decision"):
 			continue
-		var dec_ans = answers["decision"]
-		if typeof(dec_ans) != TYPE_DICTIONARY or not dec_ans.has("probabilities"):
+		var answer: Dictionary = parsed["answers"]["decision"]
+		var probabilities := normalize_probabilities(answer["probabilities"], job["keys"])
+		if probabilities.is_empty():
 			continue
-		var raw_probs = dec_ans["probabilities"]
-		if typeof(raw_probs) != TYPE_DICTIONARY:
-			continue
-
-		var eligible_ids: Array[String] = job["eligible_ids"]
-		var normalized := EvoHeuristicScorer.normalize_decision_probabilities(raw_probs, eligible_ids)
-		var raw_conf: float = float(dec_ans["confidence"]) if dec_ans.has("confidence") else 0.75
-		var clean_conf: float = snappedf(clampf(raw_conf, 0.0, 1.0), 0.0001) if (not is_nan(raw_conf) and not is_inf(raw_conf)) else 0.75
-		results_by_sig[str(job["sig"])] = {
-			"probabilities": normalized["probabilities"],
-			"dominant_decision_id": str(normalized["dominant_decision_id"]),
-			"confidence": clean_conf
+		results_by_deme[job["deme_id"]] = {
+			"probabilities": probabilities,
+			"confidence": clampf(float(answer["confidence"]), 0.0, 1.0)
 		}
-
-	return results_by_sig
+	return results_by_deme
 
 
 static func has_pending_jobs() -> bool:
 	_mutex.lock()
-	var pending := not _pending_jobs_by_sig.is_empty() or (_worker_running and _active_worker_epoch == _cache_epoch)
+	var pending := not _pending_jobs.is_empty() or (_worker_running and _active_worker_epoch == _cache_epoch)
 	_mutex.unlock()
 	return pending
 
@@ -798,7 +607,7 @@ static func wait_for_workers() -> void:
 	_mutex.lock()
 	_shutdown_requested = true
 	_pull_cancel_requested = true
-	_pending_jobs_by_sig.clear()
+	_pending_jobs.clear()
 	var s_task := _status_task_id
 	var w_task := _worker_task_id
 	var p_task := _pull_task_id

@@ -39,7 +39,7 @@ static func _test_catalog_and_presets(r) -> void:
 	r._assert(rift.cells.size() == 169, "Rift Savanna radius 7 has 169 cells")
 	r._assert(rift.demes.size() == 2, "Rift Savanna starts with 2 demes")
 	r._assert(rift.traits_catalog.size() == 11, "Base catalog has 11 traits (6 bio + 5 cul)")
-	r._assert(rift.decisions_catalog.size() == 7, "Base catalog has 7 decisions")
+	r._assert(rift.decisions_catalog.size() == 16, "Base catalog has 16 decisions")
 
 	var darwin := EvoCatalog.create_preset_world("preset-darwin-archipelago", "en")
 	r._assert(darwin.cells.size() == 169, "Darwin Archipelago radius 7 has 169 cells")
@@ -52,7 +52,7 @@ static func _test_catalog_and_presets(r) -> void:
 
 	var west: EvoTypes.Deme = rift.demes["deme-rift-west"]
 	r._assert(EvoCatalog.deme_has_cultural_capacity(west, rift.traits_catalog), "West deme has cultural capacity via bio-social-instinct")
-	var injected := EvoCatalog.inject_trait_into_deme(rift, "deme-rift-west", "bio-r-strategy", "es")
+	var injected := EvoCatalog.inject_trait_into_deme(rift, "deme-rift-west", "bio-r-strategy")
 	r._assert(injected, "Injecting bio-r-strategy succeeds")
 	r._assert(west.biological_trait_ids.has("bio-r-strategy"), "West deme now has bio-r-strategy")
 	r._assert(not west.biological_trait_ids.has("bio-k-strategy"), "Mutually exclusive bio-k-strategy was removed")
@@ -75,7 +75,7 @@ static func _test_strategy_duel_and_forge(r) -> void:
 		r._assert(base_strats.has(sid), "Base strategies catalog includes %s" % sid)
 		var s: EvoTypes.StrategyDef = base_strats[sid]
 		var vec := EvoCatalog.compute_strategy_vector(s, base_traits)
-		r._assert(vec != null and vec.extraction_efficiency > 0.0, "Strategy %s computes valid biophysical vector" % sid)
+		r._assert(vec != null and vec.extraction_efficiency > 0.0 and s.doctrine != "", "Strategy %s computes valid biophysical vector and doctrine" % sid)
 
 	# 2. 1v1 strategy matchup initialization in create_preset_world
 	var duel_world := EvoCatalog.create_preset_world("preset-rift-savanna", "en", "strat-trade", "strat-innovation")
@@ -96,15 +96,16 @@ static func _test_strategy_duel_and_forge(r) -> void:
 	# 3. Strategy inheritance across colonist budding migration and allopatric speciation
 	west.population = 140
 	west.energy_reserves = 200.0
-	west.last_decision_probabilities = {"dec-selective-migration": 0.90, "dec-conservative-forage": 0.10}
-	west.last_dominant_decision_id = "dec-selective-migration"
-	var init_pops := {west.id: west.population, east.id: east.population}
-	var eff_vecs := {
-		west.id: EvoEcologyInteraction.compute_effective_vector(west, duel_world),
-		east.id: EvoEcologyInteraction.compute_effective_vector(east, duel_world)
-	}
-	var ext_energy := {west.id: 90.0, east.id: 90.0}
-	EvoDemographyMigration.run_demography_and_migration_phase(duel_world, "en", init_pops, eff_vecs, {}, ext_energy)
+	var w_coords := HexMath.parse_id(west.hex_id)
+	var settle_hex := ""
+	for nid in HexMath.get_neighbor_ids(w_coords.x, w_coords.y, duel_world.cells):
+		var nc: EvoTypes.HexCell = duel_world.cells[nid]
+		if nc.deme_ids.is_empty() and EvoActionMenu.is_passable(nc):
+			settle_hex = nid
+			break
+	west.chosen_action = EvoActionMenu.option("settle", settle_hex)
+	east.chosen_action = EvoActionMenu.option("forage")
+	EvoBiophysPhase.run_biophysical_phase(duel_world, "en")
 	var budded_daughter: EvoTypes.Deme = null
 	for did in duel_world.demes.keys():
 		if did != "deme-rift-west" and did != "deme-rift-east":
@@ -141,6 +142,7 @@ static func _test_strategy_duel_and_forge(r) -> void:
 	custom_st.id = "strat-custom-fortress"
 	custom_st.name = "Fortress Doctrine"
 	custom_st.description = "Custom defensive strategy."
+	custom_st.doctrine = "Fortify every border and never yield."
 	custom_st.icon = "🛡️"
 	custom_st.color = "#14B8A6"
 	custom_st.origin = "user"
@@ -159,7 +161,8 @@ static func _test_strategy_duel_and_forge(r) -> void:
 	EvoUserSettings.load_user_catalog_into(fresh_state)
 	r._assert(fresh_state.traits_catalog.has("bio-custom-carapace"), "load_user_catalog_into restores custom user trait")
 	r._assert(fresh_state.strategies_catalog.has("strat-custom-fortress"), "load_user_catalog_into restores custom user strategy")
-	r._assert((fresh_state.strategies_catalog["strat-custom-fortress"] as EvoTypes.StrategyDef).name == "Fortress Doctrine", "Restored custom user strategy preserves name and metadata")
+	var restored_st: EvoTypes.StrategyDef = fresh_state.strategies_catalog["strat-custom-fortress"]
+	r._assert(restored_st.name == "Fortress Doctrine" and restored_st.doctrine == "Fortify every border and never yield.", "Restored custom user strategy preserves name, doctrine and metadata")
 
 	# 5. UI integration in EvoMainController, EvoMainHud & EvoLabModal
 	var packed: PackedScene = load("res://scenes/main.tscn")
@@ -188,8 +191,10 @@ static func _test_strategy_duel_and_forge(r) -> void:
 
 	lab.id_edit.text = "strat-custom-duelist"
 	lab.name_edit.text = "Duelist Doctrine"
+	lab.doctrine_edit.text = "Strike swiftly and claim high ground."
 	lab._save_current_item()
 	r._assert(main.world_state.strategies_catalog.has("strat-custom-duelist"), "Saving custom strategy in Lab Modal adds it to strategies_catalog")
+	r._assert((main.world_state.strategies_catalog["strat-custom-duelist"] as EvoTypes.StrategyDef).doctrine == "Strike swiftly and claim high ground.", "Saving custom strategy in Lab Modal persists doctrine text")
 
 	main.set_matchup_strategies("strat-custom-duelist", "strat-trade")
 	r._assert(main.world_state.generation == 0 and main.world_state.strategy_a_id == "strat-custom-duelist" and main.world_state.strategy_b_id == "strat-trade", "set_matchup_strategies resets to Generation 0 with selected strategies")

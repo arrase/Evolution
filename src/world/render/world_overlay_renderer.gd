@@ -232,10 +232,9 @@ static func _draw_active_lens_overlay(r: Node2D) -> void:
 				ci.draw_line(p_a - perp * 2.5, p_b - perp * 2.5, Color("#fbbf24"), 2.6)
 				_draw_lens_icon_pill(ci, font, (p_a + p_b) * 0.5, "icon_merge", "", Color("#fbbf24"))
 
-		for pk_var in state.active_pacts.keys():
+		for pk_var in state.relations.keys():
 			var pk := str(pk_var)
-			var sep := "__" if pk.contains("__") else "|"
-			var parts := pk.split(sep)
+			var parts := pk.split("__")
 			if parts.size() != 2 or not state.demes.has(parts[0]) or not state.demes.has(parts[1]):
 				continue
 			var d_a: EvoTypes.Deme = state.demes[parts[0]]
@@ -244,17 +243,17 @@ static func _draw_active_lens_overlay(r: Node2D) -> void:
 				continue
 			var p_a: Vector2 = to_screen * (r._hex_centers[d_a.hex_id] as Vector2)
 			var p_b: Vector2 = to_screen * (r._hex_centers[d_b.hex_id] as Vector2)
-			var turns := int(state.active_pacts[pk_var])
-			if turns >= 2:
-				var w := clampf(2.5 + float(turns) * 0.7, 3.0, 6.5)
+			var rel: EvoTypes.Relation = state.relations[pk_var]
+			if rel.pact_turns > 0:
+				var w := clampf(2.5 + float(rel.pact_turns) * 0.7, 3.0, 6.5)
 				ci.draw_line(p_a, p_b, Color(0.04, 0.18, 0.12, 0.80), w + 2.4)
 				ci.draw_line(p_a, p_b, Color("#10b981"), w)
-				_draw_lens_icon_pill(ci, font, (p_a + p_b) * 0.5, "icon_pact", str(turns), Color("#10b981"))
-			elif turns == 1:
-				_draw_dashed_screen_line(ci, p_a, p_b, Color("#6ee7b7"), 2.2)
-			elif turns < 0:
+				_draw_lens_icon_pill(ci, font, (p_a + p_b) * 0.5, "icon_pact", str(rel.pact_turns), Color("#10b981"))
+			elif rel.feud_turns > 0:
 				_draw_dashed_screen_line(ci, p_a, p_b, Color("#ef4444"), 3.0)
-				_draw_lens_icon_pill(ci, font, (p_a + p_b) * 0.5, "icon_vendetta", str(absi(turns)), Color("#ef4444"))
+				_draw_lens_icon_pill(ci, font, (p_a + p_b) * 0.5, "icon_vendetta", str(rel.feud_turns), Color("#ef4444"))
+			elif rel.truce_turns > 0:
+				_draw_dashed_screen_line(ci, p_a, p_b, Color("#6ee7b7"), 2.2)
 
 		for flow in state.active_flows:
 			if not r._hex_centers.has(flow.from_hex_id) or not r._hex_centers.has(flow.to_hex_id):
