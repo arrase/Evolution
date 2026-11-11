@@ -257,6 +257,9 @@ func refresh_village_decisions() -> void:
 		if village["archetype"] != new_arch:
 			village["archetype"] = new_arch
 			any_arch_changed = true
+		if village["posture"] != deme.defense_posture:
+			village["posture"] = deme.defense_posture
+			any_arch_changed = true
 	if any_arch_changed:
 		_static_props = EvoPropFloraRenderer.collect_static_props(self)
 		_network_layer.queue_redraw()
@@ -594,6 +597,8 @@ func _draw_animated() -> void:
 
 	if highlighted_lineage_id != "":
 		for village in _villages:
+			if not bool(village["is_capital"]):
+				continue
 			var deme: EvoTypes.Deme = village["deme"]
 			if deme.lineage_id == highlighted_lineage_id:
 				var v_pos: Vector2 = village["pos"]

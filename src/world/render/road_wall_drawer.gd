@@ -600,7 +600,7 @@ static func draw_settlement_perimeter_walls(r: Node2D) -> void:
 		if has_cull and not cull_rect.has_point(center):
 			continue
 		var deme: EvoTypes.Deme = village["deme"]
-		var has_union: bool = deme.walled_union_id != ""
+		var has_union: bool = deme.is_multi_hex()
 		if deme.defense_tier < 1 and not has_union:
 			continue
 		var hex_id: String = village["hex_id"]
@@ -613,20 +613,18 @@ static func draw_settlement_perimeter_walls(r: Node2D) -> void:
 		var is_stone: bool = deme.defense_tier >= 2 or has_union
 		var wall_r := 0.78
 
-		var is_shared_edge: Array[bool] = [false, false, false, false, false, false]
+		var edge_suppressed: Array[bool] = [false, false, false, false, false, false]
 		if has_union:
 			for e in range(6):
 				var dir_idx: int = EDGE_DIR_MAP[e]
 				var nb_id: String = r._neighbor_id(cell, dir_idx)
 				if state.cells.has(nb_id):
 					var nb_cell: EvoTypes.HexCell = state.cells[nb_id]
-					if not nb_cell.deme_ids.is_empty() and state.demes.has(nb_cell.deme_ids[0]):
-						var nb_deme: EvoTypes.Deme = state.demes[nb_cell.deme_ids[0]]
-						if nb_deme.walled_union_id == deme.walled_union_id:
-							is_shared_edge[e] = true
+					if not nb_cell.deme_ids.is_empty() and nb_cell.deme_ids[0] == deme.id:
+						edge_suppressed[e] = true
 
 		for e in range(6):
-			if is_shared_edge[e]:
+			if edge_suppressed[e]:
 				continue
 			var next_e: int = (e + 1) % 6
 			var c0 := center.lerp(top_pts[e], wall_r)
@@ -660,7 +658,7 @@ static func draw_settlement_perimeter_walls(r: Node2D) -> void:
 			var wall_h := 11.0
 			for v in range(6):
 				var prev_e: int = (v + 5) % 6
-				if is_shared_edge[v] and is_shared_edge[prev_e]:
+				if edge_suppressed[v] and edge_suppressed[prev_e]:
 					continue
 				var cv := center.lerp(top_pts[v], wall_r)
 				ci.draw_circle(cv + Vector2(0.0, -wall_h * 0.5), 7.5, INK * mod_col)

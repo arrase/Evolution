@@ -3,13 +3,21 @@ extends RefCounted
 
 ## Bilateral trust, feuds, truces, proposals, public reputation and per-settlement memory.
 
-const MEMORY_LENGTH := 8
+const MEMORY_LENGTH := 12
 
 
 static func remember(deme: EvoTypes.Deme, state: EvoTypes.WorldState, text: String) -> void:
 	deme.memory.push_front("T%d: %s" % [state.generation, text])
 	if deme.memory.size() > MEMORY_LENGTH:
 		deme.memory.resize(MEMORY_LENGTH)
+
+
+static func posture_tag(deme: EvoTypes.Deme) -> String:
+	if deme.defense_posture == "patrol_fields":
+		return " [patrolling fields]"
+	if deme.defense_posture == "mobilized_garrison":
+		return " [garrisoned]"
+	return ""
 
 
 static func record(state: EvoTypes.WorldState, a: EvoTypes.Deme, b: EvoTypes.Deme, trust_delta: float, event_text: String) -> EvoTypes.Relation:
@@ -55,8 +63,19 @@ static func clear_proposal(rel: EvoTypes.Relation) -> void:
 	rel.proposal_gen = -1
 
 
+static func resolve_expired_tributes(state: EvoTypes.WorldState, lang: String) -> void:
+	for pk in state.relations.keys():
+		if not state.relations.has(pk):
+			continue
+		var rel: EvoTypes.Relation = state.relations[pk]
+		if rel.proposal_from != "" and rel.proposal_kind == "tribute" and rel.proposal_gen < state.generation:
+			_refuse_tribute(state, str(pk), rel, lang)
+			clear_proposal(rel)
+
+
 ## End-of-turn bookkeeping: timers advance and unanswered proposals expire.
 static func tick(state: EvoTypes.WorldState) -> void:
+	resolve_expired_tributes(state, "en")
 	for pk in state.relations.keys():
 		var rel: EvoTypes.Relation = state.relations[pk]
 		if rel.pact_turns > 0:
@@ -64,8 +83,6 @@ static func tick(state: EvoTypes.WorldState) -> void:
 		rel.feud_turns = maxi(0, rel.feud_turns - 1)
 		rel.truce_turns = maxi(0, rel.truce_turns - 1)
 		if rel.proposal_from != "" and rel.proposal_gen < state.generation:
-			if rel.proposal_kind == "tribute":
-				_refuse_tribute(state, str(pk), rel)
 			clear_proposal(rel)
 
 	var friendly_pairs: Dictionary = {}
@@ -83,7 +100,7 @@ static func tick(state: EvoTypes.WorldState) -> void:
 	state.disused_connections = updated_disused
 
 
-static func _refuse_tribute(state: EvoTypes.WorldState, pair_key: String, rel: EvoTypes.Relation) -> void:
+static func _refuse_tribute(state: EvoTypes.WorldState, pair_key: String, rel: EvoTypes.Relation, lang: String) -> void:
 	var demander_id := rel.proposal_from
 	var target_id := EvoTypes.pair_partner(pair_key, demander_id)
 	if not state.demes.has(demander_id) or not state.demes.has(target_id):
@@ -95,10 +112,9 @@ static func _refuse_tribute(state: EvoTypes.WorldState, pair_key: String, rel: E
 	rel.last_event = "T%d %s refused to pay tribute to %s" % [state.generation, target.name, demander.name]
 	remember(demander, state, "%s refused your tribute demand." % target.name)
 	remember(target, state, "You refused %s's tribute demand." % demander.name)
-	var ca: EvoTypes.HexCell = state.cells[demander.hex_id]
-	var cb: EvoTypes.HexCell = state.cells[target.hex_id]
-	if HexMath.hex_distance(ca.q, ca.r, cb.q, cb.r) == 1 and target.defense_tier < 3:
-		EvoConflictPhase._raid(demander, target, rel, state, "en", false)
+	var in_range := EvoPayoffs.min_urban_distance(demander, target, state) == 1 or EvoDiplomacyPhase.has_border_crop_contact(demander, target, state)
+	if in_range and target.defense_tier < 3 and demander.population >= 20:
+		EvoConflictPhase._raid(demander, target, rel, state, lang, false, true)
 
 
 static func trust_word(trust: float) -> String:

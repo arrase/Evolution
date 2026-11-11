@@ -7,25 +7,15 @@ static func compute_deme_salubrity(
 	cell: EvoTypes.HexCell,
 	state: EvoTypes.WorldState
 ) -> float:
-	var union_partners: int = 0
-	if deme.walled_union_id != "":
-		for nid in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
-			var ncell: EvoTypes.HexCell = state.cells[nid]
-			for p_id in ncell.deme_ids:
-				if p_id != deme.id and state.demes.has(p_id):
-					var partner: EvoTypes.Deme = state.demes[p_id]
-					if partner.population > 0 and partner.walled_union_id == deme.walled_union_id:
-						union_partners += 1
-
+	var eff_k := maxf(40.0, EvoPayoffs.effective_carrying_capacity(deme, state))
 	var sal_crowding := (
-		float(deme.population) / maxf(20.0, cell.carrying_capacity)
-		+ 0.16 * float(maxi(0, deme.get_village_tier() - 2))
-		+ 0.14 * float(union_partners)
+		float(deme.population) / eff_k
+		+ 0.12 * float(maxi(0, deme.get_village_tier() - 2))
 	)
 	var sanitation := (
 		(0.20 if deme.cultural_trait_ids.has("cul-communal-conservation") else 0.0)
 		+ (0.14 if deme.biological_trait_ids.has("bio-k-strategy") else 0.0)
-		+ 0.08 * maxf(0.0, cell.humidity)
+		- 0.06 * maxf(0.0, cell.humidity) * maxf(0.0, cell.temperature)
 	)
 	var target_salubrity := clampf(1.12 - 0.48 * maxf(0.0, sal_crowding - 0.60) + sanitation, 0.05, 1.0)
 	deme.salubrity = snappedf(lerpf(deme.salubrity, target_salubrity, 0.45), 0.0001)
@@ -89,6 +79,7 @@ static func _run_epidemic_phase(
 			if deme.infection_turns == 0:
 				deme.immunity_turns = 6
 				deme.salubrity = minf(1.0, snappedf(deme.salubrity + 0.25, 0.0001))
+				EvoRelations.remember(deme, state, "Your people recovered from the epidemic (+immunity).")
 				EvoTypes.push_event(state, "epidemic_recovered", deme.hex_id, deme.hex_id, deme.id, deme.id, deme.salubrity, 0)
 				var rec_params := {
 					"deme": deme.name,
@@ -109,10 +100,14 @@ static func _run_epidemic_phase(
 		var deme: EvoTypes.Deme = state.demes[did]
 		if was_active_or_immune.has(deme.id):
 			continue
-		if deme.infection_turns == 0 and deme.immunity_turns == 0 and deme.salubrity < 0.35 and deme.population >= 130:
+		if deme.infection_turns == 0 and deme.immunity_turns == 0 and deme.salubrity < 0.38 and deme.population >= 130:
+			var p_outbreak := clampf((0.38 - deme.salubrity) * 2.5, 0.0, 0.85)
+			if state.rng.randf() >= p_outbreak:
+				continue
 			var epi_loss := maxi(10, int(round(float(deme.population) * 0.15)))
 			deme.population = maxi(10, deme.population - epi_loss)
 			deme.infection_turns = 2
+			EvoRelations.remember(deme, state, "An epidemic broke out (%d people died)." % epi_loss)
 			EvoTypes.push_event(state, "epidemic", deme.hex_id, deme.hex_id, deme.id, deme.id, deme.salubrity, epi_loss)
 			var epi_params := {
 				"deme": deme.name,
@@ -140,6 +135,7 @@ static func _run_epidemic_phase(
 			var spread_loss := maxi(5, int(round(float(target_deme.population) * 0.08)))
 			target_deme.population = maxi(10, target_deme.population - spread_loss)
 			target_deme.infection_turns = 2
+			EvoRelations.remember(target_deme, state, "Epidemic spread from %s (%d people died)." % [source_deme.name, spread_loss])
 			EvoTypes.push_event(
 				state,
 				"epidemic_spread",

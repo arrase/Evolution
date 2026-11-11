@@ -192,8 +192,13 @@ static func compute_deme_vector(deme: EvoTypes.Deme, traits_catalog: Dictionary)
 			mobility += v.spatial_mobility
 			cohesion += v.social_cohesion
 			threshold += v.transmission_threshold
-	return EvoThermodynamics.clamp_vector(
-		EvoTypes.BiophysicalVector.new(cost, extract, eco, mobility, cohesion, threshold)
+	return EvoTypes.BiophysicalVector.new(
+		snappedf(clampf(cost, -1.0, 1.0), 0.0001),
+		snappedf(clampf(extract, -1.0, 1.0), 0.0001),
+		snappedf(clampf(eco, -1.0, 1.0), 0.0001),
+		snappedf(clampf(mobility, -1.0, 1.0), 0.0001),
+		snappedf(clampf(cohesion, -1.0, 1.0), 0.0001),
+		snappedf(clampf(threshold, 0.0, 1.0), 0.0001)
 	)
 
 

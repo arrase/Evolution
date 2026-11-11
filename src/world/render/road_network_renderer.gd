@@ -17,7 +17,8 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 	for v in r._villages:
 		v_positions.append(v["pos"] as Vector2)
 		var did: String = v["deme_id"]
-		deme_village[did] = v
+		if not deme_village.has(did) or bool(v["is_capital"]):
+			deme_village[did] = v
 		if state.demes.has(did):
 			var dom_arch: String = v["archetype"]
 			deme_road_stance[did] = {
@@ -60,7 +61,7 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 		)
 
 		handled_hex_pairs[h_key] = true
-		if flow.from_deme_id != "" and flow.to_deme_id != "":
+		if flow.from_deme_id != "" and flow.to_deme_id != "" and flow.from_deme_id != flow.to_deme_id:
 			handled_deme_pairs[make_pair_key(flow.from_deme_id, flow.to_deme_id)] = true
 
 		var flow_color := Color("#eab308")
@@ -79,7 +80,7 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 		if d_from_id != "" and d_to_id != "" and state.demes.has(d_from_id) and state.demes.has(d_to_id):
 			var d1: EvoTypes.Deme = state.demes[d_from_id]
 			var d2: EvoTypes.Deme = state.demes[d_to_id]
-			if d1.walled_union_id != "" and d1.walled_union_id == d2.walled_union_id and effective_type in ["exchange", "cooperate", "trade", "pact", "merge"]:
+			if d1.id == d2.id and effective_type in ["exchange", "cooperate", "trade", "pact", "merge"]:
 				effective_type = "merge"
 				curve_f = 0.0
 		if effective_type in ["exchange", "cooperate"] and flow.from_deme_id != "" and flow.to_deme_id != "":
@@ -270,113 +271,91 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 		if d.population > 0 and state.cells.has(d.hex_id):
 			all_demes.append(d)
 
+	var handled_rural_cells: Dictionary = {}
 	for d in all_demes:
-		var ca: EvoTypes.HexCell = state.cells[d.hex_id]
-		var world_a := HexMath.axial_to_world(ca.q, ca.r)
-		var z_a: float = r._get_cell_top_z(ca)
-		var trim_a := get_cell_plaza_trim(ca)
-		var p_a_raw: Vector2 = r._project(world_a, z_a)
-		for dir_idx in range(6):
-			var n_id: String = r._neighbor_id(ca, dir_idx)
-			if not state.cells.has(n_id):
+		var strat_col := EvoPropFloraRenderer.resolve_deme_strategy_color(state, d)
+		for u_hid in d.urban_hex_ids:
+			if not state.cells.has(u_hid):
 				continue
-			var cb: EvoTypes.HexCell = state.cells[n_id]
-			if cb.deme_ids.is_empty() and cb.owner_deme_id == d.id and (cb.land_use in ["crops", "pasture"]):
-				var h_key := make_pair_key(ca.id, cb.id)
-				if not handled_hex_pairs.has(h_key):
-					handled_hex_pairs[h_key] = true
-					var world_b := HexMath.axial_to_world(cb.q, cb.r)
-					var z_b: float = r._get_cell_top_z(cb)
-					var trim_b := 22.0
-					var trimmed := trim_road_segment(p_a_raw, r._project(world_b, z_b), trim_a, trim_b)
-					roads.append({
-						"kind": "rural_farm",
-						"hex_a": ca.id,
-						"hex_b": cb.id,
-						"world_a": world_a,
-						"z_a": z_a,
-						"trim_a": trim_a,
-						"world_b": world_b,
-						"z_b": z_b,
-						"trim_b": trim_b,
-						"p_a": trimmed["p_a"],
-						"p_b": trimmed["p_b"],
-						"curve_factor": 0.035,
-						"show_badge": false,
-						"show_traffic": true,
-						"color": EvoPropFloraRenderer.resolve_deme_strategy_color(state, d)
-					})
-
-	for d in all_demes:
-		var ca: EvoTypes.HexCell = state.cells[d.hex_id]
-		for dir_idx in range(6):
-			var n_id: String = r._neighbor_id(ca, dir_idx)
-			if not state.cells.has(n_id):
-				continue
-			var cb: EvoTypes.HexCell = state.cells[n_id]
-			if cb.deme_ids.is_empty():
-				continue
-			var h_key := make_pair_key(ca.id, cb.id)
-			if handled_hex_pairs.has(h_key):
-				continue
-			handled_hex_pairs[h_key] = true
-
-			var pair := find_closest_deme_pair(r, ca, cb)
-			if pair.is_empty():
-				continue
-			var da: EvoTypes.Deme = pair["da"]
-			var db: EvoTypes.Deme = pair["db"]
-			handled_deme_pairs[make_pair_key(da.id, db.id)] = true
-			var world_a: Vector2 = pair["wa"]
+			var ca: EvoTypes.HexCell = state.cells[u_hid]
+			var world_a := HexMath.axial_to_world(ca.q, ca.r)
 			var z_a: float = r._get_cell_top_z(ca)
 			var trim_a := get_cell_plaza_trim(ca)
-			var world_b: Vector2 = pair["wb"]
-			var z_b: float = r._get_cell_top_z(cb)
-			var trim_b := get_cell_plaza_trim(cb)
-			var trimmed := trim_road_segment(
-				r._project(world_a, z_a),
-				r._project(world_b, z_b),
-				trim_a,
-				trim_b
-			)
-			var p_a: Vector2 = trimmed["p_a"]
-			var p_b: Vector2 = trimmed["p_b"]
-			var is_prio: bool = (
-				ca.id == r.selected_hex_id
-				or cb.id == r.selected_hex_id
-				or ca.id == r.hovered_hex_id
-				or cb.id == r.hovered_hex_id
-			)
+			var p_a_raw: Vector2 = r._project(world_a, z_a)
+			for dir_idx in range(6):
+				var n_id: String = r._neighbor_id(ca, dir_idx)
+				if not state.cells.has(n_id):
+					continue
+				var cb: EvoTypes.HexCell = state.cells[n_id]
+				if cb.deme_ids.is_empty() and cb.owner_deme_id == d.id and (cb.land_use in ["crops", "pasture"]):
+					var h_key := make_pair_key(ca.id, cb.id)
+					if not handled_hex_pairs.has(h_key) and not handled_rural_cells.has(cb.id):
+						handled_hex_pairs[h_key] = true
+						handled_rural_cells[cb.id] = true
+						var world_b := HexMath.axial_to_world(cb.q, cb.r)
+						var z_b: float = r._get_cell_top_z(cb)
+						var trim_b := 22.0
+						var trimmed := trim_road_segment(p_a_raw, r._project(world_b, z_b), trim_a, trim_b)
+						roads.append({
+							"kind": "rural_farm",
+							"hex_a": ca.id,
+							"hex_b": cb.id,
+							"world_a": world_a,
+							"z_a": z_a,
+							"trim_a": trim_a,
+							"world_b": world_b,
+							"z_b": z_b,
+							"trim_b": trim_b,
+							"p_a": trimmed["p_a"],
+							"p_b": trimmed["p_b"],
+							"curve_factor": 0.035,
+							"show_badge": false,
+							"show_traffic": true,
+							"color": strat_col
+						})
 
-			if da.walled_union_id != "" and da.walled_union_id == db.walled_union_id:
-				var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, 0.0)
-				var show_badge := register_road_badge(r, b_pos, badge_positions, true)
-				roads.append({
-					"kind": "merge",
-					"hex_a": ca.id,
-					"hex_b": cb.id,
-					"world_a": world_a,
-					"z_a": z_a,
-					"trim_a": trim_a,
-					"world_b": world_b,
-					"z_b": z_b,
-					"trim_b": trim_b,
-					"p_a": p_a,
-					"p_b": p_b,
-					"curve_factor": 0.0,
-					"show_badge": show_badge,
-					"show_traffic": true,
-					"color": Color("#fbbf24")
-				})
+	for d in all_demes:
+		for u_hid in d.urban_hex_ids:
+			if not state.cells.has(u_hid):
 				continue
+			var ca: EvoTypes.HexCell = state.cells[u_hid]
+			for dir_idx in range(6):
+				var n_id: String = r._neighbor_id(ca, dir_idx)
+				if not state.cells.has(n_id):
+					continue
+				var cb: EvoTypes.HexCell = state.cells[n_id]
+				if cb.deme_ids.is_empty():
+					continue
+				var h_key := make_pair_key(ca.id, cb.id)
+				if handled_hex_pairs.has(h_key):
+					continue
 
-			match classify_village_pair_relation(r, da, db):
-				"pact":
-					var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, 0.045)
+				var pair := find_closest_deme_pair(r, ca, cb)
+				if pair.is_empty():
+					continue
+				var da: EvoTypes.Deme = pair["da"]
+				var db: EvoTypes.Deme = pair["db"]
+				var world_a: Vector2 = pair["wa"]
+				var z_a: float = r._get_cell_top_z(ca)
+				var trim_a := get_cell_plaza_trim(ca)
+				var world_b: Vector2 = pair["wb"]
+				var z_b: float = r._get_cell_top_z(cb)
+				var trim_b := get_cell_plaza_trim(cb)
+				var trimmed := trim_road_segment(
+					r._project(world_a, z_a),
+					r._project(world_b, z_b),
+					trim_a,
+					trim_b
+				)
+				var p_a: Vector2 = trimmed["p_a"]
+				var p_b: Vector2 = trimmed["p_b"]
+
+				if da.id == db.id:
+					handled_hex_pairs[h_key] = true
+					var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, 0.0)
 					var show_badge := register_road_badge(r, b_pos, badge_positions, true)
-					var show_traffic := claim_road_traffic(ca.id, cb.id, hex_traffic_counts, true)
 					roads.append({
-						"kind": "pact",
+						"kind": "merge",
 						"hex_a": ca.id,
 						"hex_b": cb.id,
 						"world_a": world_a,
@@ -387,56 +366,53 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 						"trim_b": trim_b,
 						"p_a": p_a,
 						"p_b": p_b,
-						"curve_factor": 0.045,
+						"curve_factor": 0.0,
 						"show_badge": show_badge,
-						"show_traffic": show_traffic,
-						"color": Color("#10b981")
+						"show_traffic": true,
+						"color": Color("#fbbf24")
 					})
-				"dispute_front":
-					var b_pos := (p_a + p_b) * 0.5
-					var show_badge := register_road_badge(r, b_pos, badge_positions, is_prio)
-					roads.append({
-						"kind": "dispute",
-						"world_a": world_a,
-						"z_a": z_a,
-						"trim_a": trim_a,
-						"world_b": world_b,
-						"z_b": z_b,
-						"trim_b": trim_b,
-						"p_a": p_a,
-						"p_b": p_b,
-						"show_badge": show_badge,
-						"badge_pos": b_pos
-					})
-				"active_road":
-					var kind := "bridge" if should_use_bridge(r, ca, cb) else "collab"
-					var b_pos := bridge_arch_point(p_a, p_b, 0.5) if kind == "bridge" else sample_road_curve(p_a, p_b, 0.5, 1.0, 0.045)
-					var show_badge := register_road_badge(r, b_pos, badge_positions, is_prio)
-					var show_traffic := claim_road_traffic(ca.id, cb.id, hex_traffic_counts, is_prio)
-					roads.append({
-						"kind": kind,
-						"hex_a": ca.id,
-						"hex_b": cb.id,
-						"world_a": world_a,
-						"z_a": z_a,
-						"trim_a": trim_a,
-						"world_b": world_b,
-						"z_b": z_b,
-						"trim_b": trim_b,
-						"p_a": p_a,
-						"p_b": p_b,
-						"curve_factor": 0.045,
-						"show_badge": show_badge,
-						"show_traffic": show_traffic,
-						"color": Color(da.color)
-					})
-				_:
-					var dis_age := get_disused_road_age(r, da.id, db.id, ca.id, cb.id)
-					if dis_age > 0:
+					continue
+
+				var d_pair_key := make_pair_key(da.id, db.id)
+				if handled_deme_pairs.has(d_pair_key):
+					continue
+				handled_hex_pairs[h_key] = true
+				handled_deme_pairs[d_pair_key] = true
+
+				var is_prio: bool = (
+					ca.id == r.selected_hex_id
+					or cb.id == r.selected_hex_id
+					or ca.id == r.hovered_hex_id
+					or cb.id == r.hovered_hex_id
+				)
+
+				match classify_village_pair_relation(r, da, db):
+					"pact":
+						var b_pos := sample_road_curve(p_a, p_b, 0.5, 1.0, 0.045)
+						var show_badge := register_road_badge(r, b_pos, badge_positions, true)
+						var show_traffic := claim_road_traffic(ca.id, cb.id, hex_traffic_counts, true)
+						roads.append({
+							"kind": "pact",
+							"hex_a": ca.id,
+							"hex_b": cb.id,
+							"world_a": world_a,
+							"z_a": z_a,
+							"trim_a": trim_a,
+							"world_b": world_b,
+							"z_b": z_b,
+							"trim_b": trim_b,
+							"p_a": p_a,
+							"p_b": p_b,
+							"curve_factor": 0.045,
+							"show_badge": show_badge,
+							"show_traffic": show_traffic,
+							"color": Color("#10b981")
+						})
+					"dispute_front":
 						var b_pos := (p_a + p_b) * 0.5
 						var show_badge := register_road_badge(r, b_pos, badge_positions, is_prio)
 						roads.append({
-							"kind": "broken",
+							"kind": "dispute",
 							"world_a": world_a,
 							"z_a": z_a,
 							"trim_a": trim_a,
@@ -446,8 +422,48 @@ static func collect_roads(r: Node2D) -> Array[Dictionary]:
 							"p_a": p_a,
 							"p_b": p_b,
 							"show_badge": show_badge,
-							"alpha": 0.52 if dis_age == 2 else 0.90
+							"badge_pos": b_pos
 						})
+					"active_road":
+						var kind := "bridge" if should_use_bridge(r, ca, cb) else "collab"
+						var b_pos := bridge_arch_point(p_a, p_b, 0.5) if kind == "bridge" else sample_road_curve(p_a, p_b, 0.5, 1.0, 0.045)
+						var show_badge := register_road_badge(r, b_pos, badge_positions, is_prio)
+						var show_traffic := claim_road_traffic(ca.id, cb.id, hex_traffic_counts, is_prio)
+						roads.append({
+							"kind": kind,
+							"hex_a": ca.id,
+							"hex_b": cb.id,
+							"world_a": world_a,
+							"z_a": z_a,
+							"trim_a": trim_a,
+							"world_b": world_b,
+							"z_b": z_b,
+							"trim_b": trim_b,
+							"p_a": p_a,
+							"p_b": p_b,
+							"curve_factor": 0.045,
+							"show_badge": show_badge,
+							"show_traffic": show_traffic,
+							"color": Color(da.color)
+						})
+					_:
+						var dis_age := get_disused_road_age(r, da.id, db.id, ca.id, cb.id)
+						if dis_age > 0:
+							var b_pos := (p_a + p_b) * 0.5
+							var show_badge := register_road_badge(r, b_pos, badge_positions, is_prio)
+							roads.append({
+								"kind": "broken",
+								"world_a": world_a,
+								"z_a": z_a,
+								"trim_a": trim_a,
+								"world_b": world_b,
+								"z_b": z_b,
+								"trim_b": trim_b,
+								"p_a": p_a,
+								"p_b": p_b,
+								"show_badge": show_badge,
+								"alpha": 0.52 if dis_age == 2 else 0.90
+							})
 
 	for disused in state.disused_connections:
 		var age_val := int(disused.get("age", 1))

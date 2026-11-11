@@ -4,9 +4,17 @@ extends RefCounted
 
 static func run(r) -> void:
 	_test_main_scene_and_ui_integration(r)
+	_test_multi_hex_hud_inspector_and_renderer(r)
 	_test_bugfix_regressions(r)
 	_test_turn_events_and_world_stats(r)
 	_test_ux_clarity_stats_lens_and_fx(r)
+
+
+static func _collect_label_texts(node: Node, out: Array[String]) -> void:
+	if node is Label:
+		out.append((node as Label).text)
+	for child in node.get_children():
+		_collect_label_texts(child, out)
 
 
 static func _test_main_scene_and_ui_integration(r) -> void:
@@ -24,7 +32,7 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	r._assert(main.hud != null, "main.hud exists and is configured")
 	r._assert(main.world_state != null, "main.world_state initialized on startup")
 
-	# Verify all 52 PNG files in res://assets/sprites/ and ImageTexture generation
+	# Verify all pixel-art PNG files in res://assets/sprites/ and ImageTexture generation
 	EvoPixelArtGen.ensure_all_assets()
 	var total_sprites: int = 0
 	for s_name in EvoPixelArtGen.TERRAIN_SPRITES:
@@ -48,18 +56,20 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	var expected_sprites := EvoPixelArtGen.TERRAIN_SPRITES.size() + EvoPixelArtGen.VILLAGE_SPRITES.size() + EvoPixelArtGen.UI_SPRITES.size()
 	r._assert(total_sprites == expected_sprites and total_sprites >= 60, "All %d pixel-art sprites verified" % total_sprites)
 
-	# Verify Dual System 1 Decision Models (d3:4b + tev1:4b), Settings Persistence & Dynamic UI Text
+	# Verify Dual System 1 Decision Models (d3:4b + tev1:4b), Strategy A/B HUD Labels & Settings Persistence
 	EvoUserSettings.config_path_override = ""
 	r._assert(EvoUserSettings.get_config_dir().ends_with("/.config/Evolution"), "Default config dir points to ~/.config/Evolution")
 	EvoUserSettings.config_path_override = r._suite_cfg_path
-	r._assert(EvoUserSettings.DEFAULT_CONTEXT_LENGTH == 16384, "Default context window size is 16384")
-	r._assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-rift-west") == "d3:4b", "deme-rift-west assigned to d3:4b")
-	r._assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-rift-east") == "tev1:4b", "deme-rift-east assigned to tev1:4b")
-	r._assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-island-1") == "d3:4b", "deme-island-1 assigned to d3:4b")
-	r._assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-island-2") == "tev1:4b", "deme-island-2 assigned to tev1:4b")
+	r._assert(EvoDecisionModel.resolve_model_for_slot("A") == "d3:4b", "Slot A assigned to d3:4b")
+	r._assert(EvoDecisionModel.resolve_model_for_slot("B") == "tev1:4b", "Slot B assigned to tev1:4b")
 	var ollama_status := EvoDecisionModel.check_ollama_status()
 	r._assert(ollama_status.has("primary_tag") and ollama_status["primary_tag"] == "d3:4b", "Ollama status reports primary System 1 model d3:4b")
 	r._assert(ollama_status.has("secondary_tag") and ollama_status["secondary_tag"] == "tev1:4b", "Ollama status reports secondary System 1 model tev1:4b")
+
+	r._assert(main.hud._primary_model_lbl.text == "Modelo Estrategia A:" and main.hud._secondary_model_lbl.text == "Modelo Estrategia B:", "HUD settings popup displays Strategy A / Strategy B model labels in ES")
+	main._on_language_changed("en")
+	r._assert(main.hud._primary_model_lbl.text == "Strategy A Model:" and main.hud._secondary_model_lbl.text == "Strategy B Model:", "HUD settings popup displays Strategy A / Strategy B model labels in EN")
+	main._on_language_changed("es")
 
 	var mock_tags := [
 		{"name": "d3:4b", "capabilities": ["decision", "vision"]},
@@ -73,17 +83,16 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	EvoUserSettings.config_path_override = test_cfg_path
 	EvoUserSettings.primary_model = "custom-dec-a:4b"
 	EvoUserSettings.secondary_model = "custom-dec-b:4b"
-	EvoUserSettings.context_length = 8192
-	main.hud._commit_context_window_text("16384")
+	EvoUserSettings.save_settings()
 	r._assert(FileAccess.file_exists(test_cfg_path), "Settings file saved on change")
 	EvoUserSettings.primary_model = "d3:4b"
 	EvoUserSettings.secondary_model = "tev1:4b"
-	EvoUserSettings.context_length = 8192
 	EvoUserSettings.load_settings()
-	r._assert(EvoUserSettings.primary_model == "custom-dec-a:4b" and EvoUserSettings.secondary_model == "custom-dec-b:4b" and EvoUserSettings.context_length == 16384, "Settings round-trip loads custom models and free-text context window 16384")
+	r._assert(EvoUserSettings.primary_model == "custom-dec-a:4b" and EvoUserSettings.secondary_model == "custom-dec-b:4b", "Settings round-trip loads Strategy A and Strategy B custom models")
 	main.hud._apply_decision_models_update()
-	r._assert("custom-dec-a:4b" in main.hud._models_diag_lbl.text and "custom-dec-b:4b" in main.hud._models_diag_lbl.text and "16384" in main.hud._models_diag_lbl.text, "HUD diagnostic card updates dynamically with active models and context window")
+	r._assert("custom-dec-a:4b" in main.hud._models_diag_lbl.text and "custom-dec-b:4b" in main.hud._models_diag_lbl.text, "HUD diagnostic card updates dynamically with Strategy A and B models")
 	r._assert("custom-dec-a:4b" in main.hud._settings_btn.tooltip_text and "custom-dec-b:4b" in main.hud._settings_btn.tooltip_text, "Settings button tooltip updates dynamically when models change")
+	r._assert("custom-dec-a:4b" in main.hud.strategy_a_option.tooltip_text and "custom-dec-b:4b" in main.hud.strategy_b_option.tooltip_text, "Top-bar Strategy A / B selector tooltips display assigned Ollama models")
 	var quit_signals: Array[int] = [0]
 	main.hud.quit_requested.connect(func() -> void: quit_signals[0] += 1)
 
@@ -112,12 +121,13 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	EvoUserSettings.config_path_override = r._suite_cfg_path
 	EvoUserSettings.primary_model = EvoUserSettings.DEFAULT_PRIMARY_MODEL
 	EvoUserSettings.secondary_model = EvoUserSettings.DEFAULT_SECONDARY_MODEL
-	EvoUserSettings.context_length = EvoUserSettings.DEFAULT_CONTEXT_LENGTH
 	main.hud._apply_decision_models_update()
 
 	# Advance generations via main.step_generation()
 	var gen_before := main.world_state.generation
+	EvoOllamaClient.clear_cache()
 	main.step_generation()
+	EvoOllamaClient.clear_cache()
 	main.step_generation()
 	r._assert(main.world_state.generation == gen_before + 2, "main.step_generation() advances world_state generation")
 	r._assert(main.world_renderer.world_state == main.world_state, "world_renderer tracks updated world_state")
@@ -126,11 +136,13 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	main.load_preset("preset-darwin-archipelago")
 	r._assert(main.world_state.preset_id == "preset-darwin-archipelago", "Switched to preset-darwin-archipelago")
 	r._assert(main.world_state.cells.size() == 169, "Darwin preset has 169 cells in main")
+	EvoOllamaClient.clear_cache()
 	main.step_generation()
 
 	main.load_preset("preset-finite-island")
 	r._assert(main.world_state.preset_id == "preset-finite-island", "Switched to preset-finite-island")
 	r._assert(main.world_state.cells.size() == 169, "Finite Island preset has 169 cells in main")
+	EvoOllamaClient.clear_cache()
 	main.step_generation()
 
 	# Language switching
@@ -197,7 +209,9 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	(life_state.cells[ld1.hex_id] as EvoTypes.HexCell).deme_ids.erase(ld1.id)
 	(life_state.cells[ld2.hex_id] as EvoTypes.HexCell).deme_ids.erase(ld2.id)
 	ld1.hex_id = "0,0"
+	ld1.urban_hex_ids = ["0,0"]
 	ld2.hex_id = "1,0"
+	ld2.urban_hex_ids = ["1,0"]
 	(life_state.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([ld1.id])
 	(life_state.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([ld2.id])
 	var coop_fl := EvoTypes.HexEdgeFlow.new()
@@ -209,7 +223,6 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	life_state.active_flows.append(coop_fl)
 	EvoEnvPhase.run_environmental_phase(life_state, "es")
 	r._assert(life_state.disused_connections.size() == 1 and int(life_state.disused_connections[0].get("age", -1)) == 0, "Active friendly flow recorded into disused_connections with age 0")
-	# Force raid so the friendly flow is severed
 	ld1.chosen_action = EvoActionMenu.option("raid", ld2.id)
 	ld2.chosen_action = EvoActionMenu.option("forage")
 	EvoBiophysPhase.run_biophysical_phase(life_state, "es")
@@ -238,6 +251,104 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	main.free()
 
 
+static func _test_multi_hex_hud_inspector_and_renderer(r) -> void:
+	print("-- Testing Rural Defense Posture UI, Multi-District Inspector & Multi-Hex Renderer --")
+	# 1. Rural defense posture formatting in ES & EN
+	for p_case in [
+		["open_harvest", "Cosecha abierta", "Open harvest"],
+		["patrol_fields", "Patrullando cultivos", "Patrolling fields"],
+		["mobilized_garrison", "Guarnición movilizada", "Mobilized garrison"]
+	]:
+		var lbl_es := EvoUiStyle.get_defense_posture_label(p_case[0], "es")
+		var lbl_en := EvoUiStyle.get_defense_posture_label(p_case[0], "en")
+		r._assert(lbl_es.contains(p_case[1]) and lbl_en.contains(p_case[2]), "EvoUiStyle.get_defense_posture_label formats '%s' in ES & EN" % p_case[0])
+
+	# 2. Construct multi-hex walled city properly and test HUD inspector + 2.5D WorldRenderer
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var main: EvoMainController = packed.instantiate() as EvoMainController
+	main.quit_on_close_enabled = false
+	r.root.add_child(main)
+	if main.camera == null:
+		main._ready()
+	main.hud._set_startup_blocked(false)
+	main._on_language_changed("en")
+
+	var state := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-war")
+	for cid in state.cells.keys():
+		var c: EvoTypes.HexCell = state.cells[cid]
+		c.deme_ids.clear()
+		c.owner_deme_id = ""
+		c.land_use = "wild"
+	var city: EvoTypes.Deme = state.demes["deme-rift-west"]
+	var rival: EvoTypes.Deme = state.demes["deme-rift-east"]
+	city.hex_id = "0,0"
+	city.urban_hex_ids = ["0,0", "1,0"]
+	city.population = 310
+	city.defense_tier = 2
+	city.defense_posture = "patrol_fields"
+	for hid in city.urban_hex_ids:
+		var uc: EvoTypes.HexCell = state.cells[hid]
+		uc.biome = "savanna"
+		uc.altitude = 0.45
+		uc.land_use = "urban"
+		uc.deme_ids.assign([city.id])
+	rival.hex_id = "0,3"
+	rival.urban_hex_ids = ["0,3"]
+	(state.cells["0,3"] as EvoTypes.HexCell).biome = "savanna"
+	(state.cells["0,3"] as EvoTypes.HexCell).altitude = 0.45
+	(state.cells["0,3"] as EvoTypes.HexCell).deme_ids.assign([rival.id])
+
+	main.world_state = state
+	main.world_renderer.world_state = state
+	main.hud.set_world_state(state)
+	main.hud.select_deme(city.id)
+	main.world_renderer._rebuild()
+
+	# Verify multi-district inspector display & rural posture label
+	r._assert(main.hud._inspector_model_badge_lbl.text.contains("0,0) · (1,0"), "Inspector header badge displays all districts of multi-hex city")
+	var sheet_texts: Array[String] = []
+	_collect_label_texts(main.hud._deme_sheet_vbox, sheet_texts)
+	var joined_sheet := "\n".join(sheet_texts)
+	r._assert(joined_sheet.contains("2 united districts") and joined_sheet.contains("Patrolling fields"), "Inspector sheet displays multi-district union count and active rural defense posture")
+	var city_rel_lines := EvoHudInspectorPanel.build_deme_relations_lines(state, "en", city)
+	var self_listed := city_rel_lines.any(func(item: Dictionary) -> bool: return str(item["text"]).contains(city.name))
+	r._assert(not self_listed, "Multi-hex city excludes its own districts from neighbor relation lines")
+
+	# Verify WorldRenderer: 2 district village entries, single capital entry in _village_by_deme_id, intra-city 'merge' road, and continuous outer curtain wall
+	var city_villages := main.world_renderer._villages.filter(func(v: Dictionary) -> bool: return str(v["deme_id"]) == city.id)
+	var capital_villages := city_villages.filter(func(v: Dictionary) -> bool: return bool(v["is_capital"]))
+	r._assert(city_villages.size() == 2 and capital_villages.size() == 1, "WorldRenderer builds 2 district village entries with exactly 1 capital district")
+	r._assert(main.world_renderer._village_by_deme_id.has(city.id) and bool((main.world_renderer._village_by_deme_id[city.id] as Dictionary)["is_capital"]), "_village_by_deme_id maps multi-hex Deme to its single capital billboard anchor")
+
+	var has_merge_avenue := main.world_renderer._roads.any(func(rd: Dictionary) -> bool:
+		return str(rd["kind"]) == "merge" and (
+			(str(rd["hex_a"]) == "0,0" and str(rd["hex_b"]) == "1,0")
+			or (str(rd["hex_a"]) == "1,0" and str(rd["hex_b"]) == "0,0")
+		)
+	)
+	r._assert(has_merge_avenue, "WorldRenderer connects adjacent districts of multi-hex Deme with intra-city 'merge' avenue")
+
+	# Verify shared interior edge suppression produces 10 outer wall segments (5 + 5) instead of 12
+	var outer_wall_edges := 0
+	const EDGE_DIR_MAP: Array[int] = [0, 5, 4, 3, 2, 1]
+	for v in city_villages:
+		var hc: EvoTypes.HexCell = state.cells[str(v["hex_id"])]
+		for e in range(6):
+			var nb_id := main.world_renderer._neighbor_id(hc, EDGE_DIR_MAP[e])
+			var nb_cell: EvoTypes.HexCell = state.cells[nb_id]
+			var suppressed := not nb_cell.deme_ids.is_empty() and nb_cell.deme_ids[0] == city.id
+			if not suppressed:
+				outer_wall_edges += 1
+	r._assert(outer_wall_edges == 10, "Multi-hex 2-district city suppresses shared interior wall edges leaving 10 continuous outer curtain wall segments")
+
+	# Clicking secondary district ("1,0") selects the owning multi-hex Deme cleanly
+	main.hud._on_tool_button_pressed("inspect")
+	main._on_world_hex_clicked("1,0", MOUSE_BUTTON_LEFT)
+	r._assert(main.world_renderer.selected_deme_id == city.id and main.hud._selected_deme_id == city.id, "Clicking secondary urban district (1,0) selects owning multi-hex Deme")
+
+	main.free()
+
+
 static func _test_bugfix_regressions(r) -> void:
 	print("-- Testing Bugfix Regressions --")
 	# 1. strip_migration_suffix preserves root deme IDs and strips migration/warband suffixes
@@ -245,8 +356,8 @@ static func _test_bugfix_regressions(r) -> void:
 	r._assert(EvoSettlementPhase.strip_migration_suffix("deme-rift-west-m3-0_0") == "deme-rift-west", "strip_migration_suffix strips '-m3-0_0' suffix")
 	r._assert(EvoSettlementPhase.strip_migration_suffix("deme-rift-west-w2") == "deme-rift-west", "strip_migration_suffix strips '-w2' suffix")
 
-	# 2. resolve_deme_decision_model_tag assigns deme-darwin-rival to secondary model
-	r._assert(EvoDecisionModel.resolve_deme_decision_model_tag("deme-darwin-rival", "d3:4b", "tev1:4b") == "tev1:4b", "resolve_deme_decision_model_tag assigns 'deme-darwin-rival' to secondary model 'tev1:4b'")
+	# 2. resolve_model_for_slot assigns Slot B to secondary model
+	r._assert(EvoDecisionModel.resolve_model_for_slot("B", "d3:4b", "tev1:4b") == "tev1:4b", "resolve_model_for_slot assigns Slot B to secondary model 'tev1:4b'")
 
 	# 3. EvoActionMenu.is_passable rejects altitude > 0.85 (0.88 mountain barrier)
 	var mountain_cell := EvoTypes.HexCell.new()
@@ -258,7 +369,6 @@ static func _test_bugfix_regressions(r) -> void:
 
 	# 4. validate_and_balance_thermodynamics preserves positive ecological_impact minus excess when target_metabolic > 1.0
 	var high_vec := EvoTypes.BiophysicalVector.new(0.0, 1.0, 0.30, 1.0, 1.0, 0.0)
-	# A+ = 3.0 -> required_cost = 0.5 * (3.0 - 0.60) = 1.20 -> target_metabolic = 1.20 -> excess = 0.20 -> ecological_impact = 0.30 - 0.20 = 0.10
 	var balanced_high := EvoThermodynamics.validate_and_balance_thermodynamics(high_vec, false)
 	r._assert(is_equal_approx(balanced_high.metabolic_cost, 1.0), "validate_and_balance_thermodynamics caps metabolic_cost at 1.0 when target_metabolic > 1.0")
 	r._assert(is_equal_approx(balanced_high.ecological_impact, 0.10), "validate_and_balance_thermodynamics preserves positive ecological_impact minus excess (0.30 - 0.20 = 0.10)")
@@ -280,25 +390,25 @@ static func _test_bugfix_regressions(r) -> void:
 
 	# 6. EvoUiStyle.get_village_tier_label matches Deme.get_village_tier() across all 4 tiers (I..IV)
 	var tier_cases := [
-		{"pop": 65, "merged": 0, "def": 0, "union": "", "tier": 1, "es": "I · Campamento", "en": "I · Camp"},
-		{"pop": 90, "merged": 0, "def": 1, "union": "", "tier": 2, "es": "II · Aldea", "en": "II · Village"},
-		{"pop": 140, "merged": 0, "def": 0, "union": "", "tier": 2, "es": "II · Aldea", "en": "II · Village"},
-		{"pop": 185, "merged": 0, "def": 1, "union": "", "tier": 3, "es": "III · Villa", "en": "III · Town"},
-		{"pop": 255, "merged": 0, "def": 0, "union": "", "tier": 3, "es": "III · Villa", "en": "III · Town"},
-		{"pop": 295, "merged": 0, "def": 0, "union": "union-a-b", "tier": 4, "es": "IV · Metrópolis", "en": "IV · Metropolis"},
-		{"pop": 395, "merged": 0, "def": 0, "union": "", "tier": 4, "es": "IV · Metrópolis", "en": "IV · Metropolis"}
+		{"pop": 65, "merged": 0, "def": 0, "hexes": ["0,0"], "tier": 1, "es": "I · Campamento", "en": "I · Camp"},
+		{"pop": 90, "merged": 0, "def": 1, "hexes": ["0,0"], "tier": 2, "es": "II · Aldea", "en": "II · Village"},
+		{"pop": 140, "merged": 0, "def": 0, "hexes": ["0,0"], "tier": 2, "es": "II · Aldea", "en": "II · Village"},
+		{"pop": 185, "merged": 0, "def": 1, "hexes": ["0,0"], "tier": 3, "es": "III · Villa", "en": "III · Town"},
+		{"pop": 255, "merged": 0, "def": 0, "hexes": ["0,0"], "tier": 3, "es": "III · Villa", "en": "III · Town"},
+		{"pop": 295, "merged": 0, "def": 0, "hexes": ["0,0", "1,0"], "tier": 4, "es": "IV · Metrópolis", "en": "IV · Metropolis"},
+		{"pop": 395, "merged": 0, "def": 0, "hexes": ["0,0"], "tier": 4, "es": "IV · Metrópolis", "en": "IV · Metropolis"}
 	]
 	for tc in tier_cases:
 		var td := EvoTypes.Deme.new()
 		td.population = int(tc["pop"])
 		td.merged_count = int(tc["merged"])
 		td.defense_tier = int(tc["def"])
-		td.walled_union_id = str(tc["union"])
-		var lbl_es := EvoUiStyle.get_village_tier_label(td.population, "es", td.merged_count, td.defense_tier, td.walled_union_id)
-		var lbl_en := EvoUiStyle.get_village_tier_label(td.population, "en", td.merged_count, td.defense_tier, td.walled_union_id)
+		td.urban_hex_ids.assign(tc["hexes"])
+		var lbl_es := EvoUiStyle.get_village_tier_label(td.population, "es", td.merged_count, td.defense_tier, td.is_multi_hex())
+		var lbl_en := EvoUiStyle.get_village_tier_label(td.population, "en", td.merged_count, td.defense_tier, td.is_multi_hex())
 		r._assert(
 			td.get_village_tier() == int(tc["tier"]) and lbl_es == str(tc["es"]) and lbl_en == str(tc["en"]) and lbl_es.begins_with(td.get_village_roman() + " · "),
-			"EvoUiStyle.get_village_tier_label matches Deme.get_village_tier() for tier %d (pop=%d, def=%d, union=%s)" % [int(tc["tier"]), td.population, td.defense_tier, td.walled_union_id]
+			"EvoUiStyle.get_village_tier_label matches Deme.get_village_tier() for tier %d (pop=%d, def=%d, multi_hex=%s)" % [int(tc["tier"]), td.population, td.defense_tier, str(td.is_multi_hex())]
 		)
 
 	# 7. max_rural quota enforcement releases excess rural hexes when a deme drops in tier
@@ -308,7 +418,9 @@ static func _test_bugfix_regressions(r) -> void:
 	(state_quota.cells[q_deme.hex_id] as EvoTypes.HexCell).deme_ids.erase(q_deme.id)
 	(state_quota.cells[q_other.hex_id] as EvoTypes.HexCell).deme_ids.erase(q_other.id)
 	q_deme.hex_id = "0,0"
+	q_deme.urban_hex_ids = ["0,0"]
 	q_other.hex_id = "0,4"
+	q_other.urban_hex_ids = ["0,4"]
 	(state_quota.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([q_deme.id])
 	(state_quota.cells["0,4"] as EvoTypes.HexCell).deme_ids.assign([q_other.id])
 	q_deme.population = 400
@@ -343,7 +455,7 @@ static func _test_bugfix_regressions(r) -> void:
 			count_t1 += 1
 	r._assert(q_deme.get_village_tier() == 1 and count_t1 == 0, "Dropping to Tier 1 releases all rural hexes (max_rural == 0)")
 
-	# 8. Flood/mountain relocation clears non-adjacent rural hexes and revalidates walled_union_id
+	# 8. Mountain/flood displacement relocates single-hex city, clears non-adjacent rural hexes, and splits disconnected 3-hex cities
 	var state_reloc := EvoPresets.create_preset_world("preset-rift-savanna", "en")
 	state_reloc.unlimited_pressure_mode = true
 	var r_d1: EvoTypes.Deme = state_reloc.demes["deme-rift-west"]
@@ -351,21 +463,22 @@ static func _test_bugfix_regressions(r) -> void:
 	(state_reloc.cells[r_d1.hex_id] as EvoTypes.HexCell).deme_ids.erase(r_d1.id)
 	(state_reloc.cells[r_d2.hex_id] as EvoTypes.HexCell).deme_ids.erase(r_d2.id)
 	r_d1.hex_id = "0,0"
-	r_d2.hex_id = "1,0"
+	r_d1.urban_hex_ids = ["0,0"]
+	r_d2.hex_id = "1,2"
+	r_d2.urban_hex_ids = ["0,2", "1,2", "2,2"]
 	(state_reloc.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([r_d1.id])
-	(state_reloc.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([r_d2.id])
+	for u_hid in r_d2.urban_hex_ids:
+		var uc: EvoTypes.HexCell = state_reloc.cells[u_hid]
+		uc.biome = "savanna"
+		uc.altitude = 0.45
+		uc.deme_ids.assign([r_d2.id])
 	r_d1.population = 180
-	r_d2.population = 180
-	r_d1.defense_tier = 1
-	r_d2.defense_tier = 1
-	r_d1.walled_union_id = "union-reloc-test"
-	r_d2.walled_union_id = "union-reloc-test"
-	EvoTypes.get_relation(state_reloc, r_d1.id, r_d2.id).pact_turns = 4
+	r_d2.population = 360
+	r_d2.energy_reserves = 210.0
 	for nid in HexMath.get_neighbor_ids(0, 0, state_reloc.cells):
-		if nid != "1,0":
-			var nc: EvoTypes.HexCell = state_reloc.cells[nid]
-			nc.biome = "ocean"
-			nc.altitude = 0.05
+		var nc: EvoTypes.HexCell = state_reloc.cells[nid]
+		nc.biome = "ocean"
+		nc.altitude = 0.05
 	var escape_cell: EvoTypes.HexCell = state_reloc.cells["-1,0"]
 	escape_cell.biome = "savanna"
 	escape_cell.altitude = 0.45
@@ -377,20 +490,22 @@ static func _test_bugfix_regressions(r) -> void:
 	far_rural_cell.owner_deme_id = r_d1.id
 	far_rural_cell.land_use = "crops"
 	EvoTurnEngine.apply_set_biome(state_reloc, ["0,0"], "high_mountain", "en")
-	r._assert(r_d1.hex_id == "-1,0", "Displaced deme relocates from high_mountain (0,0) to richest passable neighbor (-1,0)")
-	r._assert(far_rural_cell.owner_deme_id == "" and far_rural_cell.land_use == "wild", "Relocation clears rural hex (0,1) that is no longer at hex_distance == 1 from (-1,0)")
-	r._assert(r_d1.walled_union_id == "" and r_d2.walled_union_id == "", "Relocation out of adjacency dissolves walled_union_id on both partners")
+	r._assert(r_d1.hex_id == "-1,0" and r_d1.urban_hex_ids == ["-1,0"], "Displaced deme relocates from high_mountain (0,0) to richest passable neighbor (-1,0)")
+	r._assert(far_rural_cell.owner_deme_id == "" and far_rural_cell.land_use == "wild", "Relocation clears rural hex (0,1) that is no longer adjacent to (-1,0)")
+	EvoTurnEngine.apply_set_biome(state_reloc, ["1,2"], "high_mountain", "en")
+	r._assert(r_d2.urban_hex_ids == ["0,2"] and state_reloc.demes.size() == 3, "Submerging/blocking middle district of 3-hex city splits disconnected wing into an allied sister city")
 
 	# 9. Seeded Ollama result application on next generation
 	var state_pf := EvoPresets.create_preset_world("preset-rift-savanna", "es")
 	var pf_west: EvoTypes.Deme = state_pf.demes["deme-rift-west"]
 	EvoOllamaClient.seed_deme_result(pf_west.id, {
 		"probabilities": {"intensify": 0.99, "forage": 0.01},
+		"posture_probabilities": {"open_harvest": 0.10, "patrol_fields": 0.80, "mobilized_garrison": 0.10},
 		"dominant_decision_id": "intensify",
 		"confidence": 0.93
 	})
 	EvoDecisionModel.evaluate_all_demes(state_pf, "es", false)
-	r._assert(is_equal_approx(pf_west.last_confidence, 0.93) and str(pf_west.chosen_action.get("type", "")) in ["intensify", "forage"], "evaluate_all_demes applies seeded Ollama result cleanly")
+	r._assert(is_equal_approx(pf_west.last_confidence, 0.93) and pf_west.defense_posture == "patrol_fields" and str(pf_west.chosen_action.get("type", "")) == "intensify", "evaluate_all_demes applies seeded Ollama action & posture cleanly")
 	EvoOllamaClient.clear_cache()
 
 
@@ -429,7 +544,7 @@ static func _test_turn_events_and_world_stats(r) -> void:
 		EvoTypes.record_turn_stats(state)
 	r._assert(state.stats_history.size() == EvoTypes.STATS_HISTORY_LIMIT, "EvoTypes.record_turn_stats caps state.stats_history at STATS_HISTORY_LIMIT (%d)" % EvoTypes.STATS_HISTORY_LIMIT)
 
-	# Verify JSON round-trip preserves stats_history and new Deme fields
+	# Verify JSON round-trip preserves stats_history and Deme fields
 	var sample_deme: EvoTypes.Deme = state.demes.values()[0]
 	sample_deme.infection_turns = 2
 	sample_deme.immunity_turns = 5
@@ -468,6 +583,7 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 
 	var saw_fx_active := false
 	for g_i in range(6):
+		EvoOllamaClient.clear_cache()
 		if g_i == 0 and main.world_state.demes.has("deme-rift-west"):
 			var dw: EvoTypes.Deme = main.world_state.demes["deme-rift-west"]
 			dw.population = 90
@@ -480,7 +596,6 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 			saw_fx_active = true
 	r._assert(saw_fx_active, "world_renderer._fx_active is populated when turn_events is non-empty")
 
-	# Ensure chronicle has at least one entry and test clicking a live chronicle feed row button
 	var feed_btn: Button = null
 	for child in main.hud._event_feed_vbox.get_children():
 		if child is Button:
@@ -492,7 +607,6 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 	feed_btn.pressed.emit()
 	r._assert(main.world_renderer.selected_hex_id == latest_entry.hex_id, "Clicking live chronicle feed button jumps world_renderer.selected_hex_id to entry hex (%s)" % latest_entry.hex_id)
 
-	# Verify cycling speeds across 0, 1, 2
 	r._assert(main.speed_index == 1 and EvoMainController.STEP_INTERVALS == [4.0, 2.0, 0.6], "Default speed_index is 1 with STEP_INTERVALS = [4.0, 2.0, 0.6]")
 	main.hud._on_speed_pressed()
 	r._assert(main.speed_index == 2, "First speed button press advances speed_index to 2 (0.6s)")
@@ -501,7 +615,6 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 	main.hud._on_speed_pressed()
 	r._assert(main.speed_index == 1, "Third speed button press returns speed_index to 1 (2.0s)")
 
-	# Verify closing _milestone_banner when macro_outcome_type != "" does not re-show on subsequent refresh
 	main.world_state.macro_outcome_type = "ecological_equilibrium"
 	main.world_state.macro_outcome_title = "Equilibrium Reached"
 	main.world_state.macro_outcome_summary = "Populations stabilized."
@@ -511,7 +624,6 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 	main.hud.refresh(main.world_state)
 	r._assert(not main.hud._milestone_banner.visible, "Closed macro outcome banner does not re-open on subsequent hud.refresh() for the same macro_outcome_type")
 
-	# Verify full-map camera zoom-out (MIN_ZOOM <= 0.15 and fit_full_map / apply_preset("fit")) and overlay refresh
 	r._assert(EvoCameraController.MIN_ZOOM <= 0.15, "Camera MIN_ZOOM allows full-map zoom-out (%.2f <= 0.15)" % EvoCameraController.MIN_ZOOM)
 	main.camera.apply_preset("fit")
 	r._assert(main.camera._target_zoom < 0.25 and main.camera._target_pan == Vector2.ZERO, "Camera apply_preset('fit') zooms out to fit full map (%.3f) and centers on Vector2.ZERO" % main.camera._target_zoom)
@@ -535,6 +647,7 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 	bugs_state.demes.clear()
 	d_a.id = "deme-a-main"
 	d_a.hex_id = "-2,1"
+	d_a.urban_hex_ids = ["-2,1"]
 	d_a.population = 420
 	d_a.defense_tier = 2
 	d_a.energy_reserves = 210.0
@@ -550,6 +663,7 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 	var db := d_b_tpl.duplicate_deme()
 	db.id = "deme-b-1"
 	db.hex_id = "1,0"
+	db.urban_hex_ids = ["1,0"]
 	db.population = 120
 	db.defense_tier = 1
 	db.energy_reserves = 120.0

@@ -12,7 +12,7 @@ static func build_settings_popup(hud: Control) -> void:
 	hud._settings_popup.offset_left = -736
 	hud._settings_popup.offset_right = -364
 	hud._settings_popup.offset_top = 10
-	hud._settings_popup.offset_bottom = 450
+	hud._settings_popup.offset_bottom = 420
 	hud._settings_popup.z_index = 30
 	hud._settings_popup.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(8))
 	hud.add_child(hud._settings_popup)
@@ -77,26 +77,6 @@ static func build_settings_popup(hud: Control) -> void:
 	hud._secondary_model_opt.add_theme_font_size_override("font_size", 11)
 	hud._secondary_model_opt.item_selected.connect(hud._on_secondary_model_selected)
 	s_row.add_child(hud._secondary_model_opt)
-
-	# Context Window Size (Free Input Field)
-	var ctx_row := HBoxContainer.new()
-	ctx_row.add_theme_constant_override("separation", 6)
-	diag_vbox.add_child(ctx_row)
-
-	hud._context_window_lbl = Label.new()
-	hud._context_window_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hud._context_window_lbl.add_theme_font_size_override("font_size", 11)
-	hud._context_window_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
-	ctx_row.add_child(hud._context_window_lbl)
-
-	hud._context_window_input = LineEdit.new()
-	hud._context_window_input.custom_minimum_size = Vector2(96, 24)
-	hud._context_window_input.text = str(EvoUserSettings.context_length)
-	hud._context_window_input.alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	hud._context_window_input.add_theme_font_size_override("font_size", 11)
-	hud._context_window_input.text_submitted.connect(hud._on_context_window_submitted)
-	hud._context_window_input.focus_exited.connect(hud._on_context_window_focus_exited)
-	ctx_row.add_child(hud._context_window_input)
 
 	# Dedicated Full-Width Refresh Models Button
 	hud._refresh_models_btn = Button.new()
@@ -240,17 +220,14 @@ static func refresh_settings_static_labels(hud: Control) -> void:
 	EvoUiStyle.apply_button_active(hud._lang_es_btn, hud._lang == "es")
 	EvoUiStyle.apply_button_active(hud._lang_en_btn, hud._lang == "en")
 
-	hud._primary_model_lbl.text = EvoUiStyle.tr_text(hud._lang, "Primario (Táctico):", "Primary (Tactical):")
-	hud._secondary_model_lbl.text = EvoUiStyle.tr_text(hud._lang, "Secundario (Ecológico):", "Secondary (Ecological):")
+	hud._primary_model_lbl.text = EvoUiStyle.tr_text(hud._lang, "Modelo Estrategia A:", "Strategy A Model:")
+	hud._secondary_model_lbl.text = EvoUiStyle.tr_text(hud._lang, "Modelo Estrategia B:", "Strategy B Model:")
 	hud._refresh_models_btn.text = EvoUiStyle.tr_text(hud._lang, "🔄 Actualizar modelos de decisión", "🔄 Refresh decision models")
 	hud._refresh_models_btn.tooltip_text = EvoUiStyle.tr_text(
 		hud._lang,
 		"Volver a consultar en Ollama los modelos de decisión descargados en la máquina",
 		"Re-query Ollama for downloaded decision models on this machine"
 	)
-	hud._context_window_lbl.text = EvoUiStyle.tr_text(hud._lang, "Ventana de contexto (num_ctx):", "Context window (num_ctx):")
-	if not hud._context_window_input.has_focus():
-		hud._context_window_input.text = str(EvoUserSettings.context_length)
 	refresh_decision_model_selectors(hud)
 	hud._auto_pause_check.text = EvoUiStyle.tr_text(hud._lang, "Auto-pausa en hitos", "Auto-pause on milestones")
 	hud._unlimited_pressure_check.text = EvoUiStyle.tr_text(hud._lang, "Energía Ilimitada", "Unlimited Energy")
@@ -263,22 +240,12 @@ static func refresh_settings_popup(hud: Control) -> void:
 		return
 	var p_model := EvoUserSettings.primary_model
 	var s_model := EvoUserSettings.secondary_model
-	var ctx_len := EvoUserSettings.context_length
 	var primary_count := 0
 	var secondary_count := 0
 	var avg_conf := 0.0
 	for d_key in hud._world_state.demes.keys():
 		var d: EvoTypes.Deme = hud._world_state.demes[d_key]
-		if p_model == s_model:
-			if EvoDecisionModel.resolve_deme_decision_model_tag(d.id, "__primary__", "__secondary__") == "__secondary__":
-				secondary_count += 1
-			else:
-				primary_count += 1
-		elif d.decision_model_tag == s_model:
-			secondary_count += 1
-		elif d.decision_model_tag == p_model:
-			primary_count += 1
-		elif EvoDecisionModel.resolve_deme_decision_model_tag(d.id, "__primary__", "__secondary__") == "__secondary__":
+		if d.faction_slot == "B":
 			secondary_count += 1
 		else:
 			primary_count += 1
@@ -288,11 +255,11 @@ static func refresh_settings_popup(hud: Control) -> void:
 
 	hud._settings_btn.text = ""
 	hud._settings_btn.icon = EvoUiStyle.get_pixel_icon("settings_gear")
-	hud._settings_btn.tooltip_text = "🧠 %s (%d) · %s (%d) · ctx %d" % [p_model, primary_count, s_model, secondary_count, ctx_len]
+	hud._settings_btn.tooltip_text = "🧠 A: %s (%d) · B: %s (%d)" % [p_model, primary_count, s_model, secondary_count]
 	hud._models_diag_lbl.text = EvoUiStyle.tr_text(
 		hud._lang,
-		"🧠 Motores Cognitivos:\n• %s (Táctico/Instinto): %d aldeas\n• %s (Ecológico/Estratégico): %d aldeas\n• Ventana de contexto: %d · Confianza media: %d%%" % [p_model, primary_count, s_model, secondary_count, ctx_len, int(round(avg_conf * 100.0))],
-		"🧠 Cognitive Engines:\n• %s (Tactical/Instinct): %d villages\n• %s (Ecological/Strategic): %d villages\n• Context window: %d · Avg confidence: %d%%" % [p_model, primary_count, s_model, secondary_count, ctx_len, int(round(avg_conf * 100.0))]
+		"🧠 Motores Cognitivos:\n• Estrategia A (%s): %d aldeas\n• Estrategia B (%s): %d aldeas\n• Confianza media: %d%%" % [p_model, primary_count, s_model, secondary_count, int(round(avg_conf * 100.0))],
+		"🧠 Cognitive Engines:\n• Strategy A (%s): %d villages\n• Strategy B (%s): %d villages\n• Avg confidence: %d%%" % [p_model, primary_count, s_model, secondary_count, int(round(avg_conf * 100.0))]
 	)
 	if (hud._settings_popup != null and hud._settings_popup.visible) or (hud._primary_model_opt != null and hud._primary_model_opt.item_count == 0):
 		refresh_decision_model_selectors(hud)

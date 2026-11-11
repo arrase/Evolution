@@ -3,11 +3,9 @@ extends RefCounted
 
 const DEFAULT_PRIMARY_MODEL: String = "d3:4b"
 const DEFAULT_SECONDARY_MODEL: String = "tev1:4b"
-const DEFAULT_CONTEXT_LENGTH: int = 16384
 
 static var primary_model: String = DEFAULT_PRIMARY_MODEL
 static var secondary_model: String = DEFAULT_SECONDARY_MODEL
-static var context_length: int = DEFAULT_CONTEXT_LENGTH
 static var config_path_override: String = ""
 
 
@@ -41,8 +39,6 @@ static func load_settings() -> void:
 			primary_model = str(data["primary_model"]).strip_edges()
 		if data.has("secondary_model") and str(data["secondary_model"]).strip_edges() != "":
 			secondary_model = str(data["secondary_model"]).strip_edges()
-		if data.has("context_length") and int(data["context_length"]) > 0:
-			context_length = int(data["context_length"])
 
 
 static func save_settings() -> void:
@@ -52,8 +48,7 @@ static func save_settings() -> void:
 		return
 	var payload := {
 		"primary_model": primary_model,
-		"secondary_model": secondary_model,
-		"context_length": context_length
+		"secondary_model": secondary_model
 	}
 	file.store_string(JSON.stringify(payload, "\t") + "\n")
 	file.close()

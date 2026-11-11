@@ -37,11 +37,12 @@ static func step_cell_seasonal_climate(
 	delta_temp: float,
 	delta_hum: float,
 	gamma_season: float,
-	suffered_collapse: bool
+	suffered_collapse: bool = false
 ) -> void:
 	cell.temperature = clampf(snappedf(cell.temperature + delta_temp, 0.01), -1.0, 1.0)
 	cell.humidity = clampf(snappedf(cell.humidity + delta_hum, 0.01), 0.0, 1.0)
-	var recovery_rate: float = 0.005 if suffered_collapse else 0.05
+	var degraded := suffered_collapse or cell.carrying_capacity < 0.60 * cell.carrying_capacity_max
+	var recovery_rate: float = 0.008 if degraded else 0.05
 	var next_k := clampf(
 		snappedf(cell.carrying_capacity + recovery_rate * (cell.carrying_capacity_max - cell.carrying_capacity), 0.01),
 		10.0,
@@ -53,6 +54,8 @@ static func step_cell_seasonal_climate(
 	)
 	cell.carrying_capacity = next_k
 	cell.current_resources = next_r
+	cell.ruin_turns = maxi(0, cell.ruin_turns - 1)
+	cell.has_ruins = cell.ruin_turns > 0
 
 
 static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "es") -> void:
@@ -128,6 +131,8 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 		var cell: EvoTypes.HexCell = state.cells[cid]
 		if cell.biome == "ocean":
 			cell.current_resources = 0.0
+			cell.ruin_turns = 0
+			cell.has_ruins = false
 			continue
 		if biome_changed_hexes.has(cell.id):
 			continue
@@ -141,83 +146,100 @@ static func resolve_submerged_demes(state: EvoTypes.WorldState, lang: String = "
 	var is_en := lang == "en"
 	for cid in state.cells.keys():
 		var cell: EvoTypes.HexCell = state.cells[cid]
-		var is_uninhabitable := cell.biome in ["ocean", "high_mountain"] or cell.altitude > 0.85
-		if is_uninhabitable:
+		if cell.biome in ["ocean", "high_mountain"] or cell.altitude > 0.85:
 			cell.land_use = "wild"
 			cell.owner_deme_id = ""
 			cell.has_ruins = false
-		if not is_uninhabitable or cell.deme_ids.is_empty():
+			cell.ruin_turns = 0
+			cell.deme_ids.clear()
+
+	for did in state.demes.keys():
+		if not state.demes.has(did):
+			continue
+		var deme: EvoTypes.Deme = state.demes[did]
+		var dry_ids: Array[String] = []
+		var submerged_ids: Array[String] = []
+		for hid in deme.urban_hex_ids:
+			var ucell: EvoTypes.HexCell = state.cells[hid]
+			if ucell.biome in ["ocean", "high_mountain"] or ucell.altitude > 0.85:
+				submerged_ids.append(hid)
+			else:
+				dry_ids.append(hid)
+		if submerged_ids.is_empty():
 			continue
 
-		var resident_ids := cell.deme_ids.duplicate()
-		cell.deme_ids.clear()
+		if not dry_ids.is_empty():
+			deme.urban_hex_ids = dry_ids
+			deme.hex_id = dry_ids[0]
+			for hid in dry_ids:
+				(state.cells[hid] as EvoTypes.HexCell).deme_ids = [deme.id]
+			EvoRelations.remember(deme, state, "Rising waters flooded district %s." % ", ".join(submerged_ids))
+			continue
 
-		for deme_id in resident_ids:
-			if not state.demes.has(deme_id):
-				continue
-			var deme: EvoTypes.Deme = state.demes[deme_id]
-
-			var candidates: Array[EvoTypes.HexCell] = []
-			for nid in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
+		var seen_cand: Dictionary = {}
+		var candidates: Array[EvoTypes.HexCell] = []
+		for shid in submerged_ids:
+			var scell: EvoTypes.HexCell = state.cells[shid]
+			for nid in HexMath.get_neighbor_ids(scell.q, scell.r, state.cells):
+				if seen_cand.has(nid):
+					continue
+				seen_cand[nid] = true
 				var ncell: EvoTypes.HexCell = state.cells[nid]
-				if ncell.biome not in ["ocean", "high_mountain"] and ncell.altitude <= 0.85 and ncell.deme_ids.is_empty():
+				if ncell.biome not in ["ocean", "high_mountain"] and ncell.altitude <= 0.85 and ncell.deme_ids.is_empty() and (ncell.owner_deme_id == "" or ncell.owner_deme_id == deme.id):
 					candidates.append(ncell)
 
-			candidates.sort_custom(func(a: EvoTypes.HexCell, b: EvoTypes.HexCell) -> bool:
-				return a.current_resources > b.current_resources
+		candidates.sort_custom(func(a: EvoTypes.HexCell, b: EvoTypes.HexCell) -> bool:
+			var a_wild := a.owner_deme_id == "" and a.ruin_turns == 0
+			var b_wild := b.owner_deme_id == "" and b.ruin_turns == 0
+			if a_wild != b_wild:
+				return a_wild
+			return a.current_resources > b.current_resources
+		)
+
+		var origin_hex := submerged_ids[0]
+		if not candidates.is_empty():
+			var best_cell := candidates[0]
+			best_cell.owner_deme_id = ""
+			best_cell.land_use = "wild"
+			best_cell.has_ruins = false
+			best_cell.ruin_turns = 0
+			best_cell.deme_ids = [deme.id]
+			deme.hex_id = best_cell.id
+			deme.urban_hex_ids = [best_cell.id]
+			deme.energy_reserves = snappedf(deme.energy_reserves * 0.80, 0.01)
+			EvoRelations.remember(deme, state, "Flooding forced your people from %s to %s." % [origin_hex, best_cell.id])
+
+			var flow := EvoTypes.HexEdgeFlow.new()
+			flow.from_hex_id = origin_hex
+			flow.to_hex_id = best_cell.id
+			flow.flow_type = "migration"
+			flow.intensity = 0.65
+			flow.from_deme_id = deme.id
+			flow.to_deme_id = deme.id
+			state.active_flows.append(flow)
+		else:
+			EvoRuralHinterland._release_all_deme_rural_hexes(state, deme.id)
+			EvoTypes.push_event(state, "extinction", origin_hex, origin_hex, deme.id, "", 0.0, deme.population)
+			state.demes.erase(did)
+			EvoTypes.erase_deme_relations(state, did)
+			if not state.recent_extinction_hexes.has(origin_hex):
+				state.recent_extinction_hexes.append(origin_hex)
+
+			var entry := EvoTypes.ChronicleEntry.new()
+			entry.id = "chronicle-submerge-%d-%s" % [state.generation, deme.id]
+			entry.generation = state.generation
+			entry.event_type = "extinction"
+			entry.title = ("%s Submerged" if is_en else "%s Sumergido") % deme.name
+			entry.causal_explanation = (
+				"%s went extinct when cell (%s) submerged into ocean with no accessible terrestrial refuge." % [deme.name, origin_hex]
+				if is_en
+				else "%s se extinguió cuando la celda (%s) quedó sumergida en el océano sin refugio terrestre accesible." % [deme.name, origin_hex]
 			)
-
-			if not candidates.is_empty():
-				var target_cell := candidates[0]
-				target_cell.owner_deme_id = ""
-				target_cell.land_use = "wild"
-				target_cell.has_ruins = false
-				deme.hex_id = target_cell.id
-				deme.energy_reserves = snappedf(deme.energy_reserves * 0.80, 0.01)
-				target_cell.deme_ids.append(deme.id)
-
-				for rcid in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
-					var rcell: EvoTypes.HexCell = state.cells[rcid]
-					if rcell.owner_deme_id == deme.id and HexMath.hex_distance(rcell.q, rcell.r, target_cell.q, target_cell.r) != 1:
-						rcell.owner_deme_id = ""
-						rcell.land_use = "wild"
-
-				var flow := EvoTypes.HexEdgeFlow.new()
-				flow.from_hex_id = cell.id
-				flow.to_hex_id = target_cell.id
-				flow.flow_type = "migration"
-				flow.intensity = 0.65
-				flow.from_deme_id = deme.id
-				flow.to_deme_id = deme.id
-				state.active_flows.append(flow)
-			else:
-				EvoTypes.push_event(state, "extinction", cell.id, cell.id, deme.id, "", 0.0, deme.population)
-				state.demes.erase(deme_id)
-				cell.has_ruins = false
-				for rcid in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
-					var rcell: EvoTypes.HexCell = state.cells[rcid]
-					if rcell.owner_deme_id == deme_id:
-						rcell.owner_deme_id = ""
-						rcell.land_use = "wild"
-				EvoTypes.erase_deme_relations(state, deme_id)
-				if not state.recent_extinction_hexes.has(cell.id):
-					state.recent_extinction_hexes.append(cell.id)
-
-				var entry := EvoTypes.ChronicleEntry.new()
-				entry.id = "chronicle-submerge-%d-%s" % [state.generation, deme.id]
-				entry.generation = state.generation
-				entry.event_type = "extinction"
-				entry.title = ("%s Submerged" if is_en else "%s Sumergido") % deme.name
-				entry.causal_explanation = (
-					"%s went extinct when cell (%s) submerged into ocean with no accessible terrestrial refuge." % [deme.name, cell.id]
-					if is_en
-					else "%s se extinguió cuando la celda (%s) quedó sumergida en el océano sin refugio terrestre accesible." % [deme.name, cell.id]
-				)
-				entry.hex_id = cell.id
-				entry.deme_id = deme.id
-				entry.lineage_id = deme.lineage_id
-				state.chronicle.append(entry)
-				EvoSettlementPhase.mark_lineage_if_extinct(state, deme.lineage_id)
+			entry.hex_id = origin_hex
+			entry.deme_id = deme.id
+			entry.lineage_id = deme.lineage_id
+			state.chronicle.append(entry)
+			EvoSettlementPhase.mark_lineage_if_extinct(state, deme.lineage_id)
 
 	EvoSettlementPhase.revalidate_walled_unions(state)
 	EvoRuralHinterland.enforce_rural_hinterland_quotas(state)

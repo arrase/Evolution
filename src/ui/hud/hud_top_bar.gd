@@ -440,13 +440,19 @@ static func refresh_strategies_for_hud(hud: Control, state: EvoTypes.WorldState,
 
 	hud.strategy_a_swatch.color = Color.from_string(strat_a.color, Color("#10B981"))
 	hud.strategy_b_swatch.color = Color.from_string(strat_b.color, Color("#EF4444"))
-	hud.strategy_a_option.tooltip_text = _build_strategy_tooltip(state, strat_a, lang)
-	hud.strategy_b_option.tooltip_text = _build_strategy_tooltip(state, strat_b, lang)
+	hud.strategy_a_option.tooltip_text = _build_strategy_tooltip(state, strat_a, lang, EvoUserSettings.primary_model)
+	hud.strategy_b_option.tooltip_text = _build_strategy_tooltip(state, strat_b, lang, EvoUserSettings.secondary_model)
 
 
-static func _build_strategy_tooltip(state: EvoTypes.WorldState, strat: EvoTypes.StrategyDef, lang: String) -> String:
+static func _build_strategy_tooltip(
+	state: EvoTypes.WorldState,
+	strat: EvoTypes.StrategyDef,
+	lang: String,
+	model_tag: String
+) -> String:
 	var s_name := EvoI18n.strategy_name(lang, strat)
 	var s_desc := EvoI18n.strategy_description(lang, strat)
+	var model_line := "🧠 %s: %s" % [EvoUiStyle.tr_text(lang, "Modelo Ollama", "Ollama Model"), model_tag]
 	var trait_names: Array[String] = []
 	for tid in strat.biological_trait_ids:
 		if state.traits_catalog.has(tid):
@@ -456,10 +462,11 @@ static func _build_strategy_tooltip(state: EvoTypes.WorldState, strat: EvoTypes.
 			trait_names.append(EvoI18n.trait_name(lang, state.traits_catalog[tid]))
 	var traits_line := ", ".join(trait_names)
 	if traits_line == "":
-		return "%s %s\n%s" % [strat.icon, s_name, s_desc]
-	return "%s %s\n%s\n%s: %s" % [
+		return "%s %s\n%s\n%s" % [strat.icon, s_name, model_line, s_desc]
+	return "%s %s\n%s\n%s\n%s: %s" % [
 		strat.icon,
 		s_name,
+		model_line,
 		s_desc,
 		EvoI18n.t(lang, "lab_strat_traits"),
 		traits_line

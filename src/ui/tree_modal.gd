@@ -469,7 +469,8 @@ func _rebuild_detail_panel() -> void:
 		var pop_unit := "pop" if _lang == "en" else "hab"
 		for d in living_demes:
 			var dl := Label.new()
-			dl.text = "• %s [%s · %d %s · 🧠 %s · (%s)]" % [d.name, d.get_village_roman(), d.population, pop_unit, d.decision_model_tag, d.hex_id]
+			var d_coords := ") · (".join(d.urban_hex_ids) if d.is_multi_hex() else d.hex_id
+			dl.text = "• %s [%s · %d %s · 🧠 %s · (%s)]" % [d.name, d.get_village_roman(), d.population, pop_unit, d.decision_model_tag, d_coords]
 			dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			dl.add_theme_font_size_override("font_size", 12)
 			dl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GREEN_OK)

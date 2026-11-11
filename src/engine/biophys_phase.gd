@@ -12,7 +12,7 @@ static func run_biophysical_phase(state: EvoTypes.WorldState, lang: String = "es
 
 	var income_by_deme := EvoEconomyPhase.harvest(state, lang)
 	EvoEconomyPhase.invest(state, lang)
-	EvoDiplomacyPhase.resolve(state, lang)
+	EvoDiplomacyPhase.resolve(state, lang, income_by_deme)
 	EvoConflictPhase.resolve(state, lang)
 	EvoSettlementPhase.remove_extinct(state, lang)
 	EvoSettlementPhase.resolve_settling(state)

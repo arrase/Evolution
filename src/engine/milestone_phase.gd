@@ -1,6 +1,45 @@
 class_name EvoMilestonePhase
 extends RefCounted
 
+const CULTURAL_ARCHETYPES: Array[Dictionary] = [
+	{
+		"id": "agrarian",
+		"en": "Agrarian Terrace Tradition",
+		"es": "Tradición de Terrazas Agrarias",
+		"vec": [0.08, 0.34, 0.12, 0.08, 0.16, 0.32]
+	},
+	{
+		"id": "wayfinder",
+		"en": "Wayfinder Navigation",
+		"es": "Navegación de Pioneros",
+		"vec": [0.08, 0.18, 0.08, 0.38, 0.14, 0.30]
+	},
+	{
+		"id": "masonry",
+		"en": "Fortified Masonry",
+		"es": "Mampostería Fortificada",
+		"vec": [0.07, 0.20, 0.16, 0.06, 0.34, 0.34]
+	},
+	{
+		"id": "mercantile",
+		"en": "Mercantile Guild Charter",
+		"es": "Fuero de Gremios Mercantiles",
+		"vec": [0.06, 0.24, 0.10, 0.24, 0.28, 0.28]
+	},
+	{
+		"id": "martial",
+		"en": "Martial Vanguard Code",
+		"es": "Código de Vanguardia Marcial",
+		"vec": [0.14, 0.26, -0.08, 0.34, 0.22, 0.30]
+	},
+	{
+		"id": "agroforestry",
+		"en": "Communal Agroforestry",
+		"es": "Agroforestería Comunal",
+		"vec": [0.05, 0.24, 0.30, 0.08, 0.28, 0.32]
+	}
+]
+
 
 static func _slugify(text: String) -> String:
 	var lower := text.to_lower()
@@ -21,6 +60,55 @@ static func _slugify(text: String) -> String:
 	return out if out.length() > 0 else "adaptation"
 
 
+static func count_emergent_cultural_traits(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> int:
+	var count := 0
+	for tid in deme.cultural_trait_ids:
+		if state.traits_catalog.has(tid) and (state.traits_catalog[tid] as EvoTypes.TraitDef).origin == "emergent":
+			count += 1
+	return count
+
+
+static func _bc(deme: EvoTypes.Deme, key: String) -> int:
+	return int(deme.baldwin_counters[key]) if deme.baldwin_counters.has(key) else 0
+
+
+static func _select_cultural_archetype(
+	deme: EvoTypes.Deme,
+	cell: EvoTypes.HexCell,
+	state: EvoTypes.WorldState
+) -> Dictionary:
+	var owned_names_lower: Array[String] = []
+	for tid in deme.cultural_trait_ids:
+		if state.traits_catalog.has(tid):
+			owned_names_lower.append((state.traits_catalog[tid] as EvoTypes.TraitDef).name.to_lower())
+
+	var scores: Dictionary = {
+		"agrarian": float(_bc(deme, "intensify") + _bc(deme, "innovate")) + (2.5 if deme.strategy_id == "strat-innovation" else 0.0),
+		"wayfinder": float(_bc(deme, "settle") * 2) + (3.0 if deme.strategy_id == "strat-expansion" or cell.biome == "coastal_shallows" else 0.0),
+		"masonry": float(_bc(deme, "fortify") * 2 + deme.defense_tier * 2) + (1.5 if deme.biological_trait_ids.has("bio-k-strategy") else 0.0),
+		"mercantile": float(_bc(deme, "trade") * 2) + (3.0 if deme.strategy_id == "strat-trade" or deme.cultural_trait_ids.has("cul-interdeme-barter") else 0.0),
+		"martial": float(_bc(deme, "raid") + _bc(deme, "conquer") * 2 + _bc(deme, "demand_tribute") + _bc(deme, "betray")) + (3.0 if deme.strategy_id == "strat-war" or deme.cultural_trait_ids.has("cul-warrior-expansion") else 0.0),
+		"agroforestry": float(_bc(deme, "aid") + _bc(deme, "offer_pact") + _bc(deme, "accept_pact") + _bc(deme, "unite")) + (3.0 if deme.strategy_id == "strat-cooperation" or deme.cultural_trait_ids.has("cul-communal-conservation") else 0.5)
+	}
+
+	var best_arch: Dictionary = CULTURAL_ARCHETYPES[0]
+	var best_score := -9999.0
+	for arch in CULTURAL_ARCHETYPES:
+		var aid := str(arch["id"])
+		var en_lower := str(arch["en"]).to_lower()
+		var es_lower := str(arch["es"]).to_lower()
+		var already_owned := false
+		for oname in owned_names_lower:
+			if oname.begins_with(en_lower) or oname.begins_with(es_lower):
+				already_owned = true
+				break
+		var s := float(scores[aid]) - (100.0 if already_owned else 0.0)
+		if s > best_score:
+			best_score = s
+			best_arch = arch
+	return best_arch
+
+
 static func synthesize_milestone_trait(
 	state: EvoTypes.WorldState,
 	deme: EvoTypes.Deme,
@@ -33,12 +121,41 @@ static func synthesize_milestone_trait(
 	var biome_label := EvoI18n.biome_name(lang, cell.biome)
 
 	var base_name := ""
+	var raw_vec: EvoTypes.BiophysicalVector
+	var baldwin_dec_id := str(deme.get_meta("baldwin_decision_id", "")) if deme.has_meta("baldwin_decision_id") else ""
+	if baldwin_dec_id == "":
+		baldwin_dec_id = str(deme.chosen_action["type"])
+
 	if category == "cultural":
-		base_name = "Cooperative Ecological Tradition" if is_en else "Tradición Ecológica Cooperativa"
+		var arch := _select_cultural_archetype(deme, cell, state)
+		base_name = str(arch["en"]) if is_en else str(arch["es"])
+		var v_arr: Array = arch["vec"]
+		raw_vec = EvoTypes.BiophysicalVector.new(
+			float(v_arr[0]),
+			float(v_arr[1]),
+			float(v_arr[2]),
+			float(v_arr[3]),
+			float(v_arr[4]),
+			float(v_arr[5])
+		)
 	elif trigger_type == "allopatric_speciation":
 		base_name = "Allopatric Divergence" if is_en else "Divergencia Alopátrica"
+		raw_vec = EvoTypes.BiophysicalVector.new(0.18, 0.35, 0.10, 0.30, 0.20, 0.20)
 	else:
 		base_name = "Adaptive Homeostasis" if is_en else "Homeostasis Adaptativa"
+		if baldwin_dec_id != "" and state.decisions_catalog.has(baldwin_dec_id):
+			var dom_dec: EvoTypes.DecisionDef = state.decisions_catalog[baldwin_dec_id]
+			var dv := dom_dec.vector
+			raw_vec = EvoTypes.BiophysicalVector.new(
+				maxf(0.10, dv.metabolic_cost * 0.70),
+				clampf(maxf(0.15, dv.extraction_efficiency * 0.80), 0.0, 0.85),
+				clampf(dv.ecological_impact * 0.60, -0.50, 0.50),
+				clampf(maxf(0.10, dv.spatial_mobility * 0.80), 0.0, 0.85),
+				clampf(maxf(0.10, dv.social_cohesion * 0.80), 0.0, 0.85),
+				clampf(maxf(0.20, dv.transmission_threshold * 0.80), 0.10, 0.85)
+			)
+		else:
+			raw_vec = EvoTypes.BiophysicalVector.new(0.18, 0.35, 0.10, 0.30, 0.20, 0.20)
 
 	var candidate_name := "%s (%s)" % [base_name, biome_label]
 	if candidate_name.length() > 60:
@@ -53,29 +170,9 @@ static func synthesize_milestone_trait(
 	var suffix := 2
 	while existing_names.has(final_name.to_lower()):
 		var suffix_str := " #%d" % suffix
-		final_name = candidate_name.substr(0, max(1, 60 - suffix_str.length())) + suffix_str
+		final_name = candidate_name.substr(0, maxi(1, 60 - suffix_str.length())) + suffix_str
 		suffix += 1
 
-	var baldwin_dec_id := str(deme.get_meta("baldwin_decision_id", "")) if deme.has_meta("baldwin_decision_id") else ""
-	if baldwin_dec_id == "":
-		baldwin_dec_id = str(deme.chosen_action["type"])
-
-	var raw_vec: EvoTypes.BiophysicalVector
-	if category == "cultural":
-		raw_vec = EvoTypes.BiophysicalVector.new(0.05, 0.28, 0.20, 0.12, 0.18, 0.35)
-	elif trigger_type == "baldwin_assimilation" and baldwin_dec_id != "" and state.decisions_catalog.has(baldwin_dec_id):
-		var dom_dec: EvoTypes.DecisionDef = state.decisions_catalog[baldwin_dec_id]
-		var dv := dom_dec.vector
-		raw_vec = EvoTypes.BiophysicalVector.new(
-			maxf(0.10, dv.metabolic_cost * 0.70),
-			clampf(maxf(0.15, dv.extraction_efficiency * 0.80), 0.0, 0.85),
-			clampf(dv.ecological_impact * 0.60, -0.50, 0.50),
-			clampf(maxf(0.10, dv.spatial_mobility * 0.80), 0.0, 0.85),
-			clampf(maxf(0.10, dv.social_cohesion * 0.80), 0.0, 0.85),
-			clampf(maxf(0.20, dv.transmission_threshold * 0.80), 0.10, 0.85)
-		)
-	else:
-		raw_vec = EvoTypes.BiophysicalVector.new(0.18, 0.35, 0.10, 0.30, 0.20, 0.20)
 	var balanced_vec := EvoThermodynamics.validate_and_balance_thermodynamics(raw_vec, false)
 
 	var slug := _slugify(final_name)
@@ -175,40 +272,17 @@ static func run_milestone_phase(
 			if state.traits_catalog.has(tid) and (state.traits_catalog[tid] as EvoTypes.TraitDef).origin == "emergent":
 				emergent_bio_count += 1
 
-		var emergent_cul_count: int = 0
-		for tid in deme.cultural_trait_ids:
-			if state.traits_catalog.has(tid) and (state.traits_catalog[tid] as EvoTypes.TraitDef).origin == "emergent":
-				emergent_cul_count += 1
+		var emergent_cul_count := count_emergent_cultural_traits(deme, state)
 
 		if deme.isolation_turns >= 10 and emergent_bio_count < 3:
 			var founder_lineage: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id] if state.lineage_tree.has(deme.lineage_id) else null
-			var founder_traits: Dictionary = {}
-			if founder_lineage != null:
-				for tid in founder_lineage.acquired_trait_ids:
-					if not state.traits_catalog.has(tid) or (state.traits_catalog[tid] as EvoTypes.TraitDef).category == "biological":
-						founder_traits[tid] = true
-
-			var deme_traits: Dictionary = {}
-			var has_novel_bio := false
-			for tid in deme.biological_trait_ids:
-				deme_traits[tid] = true
-				if not founder_traits.has(tid):
-					has_novel_bio = true
-
-			var div_from_founder := _compute_set_divergence(deme_traits, founder_traits)
 			var founder_cell: EvoTypes.HexCell = (
 				state.cells[founder_lineage.founder_hex_id]
 				if (founder_lineage != null and state.cells.has(founder_lineage.founder_hex_id))
 				else null
 			)
-			var in_distinct_biome := founder_cell != null and founder_cell.biome != cell.biome
-			var separated_from_founder := (
-				founder_cell == null
-				or founder_cell.id != cell.id
-				or (state.generation == 0 and emergent_bio_count == 0 and div_from_founder >= 0.70)
-			)
-
-			if separated_from_founder and (has_novel_bio or div_from_founder >= 0.30 or in_distinct_biome):
+			var separated_from_founder := founder_cell == null or not deme.urban_hex_ids.has(founder_cell.id)
+			if separated_from_founder:
 				candidates.append({
 					"priority": 0,
 					"trigger_type": "allopatric_speciation",
@@ -231,7 +305,7 @@ static func run_milestone_phase(
 				"decision_id": triggered_baldwin_dec
 			})
 
-		if deme.innovation_counter >= 1.0 and EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog) and emergent_cul_count < 2 and (deme.last_energy_delta >= 0.0 or deme.energy_reserves >= 35.0):
+		if deme.innovation_counter >= 1.0 and EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog) and emergent_cul_count < EvoActionMenu.MAX_EMERGENT_CULTURAL and (deme.last_energy_delta >= 0.0 or deme.energy_reserves >= 35.0):
 			candidates.append({
 				"priority": 2,
 				"trigger_type": "cultural_innovation",
@@ -261,6 +335,7 @@ static func run_milestone_phase(
 			else:
 				if not deme.cultural_trait_ids.has(new_trait.id):
 					deme.cultural_trait_ids.append(new_trait.id)
+			EvoRelations.remember(deme, state, "Unlocked %s!" % new_trait.name)
 
 			var ancestor_hex_id := deme.hex_id
 			if trigger_type == "baldwin_assimilation":

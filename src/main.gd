@@ -18,6 +18,7 @@ var speed_index: int = 1
 var quit_on_close_enabled: bool = true
 var _play_timer: float = 0.0
 var _last_model_revision: int = 0
+var _pending_manual_step: bool = false
 
 
 func _ready() -> void:
@@ -66,6 +67,11 @@ func _process(delta: float) -> void:
 		world_renderer.refresh_village_decisions()
 		if bool(async_res["dom_changed"]):
 			world_renderer.refresh_overlay(world_state)
+
+	if _pending_manual_step and not EvoDecisionModel.has_pending_jobs():
+		_pending_manual_step = false
+		step_generation()
+		return
 
 	if not is_playing:
 		return
@@ -153,6 +159,7 @@ func _connect_signals() -> void:
 func load_preset(preset_id: String, strategy_a_id: String = "", strategy_b_id: String = "") -> void:
 	is_playing = false
 	_play_timer = 0.0
+	_pending_manual_step = false
 	EvoOllamaClient.clear_cache()
 
 	var preserved_traits: Dictionary = {}
@@ -291,7 +298,8 @@ func _sync_selection_after_world_mutation() -> void:
 		return
 	if world_renderer.selected_deme_id != "" and world_state.demes.has(world_renderer.selected_deme_id):
 		var d: EvoTypes.Deme = world_state.demes[world_renderer.selected_deme_id]
-		world_renderer.selected_hex_id = d.hex_id
+		if not d.urban_hex_ids.has(world_renderer.selected_hex_id):
+			world_renderer.selected_hex_id = d.hex_id
 	else:
 		if world_state.cells.has(world_renderer.selected_hex_id):
 			var cell: EvoTypes.HexCell = world_state.cells[world_renderer.selected_hex_id]
@@ -312,6 +320,10 @@ func step_generation() -> void:
 		return
 	if hud != null and (hud._ollama_startup_blocked or (hud._missing_models_modal != null and hud._missing_models_modal.visible)):
 		return
+	if EvoDecisionModel.has_pending_jobs():
+		_pending_manual_step = true
+		return
+	_pending_manual_step = false
 	var res := EvoTurnEngine.advance_generation(world_state, lang)
 	_sync_selection_after_world_mutation()
 
@@ -343,7 +355,7 @@ func _apply_brush_at_hex(hex_id: String) -> void:
 		applied = EvoTurnEngine.apply_adjust_carrying_capacity(world_state, target_hexes, delta_k)
 
 	if applied:
-		if world_renderer.selected_deme_id != "" and world_state.demes.has(world_renderer.selected_deme_id) and (world_state.demes[world_renderer.selected_deme_id] as EvoTypes.Deme).hex_id != hex_id:
+		if world_renderer.selected_deme_id != "" and world_state.demes.has(world_renderer.selected_deme_id) and not (world_state.demes[world_renderer.selected_deme_id] as EvoTypes.Deme).urban_hex_ids.has(hex_id):
 			_sync_selection_after_world_mutation()
 		else:
 			world_renderer.selected_hex_id = hex_id
@@ -381,6 +393,7 @@ func _on_world_hex_dragged(hex_id: String) -> void:
 func _on_world_deme_clicked(deme_id: String, hex_id: String) -> void:
 	world_renderer.selected_deme_id = deme_id
 	world_renderer.selected_hex_id = hex_id
+	hud._selected_hex_id = hex_id
 	hud.select_deme(deme_id)
 	world_renderer.refresh_overlay(world_state)
 
@@ -388,6 +401,7 @@ func _on_world_deme_clicked(deme_id: String, hex_id: String) -> void:
 func _on_state_imported(new_state: EvoTypes.WorldState) -> void:
 	is_playing = false
 	_play_timer = 0.0
+	_pending_manual_step = false
 	world_state = new_state
 	hud.set_playing_state(false)
 	if hud._world_state != world_state:
@@ -425,6 +439,7 @@ func _on_play_pause_toggled(p_playing: bool) -> void:
 
 func _on_quit_requested() -> void:
 	is_playing = false
+	_pending_manual_step = false
 	EvoDecisionModel.wait_for_workers()
 	if quit_on_close_enabled and get_tree() != null:
 		get_tree().quit()

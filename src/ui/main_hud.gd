@@ -81,8 +81,6 @@ var _primary_model_opt: OptionButton
 var _refresh_models_btn: Button
 var _secondary_model_lbl: Label
 var _secondary_model_opt: OptionButton
-var _context_window_lbl: Label
-var _context_window_input: LineEdit
 var _lang_es_btn: Button
 var _lang_en_btn: Button
 var _auto_pause_check: CheckBox
@@ -405,7 +403,8 @@ func select_deme(deme_id: String) -> void:
 		return
 	_selected_deme_id = deme_id
 	var d: EvoTypes.Deme = _world_state.demes[deme_id]
-	_selected_hex_id = d.hex_id
+	if not d.urban_hex_ids.has(_selected_hex_id):
+		_selected_hex_id = d.hex_id
 	if _inspector_minimized:
 		_on_toggle_inspector_minimize()
 	if _inspector_tab == "habitat":
@@ -681,32 +680,6 @@ func _on_refresh_models_pressed() -> void:
 	EvoOllamaClient.refresh_ollama_status_async()
 	EvoHudTopBar.refresh_decision_model_selectors(self)
 	_update_top_bar_state()
-
-
-func _on_context_window_submitted(new_text: String) -> void:
-	_commit_context_window_text(new_text)
-	if _context_window_input != null:
-		_context_window_input.release_focus()
-
-
-func _on_context_window_focus_exited() -> void:
-	if _context_window_input != null:
-		_commit_context_window_text(_context_window_input.text)
-
-
-func _commit_context_window_text(raw_text: String) -> void:
-	var trimmed := raw_text.strip_edges()
-	if trimmed.is_valid_int():
-		var val := int(trimmed)
-		if val > 0 and val != EvoUserSettings.context_length:
-			EvoUserSettings.context_length = val
-			EvoUserSettings.save_settings()
-			EvoOllamaClient.clear_cache()
-			if _world_state != null:
-				EvoDecisionModel.evaluate_all_demes(_world_state, _lang)
-			_update_top_bar_state()
-	if _context_window_input != null:
-		_context_window_input.text = str(EvoUserSettings.context_length)
 
 
 func _apply_decision_models_update() -> void:

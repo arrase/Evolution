@@ -64,8 +64,11 @@ static func compute_cell_flora_key(r: Node2D, cell: EvoTypes.HexCell, top_z: flo
 				var ncell: EvoTypes.HexCell = state.cells[n_id]
 				if not ncell.deme_ids.is_empty() or ncell.land_use != "wild":
 					link_mask |= (1 << dir_idx)
+	var rural_posture: String = ""
+	if v_count == 0 and cell.land_use in ["crops", "pasture"] and state.demes.has(cell.owner_deme_id):
+		rural_posture = (state.demes[cell.owner_deme_id] as EvoTypes.Deme).defense_posture
 	var cell_hash: int = int(cell.altitude * 100.0) * 1000 + prop_count * 10 + cell.biome.hash() + cell.land_use.hash() * 31 + (17 if cell.has_ruins else 0)
-	return [cell_hash, cell.biome, cell.land_use, cell.has_ruins, top_z, prop_count, v_count, k_band, link_mask, r._built_yaw, r._built_pitch]
+	return [cell_hash, cell.biome, cell.land_use, cell.has_ruins, rural_posture, top_z, prop_count, v_count, k_band, link_mask, r._built_yaw, r._built_pitch]
 
 
 static func collect_static_props(r: Node2D) -> Array[Prop]:
@@ -168,7 +171,7 @@ static func collect_static_props(r: Node2D) -> Array[Prop]:
 				dyn_props.append(r_prop)
 
 	for village in r._villages:
-		EvoPropFloraRenderer.collect_village_building_props(village, dyn_props)
+		EvoPropFloraRenderer.collect_village_building_props(state, village, dyn_props)
 	for i in range(1, dyn_props.size()):
 		var key_dp: Prop = dyn_props[i]
 		var key_dy: float = key_dp.y
@@ -251,6 +254,11 @@ static func collect_cell_flora_props(
 		else:
 			props.append(EvoPropFloraRenderer.world_prop("pasture_pen", world_xy + Vector2(-60.0, -24.0), top_z, Vector2.ZERO, 2.42, Color.WHITE))
 			props.append(EvoPropFloraRenderer.world_prop("pasture_pen", world_xy + Vector2(56.0, -20.0), top_z, Vector2.ZERO, 2.42, Color.WHITE))
+		if r.world_state != null and r.world_state.demes.has(cell.owner_deme_id):
+			var owner_posture := (r.world_state.demes[cell.owner_deme_id] as EvoTypes.Deme).defense_posture
+			if owner_posture in ["patrol_fields", "mobilized_garrison"]:
+				var tower_scale := 2.28 if owner_posture == "mobilized_garrison" else 2.08
+				props.append(EvoPropFloraRenderer.world_prop("watchtower", world_xy + Vector2(0.0, 56.0), top_z, Vector2.ZERO, tower_scale, Color.WHITE))
 		for p_i in range(4):
 			var p_ang := (TAU * float(p_i) / 4.0) + 0.35
 			var p_rad := HexMath.HEX_SIZE * (0.74 + float((absi(base_seed) + p_i * 7) % 10) * 0.01)

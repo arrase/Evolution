@@ -229,10 +229,14 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 
 	for fl in world_state.active_flows:
 		var has_deme_endpoints := (fl.from_deme_id != "" or fl.to_deme_id != "")
-		var touches := (fl.from_deme_id == d.id or fl.to_deme_id == d.id) if has_deme_endpoints else (fl.from_hex_id == d.hex_id or fl.to_hex_id == d.hex_id)
+		var from_in_d := d.urban_hex_ids.has(fl.from_hex_id)
+		var to_in_d := d.urban_hex_ids.has(fl.to_hex_id)
+		var touches := (fl.from_deme_id == d.id or fl.to_deme_id == d.id) if has_deme_endpoints else (from_in_d or to_in_d)
 		if not touches:
 			continue
-		var other_hex := fl.to_hex_id if fl.from_hex_id == d.hex_id else fl.from_hex_id
+		if (fl.from_deme_id == d.id and fl.to_deme_id == d.id) or (not has_deme_endpoints and from_in_d and to_in_d):
+			continue
+		var other_hex := fl.to_hex_id if from_in_d else fl.from_hex_id
 		var coord_lbl := "(%s)" % other_hex
 		var full_lbl := "Hex (%s)" % other_hex
 		var short_lbl := coord_lbl
@@ -362,10 +366,14 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 		var f_hex := str(dis.get("from_hex_id", ""))
 		var t_hex := str(dis.get("to_hex_id", ""))
 		var has_d := (f_deme != "" or t_deme != "")
-		var touches_dis := (f_deme == d.id or t_deme == d.id) if has_d else (f_hex == d.hex_id or t_hex == d.hex_id)
+		var f_in_d := d.urban_hex_ids.has(f_hex)
+		var t_in_d := d.urban_hex_ids.has(t_hex)
+		var touches_dis := (f_deme == d.id or t_deme == d.id) if has_d else (f_in_d or t_in_d)
 		if touches_dis:
+			if (f_deme == d.id and t_deme == d.id) or (not has_d and f_in_d and t_in_d):
+				continue
 			var other_d_id := t_deme if f_deme == d.id else f_deme
-			var target_h := t_hex if f_hex == d.hex_id else f_hex
+			var target_h := t_hex if f_in_d else f_hex
 			var coord_s := "(%s)" % target_h
 			var full_s := coord_s
 			var short_s := coord_s
@@ -398,17 +406,18 @@ static func build_deme_relations_lines(world_state: EvoTypes.WorldState, lang: S
 	if sev_line != "":
 		lines.append({"text": sev_line, "hex_id": sev_hex, "deme_id": sev_deme, "danger": false})
 
-	if world_state.cells.has(d.hex_id):
-		var c: EvoTypes.HexCell = world_state.cells[d.hex_id]
+	var perim_ids := EvoTypes.urban_perimeter_hex_ids(d, world_state)
+	if not perim_ids.is_empty():
 		var neigh_full: Array[String] = []
 		var neigh_short: Array[String] = []
 		var neigh_coord: Array[String] = []
 		var neigh_hex := ""
 		var neigh_deme := ""
-		var n_ids := HexMath.get_neighbor_ids(c.q, c.r, world_state.cells)
-		for nid in n_ids:
+		for nid in perim_ids:
 			var nc: EvoTypes.HexCell = world_state.cells[nid]
 			for nd_id in nc.deme_ids:
+				if nd_id == d.id:
+					continue
 				if not mentioned_deme_ids.has(nd_id) and world_state.demes.has(nd_id):
 					var nd: EvoTypes.Deme = world_state.demes[nd_id]
 					var nlbl := format_deme_with_hex(nd)

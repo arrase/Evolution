@@ -2,27 +2,20 @@ class_name EvoDecisionModel
 extends RefCounted
 
 
-static func resolve_deme_decision_model_tag(
-	deme_id: String,
+static func resolve_model_for_slot(
+	faction_slot: String,
 	primary_tag: String = "",
 	secondary_tag: String = ""
 ) -> String:
 	var p_tag := primary_tag if primary_tag != "" else EvoUserSettings.primary_model
 	var s_tag := secondary_tag if secondary_tag != "" else EvoUserSettings.secondary_model
-	if deme_id in ["deme-rift-west", "deme-island-1", "deme-darwin-founder"]:
-		return p_tag
-	if deme_id in ["deme-rift-east", "deme-island-2", "deme-darwin-rival"]:
-		return s_tag
-	var h: int = 0
-	for i in range(deme_id.length()):
-		h = (h * 31 + deme_id.unicode_at(i)) & 0x7FFFFFFF
-	return p_tag if (h % 2 == 0) else s_tag
+	return s_tag if faction_slot == "B" else p_tag
 
 
 static func reassign_world_models(state: EvoTypes.WorldState) -> void:
 	for deme_id in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[deme_id]
-		deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
+		deme.decision_model_tag = resolve_model_for_slot(deme.faction_slot)
 
 
 static func check_ollama_status(force_refresh: bool = false) -> Dictionary:
@@ -34,25 +27,31 @@ static func evaluate_deme(
 	state: EvoTypes.WorldState,
 	enqueue_job: bool = false
 ) -> Dictionary:
-	if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2", "deme-darwin-rival"] and deme.decision_model_tag == EvoUserSettings.primary_model):
-		deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
+	if deme.decision_model_tag == "":
+		deme.decision_model_tag = resolve_model_for_slot(deme.faction_slot)
 	if not state.cells.has(deme.hex_id):
 		return {
 			"chosen_action": deme.chosen_action,
 			"probabilities": deme.action_probabilities,
 			"forecasts": deme.action_forecasts,
+			"defense_posture": deme.defense_posture,
+			"posture_probabilities": deme.posture_probabilities,
+			"posture_forecasts": deme.posture_forecasts,
 			"confidence": deme.last_confidence
 		}
 	var job := EvoActionPolicy.prepare_deme_menu(deme, state)
 	var ready := EvoOllamaClient.take_result(deme.id)
 	if not ready.is_empty():
-		EvoActionPolicy.sample_action(deme, ready["probabilities"], float(ready["confidence"]), state.rng)
+		EvoActionPolicy.apply_live_result(deme, ready)
 	elif enqueue_job:
 		EvoOllamaClient.enqueue_jobs([job])
 	return {
 		"chosen_action": deme.chosen_action,
 		"probabilities": deme.action_probabilities,
 		"forecasts": deme.action_forecasts,
+		"defense_posture": deme.defense_posture,
+		"posture_probabilities": deme.posture_probabilities,
+		"posture_forecasts": deme.posture_forecasts,
 		"confidence": deme.last_confidence
 	}
 
@@ -67,14 +66,14 @@ static func evaluate_all_demes(
 	var jobs: Array[Dictionary] = []
 	for deme_id in state.demes.keys():
 		var deme: EvoTypes.Deme = state.demes[deme_id]
-		if deme.decision_model_tag == "" or (deme.id in ["deme-rift-east", "deme-island-2", "deme-darwin-rival"] and deme.decision_model_tag == EvoUserSettings.primary_model):
-			deme.decision_model_tag = resolve_deme_decision_model_tag(deme.id)
+		if deme.decision_model_tag == "":
+			deme.decision_model_tag = resolve_model_for_slot(deme.faction_slot)
 		if not state.cells.has(deme.hex_id):
 			continue
 		var job := EvoActionPolicy.prepare_deme_menu(deme, state)
 		var ready := EvoOllamaClient.take_result(deme.id)
 		if not ready.is_empty():
-			EvoActionPolicy.sample_action(deme, ready["probabilities"], float(ready["confidence"]), state.rng)
+			EvoActionPolicy.apply_live_result(deme, ready)
 		elif enqueue_jobs:
 			jobs.append(job)
 	if enqueue_jobs and not jobs.is_empty():
@@ -95,13 +94,24 @@ static func apply_completed_live_results(state: EvoTypes.WorldState, _lang: Stri
 			continue
 		var deme: EvoTypes.Deme = state.demes[deme_id]
 		var prev_key := str(deme.chosen_action["key"])
+		var prev_posture := deme.defense_posture
 		var entry: Dictionary = newly_completed[deme_id]
-		EvoActionPolicy.sample_action(deme, entry["probabilities"], float(entry["confidence"]), state.rng)
-		if str(deme.chosen_action["key"]) != prev_key:
+		EvoActionPolicy.apply_live_result(deme, entry)
+		if str(deme.chosen_action["key"]) != prev_key or deme.defense_posture != prev_posture:
 			any_changed = true
 		any_updated = true
 
 	return {"updated": any_updated, "dom_changed": any_changed, "revision": current_rev}
+
+
+static func finalize_turn_decisions(state: EvoTypes.WorldState) -> void:
+	var ids := state.demes.keys()
+	ids.sort()
+	for did in ids:
+		var deme: EvoTypes.Deme = state.demes[did]
+		if not deme.pending_raw_eval.is_empty():
+			EvoActionPolicy.sample_turn_decisions(deme, state.rng)
+			deme.pending_raw_eval = {}
 
 
 static func has_pending_jobs() -> bool:

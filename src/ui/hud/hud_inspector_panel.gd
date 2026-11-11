@@ -277,10 +277,11 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	EvoUiStyle.apply_button_active(hud._inspector_header_hl_btn, is_hl)
 
 	var conf_pct := int(round(d.last_confidence * 100.0))
+	var coords_str := ") · (".join(d.urban_hex_ids) if d.is_multi_hex() else d.hex_id
 	hud._inspector_model_badge_lbl.text = EvoUiStyle.tr_text(
 		hud._lang,
-		"🧠 Modelo: %s · %d%% · 📍 (%s)" % [d.decision_model_tag, conf_pct, d.hex_id],
-		"🧠 Model: %s · %d%% · 📍 (%s)" % [d.decision_model_tag, conf_pct, d.hex_id]
+		"🧠 Modelo: %s · %d%% · 📍 (%s)" % [d.decision_model_tag, conf_pct, coords_str],
+		"🧠 Model: %s · %d%% · 📍 (%s)" % [d.decision_model_tag, conf_pct, coords_str]
 	)
 
 	if hud._inspector_tab == "traits":
@@ -299,7 +300,7 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	EvoHudInspectorFormatters.add_sheet_kv(m_vbox, EvoUiStyle.tr_text(hud._lang, "🛡️ Linaje:", "🛡️ Lineage:"), lin_name)
 	var pop_unit := "pop." if hud._lang == "en" else "hab."
 	var pop_delta_str := " (%+d)" % d.last_population_delta if d.last_population_delta != 0 else ""
-	var tier_lbl := EvoUiStyle.get_village_tier_label(d.population, hud._lang, d.merged_count, d.defense_tier, d.walled_union_id)
+	var tier_lbl := EvoUiStyle.get_village_tier_label(d.population, hud._lang, d.merged_count, d.defense_tier, d.is_multi_hex())
 	EvoHudInspectorFormatters.add_sheet_kv(
 		m_vbox,
 		EvoUiStyle.tr_text(hud._lang, "👥 Población:", "👥 Population:"),
@@ -345,17 +346,26 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		"🏰 " + EvoI18n.t(hud._lang, "inspector_defense_label") + ":",
 		EvoI18n.t(hud._lang, "inspector_defense_%d" % clampi(d.defense_tier, 0, 3))
 	)
+	EvoHudInspectorFormatters.add_sheet_kv(
+		m_vbox,
+		EvoUiStyle.tr_text(hud._lang, "🛡️ Postura Rural:", "🛡️ Rural Posture:"),
+		EvoUiStyle.get_defense_posture_label(d.defense_posture, hud._lang)
+	)
 	if d.merged_count > 0:
 		EvoHudInspectorFormatters.add_sheet_kv(
 			m_vbox,
 			"🏛️ " + EvoUiStyle.tr_text(hud._lang, "Unificación:", "Unification:"),
 			EvoI18n.t(hud._lang, "inspector_merged_city", {"count": str(d.merged_count + 1)})
 		)
-	if d.walled_union_id != "":
+	if d.is_multi_hex():
 		EvoHudInspectorFormatters.add_sheet_kv(
 			m_vbox,
 			"🧱 " + EvoUiStyle.tr_text(hud._lang, "Unión Amurallada:", "Walled Union:"),
-			EvoUiStyle.tr_text(hud._lang, "Activa (%s)" % d.walled_union_id, "Active (%s)" % d.walled_union_id)
+			EvoUiStyle.tr_text(
+				hud._lang,
+				"%d distritos unidos (%s)" % [d.urban_hex_ids.size(), coords_str],
+				"%d united districts (%s)" % [d.urban_hex_ids.size(), coords_str]
+			)
 		)
 	EvoHudInspectorFormatters.add_sheet_kv(
 		m_vbox,

@@ -217,20 +217,30 @@ static func _draw_active_lens_overlay(r: Node2D) -> void:
 	var inv_zoom: float = clampf(1.0 / maxf(0.05, zoom_val), 0.8, 3.2)
 
 	if lens == "diplomacy":
-		for d_a: EvoTypes.Deme in state.demes.values():
-			if d_a.walled_union_id == "" or not r._hex_centers.has(d_a.hex_id):
+		for d: EvoTypes.Deme in state.demes.values():
+			if not d.is_multi_hex():
 				continue
-			for d_b: EvoTypes.Deme in state.demes.values():
-				if d_b.id <= d_a.id or d_b.walled_union_id != d_a.walled_union_id or not r._hex_centers.has(d_b.hex_id):
+			var n_urb := d.urban_hex_ids.size()
+			for i in range(n_urb):
+				var h_a := d.urban_hex_ids[i]
+				if not state.cells.has(h_a) or not r._hex_centers.has(h_a):
 					continue
-				var p_a: Vector2 = to_screen * (r._hex_centers[d_a.hex_id] as Vector2)
-				var p_b: Vector2 = to_screen * (r._hex_centers[d_b.hex_id] as Vector2)
-				var diff := p_b - p_a
-				var perp := Vector2(-diff.y, diff.x).normalized() if diff.length() > 1.0 else Vector2.UP
-				ci.draw_line(p_a, p_b, Color(0.08, 0.04, 0.02, 0.75), 9.0)
-				ci.draw_line(p_a + perp * 2.5, p_b + perp * 2.5, Color("#fbbf24"), 2.6)
-				ci.draw_line(p_a - perp * 2.5, p_b - perp * 2.5, Color("#fbbf24"), 2.6)
-				_draw_lens_icon_pill(ci, font, (p_a + p_b) * 0.5, "icon_merge", "", Color("#fbbf24"))
+				var c_a: EvoTypes.HexCell = state.cells[h_a]
+				for j in range(i + 1, n_urb):
+					var h_b := d.urban_hex_ids[j]
+					if not state.cells.has(h_b) or not r._hex_centers.has(h_b):
+						continue
+					var c_b: EvoTypes.HexCell = state.cells[h_b]
+					if HexMath.hex_distance(c_a.q, c_a.r, c_b.q, c_b.r) != 1:
+						continue
+					var p_a: Vector2 = to_screen * (r._hex_centers[h_a] as Vector2)
+					var p_b: Vector2 = to_screen * (r._hex_centers[h_b] as Vector2)
+					var diff := p_b - p_a
+					var perp := Vector2(-diff.y, diff.x).normalized() if diff.length() > 1.0 else Vector2.UP
+					ci.draw_line(p_a, p_b, Color(0.08, 0.04, 0.02, 0.75), 9.0)
+					ci.draw_line(p_a + perp * 2.5, p_b + perp * 2.5, Color("#fbbf24"), 2.6)
+					ci.draw_line(p_a - perp * 2.5, p_b - perp * 2.5, Color("#fbbf24"), 2.6)
+					_draw_lens_icon_pill(ci, font, (p_a + p_b) * 0.5, "icon_merge", "", Color("#fbbf24"))
 
 		for pk_var in state.relations.keys():
 			var pk := str(pk_var)
@@ -239,10 +249,26 @@ static func _draw_active_lens_overlay(r: Node2D) -> void:
 				continue
 			var d_a: EvoTypes.Deme = state.demes[parts[0]]
 			var d_b: EvoTypes.Deme = state.demes[parts[1]]
-			if not r._hex_centers.has(d_a.hex_id) or not r._hex_centers.has(d_b.hex_id):
+			var best_ha := ""
+			var best_hb := ""
+			var best_dist := 999999
+			for ha in d_a.urban_hex_ids:
+				if not state.cells.has(ha) or not r._hex_centers.has(ha):
+					continue
+				var ca: EvoTypes.HexCell = state.cells[ha]
+				for hb in d_b.urban_hex_ids:
+					if not state.cells.has(hb) or not r._hex_centers.has(hb):
+						continue
+					var cb: EvoTypes.HexCell = state.cells[hb]
+					var hd := HexMath.hex_distance(ca.q, ca.r, cb.q, cb.r)
+					if hd < best_dist:
+						best_dist = hd
+						best_ha = ha
+						best_hb = hb
+			if best_ha == "" or best_hb == "":
 				continue
-			var p_a: Vector2 = to_screen * (r._hex_centers[d_a.hex_id] as Vector2)
-			var p_b: Vector2 = to_screen * (r._hex_centers[d_b.hex_id] as Vector2)
+			var p_a: Vector2 = to_screen * (r._hex_centers[best_ha] as Vector2)
+			var p_b: Vector2 = to_screen * (r._hex_centers[best_hb] as Vector2)
 			var rel: EvoTypes.Relation = state.relations[pk_var]
 			if rel.pact_turns > 0:
 				var w := clampf(2.5 + float(rel.pact_turns) * 0.7, 3.0, 6.5)
@@ -301,24 +327,26 @@ static func _draw_active_lens_overlay(r: Node2D) -> void:
 			if deme.infection_turns > 0:
 				var inf_col := Color(0.52, 0.80, 0.09, 0.88 * pulse)
 				ci.draw_polyline(ring_pts, inf_col, 4.5 * sqrt(inv_zoom))
-				_draw_lens_icon_pill(
-					ci,
-					font,
-					screen_center + Vector2(0.0, 32.0),
-					"icon_epidemic",
-					"%dt" % deme.infection_turns,
-					Color("#84cc16")
-				)
+				if bool(village["is_capital"]):
+					_draw_lens_icon_pill(
+						ci,
+						font,
+						screen_center + Vector2(0.0, 32.0),
+						"icon_epidemic",
+						"%dt" % deme.infection_turns,
+						Color("#84cc16")
+					)
 			elif deme.immunity_turns > 0:
 				ci.draw_polyline(ring_pts, Color("#06b6d4"), 3.2 * sqrt(inv_zoom))
-				_draw_lens_icon_pill(
-					ci,
-					font,
-					screen_center + Vector2(0.0, 32.0),
-					"icon_immune",
-					"%dt" % deme.immunity_turns,
-					Color("#06b6d4")
-				)
+				if bool(village["is_capital"]):
+					_draw_lens_icon_pill(
+						ci,
+						font,
+						screen_center + Vector2(0.0, 32.0),
+						"icon_immune",
+						"%dt" % deme.immunity_turns,
+						Color("#06b6d4")
+					)
 			elif deme.salubrity < 0.45:
 				ci.draw_polyline(ring_pts, Color("#f59e0b"), 3.0 * sqrt(inv_zoom))
 
@@ -354,6 +382,8 @@ static func _draw_active_lens_overlay(r: Node2D) -> void:
 
 	elif lens == "food":
 		for village in r._villages:
+			if not bool(village["is_capital"]):
+				continue
 			var deme: EvoTypes.Deme = village["deme"]
 			var hex_id: String = village["hex_id"]
 			if not r._hex_centers.has(hex_id):
@@ -400,7 +430,7 @@ static func _draw_deme_billboards(r: Node2D) -> void:
 
 		_draw_hex_strategy_ring(r, hex_id, screen_pos, strat_color, alpha)
 
-		var is_merged: bool = deme.merged_count > 0 or deme.walled_union_id != ""
+		var is_merged: bool = deme.merged_count > 0 or deme.is_multi_hex()
 		var plinth_r: float = (58.0 if is_merged else 52.0) * zoom_val
 		var plaza_screen: Vector2 = to_screen * (v_pos + Vector2(0.0, 8.0))
 		var modulate_col: Color = village["modulate"]
@@ -427,9 +457,10 @@ static func _draw_deme_billboards(r: Node2D) -> void:
 			"deme_id": deme.id,
 			"hex_id": hex_id
 		})
-		var crest_offset_y := -52.0 if is_macro else -68.0
-		var crest_pos: Vector2 = (to_screen * (v_pos + Vector2(0.0, crest_offset_y))) + Vector2(0.0, -12.0 if is_macro else -16.0)
-		draw_village_billboard(r, village, crest_pos)
+		if bool(village["is_capital"]):
+			var crest_offset_y := -52.0 if is_macro else -68.0
+			var crest_pos: Vector2 = (to_screen * (v_pos + Vector2(0.0, crest_offset_y))) + Vector2(0.0, -12.0 if is_macro else -16.0)
+			draw_village_billboard(r, village, crest_pos)
 
 
 static func _draw_rural_territory_overlays(r: Node2D, to_screen: Transform2D, screen_cull_rect: Rect2) -> void:

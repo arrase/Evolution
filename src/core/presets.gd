@@ -54,6 +54,7 @@ static func create_preset_world(
 
 	state.strategy_a_id = strategy_a_id if state.strategies_catalog.has(strategy_a_id) else "strat-cooperation"
 	state.strategy_b_id = strategy_b_id if state.strategies_catalog.has(strategy_b_id) else "strat-war"
+	state.next_deme_seq = 1
 	state.rng_seed = int(absi(("%s|%s|%s" % [preset_id, state.strategy_a_id, state.strategy_b_id]).hash())) + 1
 	state.rng.seed = state.rng_seed
 
@@ -116,11 +117,13 @@ static func _build_darwin_archipelago(state: EvoTypes.WorldState, is_en: bool) -
 	founder.id = "deme-darwin-founder"
 	founder.name = "Western Island Founders" if is_en else "Fundadores Insulares del Oeste"
 	founder.lineage_id = lin_a.id
+	founder.faction_slot = "A"
 	founder.hex_id = "-1,0"
+	founder.urban_hex_ids = [founder.hex_id]
 	founder.population = 95
 	founder.energy_reserves = 165.0
 	founder.last_energy_delta = 12.0
-	founder.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(founder.id)
+	founder.decision_model_tag = EvoDecisionModel.resolve_model_for_slot(founder.faction_slot)
 	EvoCatalog.apply_strategy_to_deme(state, founder, state.strategy_a_id)
 	state.demes[founder.id] = founder
 	(state.cells["-1,0"] as EvoTypes.HexCell).deme_ids.append(founder.id)
@@ -139,11 +142,13 @@ static func _build_darwin_archipelago(state: EvoTypes.WorldState, is_en: bool) -
 	rival.id = "deme-darwin-rival"
 	rival.name = "Eastern Island Rivals" if is_en else "Rivales Insulares del Este"
 	rival.lineage_id = lin_b.id
+	rival.faction_slot = "B"
 	rival.hex_id = "1,0"
+	rival.urban_hex_ids = [rival.hex_id]
 	rival.population = 95
 	rival.energy_reserves = 165.0
 	rival.last_energy_delta = 10.0
-	rival.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(rival.id)
+	rival.decision_model_tag = EvoDecisionModel.resolve_model_for_slot(rival.faction_slot)
 	EvoCatalog.apply_strategy_to_deme(state, rival, state.strategy_b_id)
 	state.demes[rival.id] = rival
 	(state.cells["1,0"] as EvoTypes.HexCell).deme_ids.append(rival.id)
@@ -172,6 +177,7 @@ static func _build_finite_island(state: EvoTypes.WorldState, is_en: bool) -> voi
 			"name": "Northern Quarry Clan" if is_en else "Clan de la Cantera Norte",
 			"lineage_id": "lineage-island-1",
 			"lineage_name": "Northern Quarry Lineage" if is_en else "Linaje de la Cantera Norte",
+			"faction_slot": "A",
 			"hex_id": "-1,0",
 			"strategy_id": state.strategy_a_id
 		},
@@ -180,6 +186,7 @@ static func _build_finite_island(state: EvoTypes.WorldState, is_en: bool) -> voi
 			"name": "Southern Timber Clan" if is_en else "Clan Maderero del Sur",
 			"lineage_id": "lineage-island-2",
 			"lineage_name": "Southern Timber Lineage" if is_en else "Linaje Maderero del Sur",
+			"faction_slot": "B",
 			"hex_id": "1,0",
 			"strategy_id": state.strategy_b_id
 		}
@@ -201,11 +208,13 @@ static func _build_finite_island(state: EvoTypes.WorldState, is_en: bool) -> voi
 		deme.id = str(cfg["id"])
 		deme.name = str(cfg["name"])
 		deme.lineage_id = lin.id
+		deme.faction_slot = str(cfg["faction_slot"])
 		deme.hex_id = hex_id
+		deme.urban_hex_ids = [deme.hex_id]
 		deme.population = 95
 		deme.energy_reserves = 140.0
 		deme.last_energy_delta = 8.0
-		deme.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(deme.id)
+		deme.decision_model_tag = EvoDecisionModel.resolve_model_for_slot(deme.faction_slot)
 		EvoCatalog.apply_strategy_to_deme(state, deme, str(cfg["strategy_id"]))
 		state.demes[deme.id] = deme
 		(state.cells[hex_id] as EvoTypes.HexCell).deme_ids.append(deme.id)
@@ -245,11 +254,13 @@ static func _build_rift_savanna(state: EvoTypes.WorldState, lang: String, is_en:
 	west_deme.id = "deme-rift-west"
 	west_deme.name = "Western Forest Hominids" if is_en else "Homínidos del Bosque Occidental"
 	west_deme.lineage_id = lin_west.id
+	west_deme.faction_slot = "A"
 	west_deme.hex_id = "-2,1"
+	west_deme.urban_hex_ids = [west_deme.hex_id]
 	west_deme.population = 140
 	west_deme.energy_reserves = 180.0
 	west_deme.last_energy_delta = 12.0
-	west_deme.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(west_deme.id)
+	west_deme.decision_model_tag = EvoDecisionModel.resolve_model_for_slot(west_deme.faction_slot)
 	EvoCatalog.apply_strategy_to_deme(state, west_deme, state.strategy_a_id)
 	state.demes[west_deme.id] = west_deme
 	(state.cells["-2,1"] as EvoTypes.HexCell).deme_ids.append(west_deme.id)
@@ -268,11 +279,13 @@ static func _build_rift_savanna(state: EvoTypes.WorldState, lang: String, is_en:
 	east_deme.id = "deme-rift-east"
 	east_deme.name = "Eastern Savanna Hominids" if is_en else "Homínidos de la Sabana Oriental"
 	east_deme.lineage_id = lin_east.id
+	east_deme.faction_slot = "B"
 	east_deme.hex_id = "2,-1"
+	east_deme.urban_hex_ids = [east_deme.hex_id]
 	east_deme.population = 140
 	east_deme.energy_reserves = 180.0
 	east_deme.last_energy_delta = 8.0
-	east_deme.decision_model_tag = EvoDecisionModel.resolve_deme_decision_model_tag(east_deme.id)
+	east_deme.decision_model_tag = EvoDecisionModel.resolve_model_for_slot(east_deme.faction_slot)
 	EvoCatalog.apply_strategy_to_deme(state, east_deme, state.strategy_b_id)
 	state.demes[east_deme.id] = east_deme
 	(state.cells["2,-1"] as EvoTypes.HexCell).deme_ids.append(east_deme.id)

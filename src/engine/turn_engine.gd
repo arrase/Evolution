@@ -11,6 +11,7 @@ static func advance_generation(state: EvoTypes.WorldState, lang: String = "es") 
 	var prev_chronicle_count := state.chronicle.size()
 
 	EvoDecisionModel.apply_completed_live_results(state, lang, -1)
+	EvoDecisionModel.finalize_turn_decisions(state)
 	EvoEnvPhase.run_environmental_phase(state, lang)
 	EvoBiophysPhase.run_biophysical_phase(state, lang)
 	EvoMilestonePhase.run_milestone_phase(state, lang)
@@ -73,6 +74,7 @@ static func _apply_biome_climate_defaults(cell: EvoTypes.HexCell, biome_id: Stri
 		cell.land_use = "wild"
 		cell.owner_deme_id = ""
 		cell.has_ruins = false
+		cell.ruin_turns = 0
 	elif reset_to_healthy:
 		cell.carrying_capacity = snappedf(clampf(cell.carrying_capacity_max * 0.90, 20.0, cell.carrying_capacity_max), 0.01)
 		cell.current_resources = snappedf(clampf(cell.carrying_capacity * 0.85, 10.0, cell.carrying_capacity), 0.01)
@@ -113,6 +115,7 @@ static func apply_set_biome(
 			cell.land_use = "wild"
 			cell.owner_deme_id = ""
 			cell.has_ruins = false
+			cell.ruin_turns = 0
 		elif cell.owner_deme_id != "" and cell.land_use in ["crops", "pasture"]:
 			cell.land_use = "pasture" if cell.biome in ["arid_steppe", "tundra"] else "crops"
 
@@ -174,6 +177,7 @@ static func apply_adjust_altitude(
 			cell.land_use = "wild"
 			cell.owner_deme_id = ""
 			cell.has_ruins = false
+			cell.ruin_turns = 0
 		elif cell.owner_deme_id != "" and cell.land_use in ["crops", "pasture"]:
 			cell.land_use = "pasture" if cell.biome in ["arid_steppe", "tundra"] else "crops"
 

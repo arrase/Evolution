@@ -45,6 +45,12 @@ const EVENT_TYPES: Array[String] = [
 ]
 
 const STATS_HISTORY_LIMIT: int = 200
+const MAX_URBAN_HEXES: int = 3
+const DEFENSE_POSTURES: Array[String] = [
+	"open_harvest",
+	"patrol_fields",
+	"mobilized_garrison"
+]
 
 const BIOME_CLIMATE_DEFAULTS: Dictionary = {
 	"tropical_forest": {"temperature": 0.45, "humidity": 0.85, "min_alt": 0.28, "max_alt": 0.65, "regen": 0.28, "k_max": 600.0},
@@ -302,6 +308,7 @@ class HexCell extends RefCounted:
 	var land_use: String = "wild"
 	var owner_deme_id: String = ""
 	var has_ruins: bool = false
+	var ruin_turns: int = 0
 
 	func to_dict() -> Dictionary:
 		return {
@@ -320,7 +327,8 @@ class HexCell extends RefCounted:
 			"demeIds": deme_ids.duplicate(),
 			"landUse": land_use,
 			"ownerDemeId": owner_deme_id,
-			"hasRuins": has_ruins
+			"hasRuins": has_ruins,
+			"ruinTurns": ruin_turns
 		}
 
 	static func from_dict(d: Dictionary) -> HexCell:
@@ -340,12 +348,10 @@ class HexCell extends RefCounted:
 		c.deme_ids = []
 		for item in d["demeIds"]:
 			c.deme_ids.append(str(item))
-		if d.has("landUse"):
-			c.land_use = str(d["landUse"])
-		if d.has("ownerDemeId"):
-			c.owner_deme_id = str(d["ownerDemeId"])
-		if d.has("hasRuins"):
-			c.has_ruins = bool(d["hasRuins"])
+		c.land_use = str(d["landUse"])
+		c.owner_deme_id = str(d["ownerDemeId"])
+		c.has_ruins = bool(d["hasRuins"])
+		c.ruin_turns = int(d["ruinTurns"])
 		return c
 
 
@@ -354,8 +360,10 @@ class Deme extends RefCounted:
 	var name: String = ""
 	var lineage_id: String = ""
 	var strategy_id: String = ""
+	var faction_slot: String = "A"
 	var color: String = "#E07A5F"
 	var hex_id: String = "0,0"
+	var urban_hex_ids: Array[String] = []
 	var population: int = 100
 	var energy_reserves: float = 100.0
 	var last_energy_delta: float = 0.0
@@ -369,6 +377,10 @@ class Deme extends RefCounted:
 	var chosen_action: Dictionary = {"key": "forage", "type": "forage", "target": ""}
 	var action_probabilities: Dictionary = {} # action key -> probability from the decision model
 	var action_forecasts: Dictionary = {} # action key -> forecast text shown to the decision model
+	var defense_posture: String = "open_harvest"
+	var posture_probabilities: Dictionary = {}
+	var posture_forecasts: Dictionary = {}
+	var pending_raw_eval: Dictionary = {}
 	var last_outcome: String = ""
 	var memory: Array[String] = []
 	var reputation: float = 0.0 # [-1, 1], visible to every neighbor
@@ -376,12 +388,13 @@ class Deme extends RefCounted:
 	var merged_count: int = 0
 	var secondary_color: String = ""
 	var salubrity: float = 1.0
-	var walled_union_id: String = ""
 	var infection_turns: int = 0
 	var immunity_turns: int = 0
 	var last_food_intake: float = 0.0
 	var last_food_need: float = 0.0
 	var last_population_delta: int = 0
+	var _cached_vector: BiophysicalVector = null
+	var _cached_vector_hash: int = 0
 
 	func duplicate_deme() -> Deme:
 		var d := Deme.new()
@@ -389,8 +402,10 @@ class Deme extends RefCounted:
 		d.name = name
 		d.lineage_id = lineage_id
 		d.strategy_id = strategy_id
+		d.faction_slot = faction_slot
 		d.color = color
 		d.hex_id = hex_id
+		d.urban_hex_ids = urban_hex_ids.duplicate()
 		d.population = population
 		d.energy_reserves = energy_reserves
 		d.last_energy_delta = last_energy_delta
@@ -404,6 +419,10 @@ class Deme extends RefCounted:
 		d.chosen_action = chosen_action.duplicate()
 		d.action_probabilities = action_probabilities.duplicate()
 		d.action_forecasts = action_forecasts.duplicate()
+		d.defense_posture = defense_posture
+		d.posture_probabilities = posture_probabilities.duplicate()
+		d.posture_forecasts = posture_forecasts.duplicate()
+		d.pending_raw_eval = pending_raw_eval.duplicate(true)
 		d.last_outcome = last_outcome
 		d.memory = memory.duplicate()
 		d.reputation = reputation
@@ -411,13 +430,15 @@ class Deme extends RefCounted:
 		d.merged_count = merged_count
 		d.secondary_color = secondary_color
 		d.salubrity = salubrity
-		d.walled_union_id = walled_union_id
 		d.infection_turns = infection_turns
 		d.immunity_turns = immunity_turns
 		d.last_food_intake = last_food_intake
 		d.last_food_need = last_food_need
 		d.last_population_delta = last_population_delta
 		return d
+
+	func is_multi_hex() -> bool:
+		return urban_hex_ids.size() > 1
 
 	func get_vital_status() -> String:
 		if population <= 0:
@@ -431,11 +452,11 @@ class Deme extends RefCounted:
 		return "stable"
 
 	func get_village_tier() -> int:
-		if population >= 380 or (population >= 280 and (defense_tier >= 2 or merged_count >= 1 or walled_union_id != "")):
+		if population >= 380 or (population >= 280 and (defense_tier >= 2 or merged_count >= 1 or urban_hex_ids.size() > 1)):
 			return 4
 		if population >= 240 or (population >= 170 and (defense_tier >= 1 or merged_count >= 1)):
 			return 3
-		if population >= 120 or defense_tier == 1:
+		if population >= 120 or defense_tier >= 1:
 			return 2
 		return 1
 
@@ -455,8 +476,10 @@ class Deme extends RefCounted:
 			"name": name,
 			"lineageId": lineage_id,
 			"strategy_id": strategy_id,
+			"factionSlot": faction_slot,
 			"color": color,
 			"hexId": hex_id,
+			"urbanHexIds": urban_hex_ids.duplicate(),
 			"population": population,
 			"energyReserves": energy_reserves,
 			"lastEnergyDelta": last_energy_delta,
@@ -470,6 +493,9 @@ class Deme extends RefCounted:
 			"chosenAction": chosen_action.duplicate(),
 			"actionProbabilities": action_probabilities.duplicate(),
 			"actionForecasts": action_forecasts.duplicate(),
+			"defensePosture": defense_posture,
+			"postureProbabilities": posture_probabilities.duplicate(),
+			"postureForecasts": posture_forecasts.duplicate(),
 			"lastOutcome": last_outcome,
 			"memory": memory.duplicate(),
 			"reputation": reputation,
@@ -477,7 +503,6 @@ class Deme extends RefCounted:
 			"mergedCount": merged_count,
 			"secondaryColor": secondary_color,
 			"salubrity": salubrity,
-			"walledUnionId": walled_union_id,
 			"infectionTurns": infection_turns,
 			"immunityTurns": immunity_turns,
 			"lastFoodIntake": last_food_intake,
@@ -491,8 +516,12 @@ class Deme extends RefCounted:
 		d.name = str(dict_data["name"])
 		d.lineage_id = str(dict_data["lineageId"])
 		d.strategy_id = str(dict_data["strategy_id"])
+		d.faction_slot = str(dict_data["factionSlot"])
 		d.color = str(dict_data["color"])
 		d.hex_id = str(dict_data["hexId"])
+		d.urban_hex_ids = []
+		for item in dict_data["urbanHexIds"]:
+			d.urban_hex_ids.append(str(item))
 		d.population = int(dict_data["population"])
 		d.energy_reserves = float(dict_data["energyReserves"])
 		d.last_energy_delta = float(dict_data["lastEnergyDelta"])
@@ -513,6 +542,9 @@ class Deme extends RefCounted:
 		d.chosen_action = (dict_data["chosenAction"] as Dictionary).duplicate()
 		d.action_probabilities = (dict_data["actionProbabilities"] as Dictionary).duplicate()
 		d.action_forecasts = (dict_data["actionForecasts"] as Dictionary).duplicate()
+		d.defense_posture = str(dict_data["defensePosture"])
+		d.posture_probabilities = (dict_data["postureProbabilities"] as Dictionary).duplicate()
+		d.posture_forecasts = (dict_data["postureForecasts"] as Dictionary).duplicate()
 		d.last_outcome = str(dict_data["lastOutcome"])
 		d.memory = []
 		for item in dict_data["memory"]:
@@ -522,7 +554,6 @@ class Deme extends RefCounted:
 		d.merged_count = int(dict_data["mergedCount"])
 		d.secondary_color = str(dict_data["secondaryColor"])
 		d.salubrity = float(dict_data["salubrity"])
-		d.walled_union_id = str(dict_data["walledUnionId"])
 		d.infection_turns = int(dict_data["infectionTurns"])
 		d.immunity_turns = int(dict_data["immunityTurns"])
 		d.last_food_intake = float(dict_data["lastFoodIntake"])
@@ -677,6 +708,7 @@ class WorldState extends RefCounted:
 	var chronicle: Array[ChronicleEntry] = []
 	var active_flows: Array[HexEdgeFlow] = []
 	var relations: Dictionary = {} # pair_key ("idA__idB" sorted) -> Relation
+	var next_deme_seq: int = 1
 	var rng_seed: int = 1
 	var rng := RandomNumberGenerator.new()
 	var recent_extinction_hexes: Array[String] = [] # hex_ids that had real extinction this turn
@@ -741,6 +773,7 @@ class WorldState extends RefCounted:
 			"chronicle": chron_arr,
 			"activeFlows": flows_arr,
 			"relations": relations_dict,
+			"nextDemeSeq": next_deme_seq,
 			"rngSeed": rng_seed,
 			"rngState": rng.state,
 			"recentExtinctionHexes": recent_extinction_hexes.duplicate(),
@@ -778,11 +811,17 @@ class WorldState extends RefCounted:
 		var invalid_deme_ids: Array[String] = []
 		for did in s.demes.keys():
 			var dm: Deme = s.demes[did]
-			if not s.cells.has(dm.hex_id):
+			var valid_urban: Array[String] = []
+			for hid in dm.urban_hex_ids:
+				if s.cells.has(hid) and not valid_urban.has(hid):
+					valid_urban.append(hid)
+			dm.urban_hex_ids = valid_urban
+			if dm.urban_hex_ids.is_empty():
 				invalid_deme_ids.append(did)
 				continue
-			var host_cell: HexCell = s.cells[dm.hex_id]
-			host_cell.deme_ids.append(dm.id)
+			dm.hex_id = dm.urban_hex_ids[0]
+			for hid in dm.urban_hex_ids:
+				(s.cells[hid] as HexCell).deme_ids.append(dm.id)
 		for did in invalid_deme_ids:
 			s.demes.erase(did)
 		for k in d["traitsCatalog"].keys():
@@ -802,6 +841,7 @@ class WorldState extends RefCounted:
 		var raw_relations: Dictionary = d["relations"]
 		for k in raw_relations.keys():
 			s.relations[str(k)] = Relation.from_dict(raw_relations[k])
+		s.next_deme_seq = int(d["nextDemeSeq"])
 		s.rng_seed = int(d["rngSeed"])
 		s.rng.seed = s.rng_seed
 		s.rng.state = int(d["rngState"])
@@ -858,7 +898,26 @@ static func push_event(
 	})
 
 
+static func urban_perimeter_hex_ids(deme: Deme, state: WorldState) -> Array[String]:
+	if deme.urban_hex_ids.size() == 1:
+		var single_cell: HexCell = state.cells[deme.urban_hex_ids[0]]
+		return HexMath.get_neighbor_ids(single_cell.q, single_cell.r, state.cells)
+	var perimeter: Array[String] = []
+	var seen: Dictionary = {}
+	for hid in deme.urban_hex_ids:
+		seen[hid] = true
+	for hid in deme.urban_hex_ids:
+		var ucell: HexCell = state.cells[hid]
+		for nid in HexMath.get_neighbor_ids(ucell.q, ucell.r, state.cells):
+			if not seen.has(nid):
+				seen[nid] = true
+				perimeter.append(nid)
+	return perimeter
+
+
 static func _is_side_b_deme(state: WorldState, d: Deme) -> bool:
+	if d.faction_slot == "B":
+		return true
 	if state.strategy_a_id != state.strategy_b_id:
 		if d.strategy_id == state.strategy_b_id:
 			return true
@@ -898,13 +957,13 @@ static func compute_world_stats(state: WorldState) -> Dictionary:
 	}
 	var sal_sum_a: float = 0.0
 	var sal_sum_b: float = 0.0
-	var union_ids: Dictionary = {}
+	var unions_count: int = 0
 
 	for d: Deme in state.demes.values():
 		if d.population <= 0:
 			continue
-		if d.walled_union_id != "":
-			union_ids[d.walled_union_id] = true
+		if d.urban_hex_ids.size() > 1:
+			unions_count += 1
 		var is_b := _is_side_b_deme(state, d)
 		var target: Dictionary = side_b if is_b else side_a
 		target["villages"] = int(target["villages"]) + 1
@@ -957,7 +1016,7 @@ static func compute_world_stats(state: WorldState) -> Dictionary:
 		"b": side_b,
 		"pacts": pacts_count,
 		"vendettas": vendettas_count,
-		"unions": union_ids.size(),
+		"unions": unions_count,
 		"wars": wars_count
 	}
 
@@ -994,11 +1053,14 @@ static func get_relation(state: WorldState, id_a: String, id_b: String) -> Relat
 
 
 static func pair_partner(pair_key: String, deme_id: String) -> String:
-	var parts := pair_key.split("__")
-	if parts[0] == deme_id:
-		return parts[1]
-	if parts[1] == deme_id:
-		return parts[0]
+	var n := deme_id.length()
+	var total := pair_key.length()
+	if total <= n + 2:
+		return ""
+	if pair_key.begins_with(deme_id) and pair_key.substr(n, 2) == "__":
+		return pair_key.substr(n + 2)
+	if pair_key.ends_with(deme_id) and pair_key.substr(total - n - 2, 2) == "__":
+		return pair_key.substr(0, total - n - 2)
 	return ""
 
 

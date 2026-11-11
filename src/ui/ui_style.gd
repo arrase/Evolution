@@ -567,14 +567,23 @@ static func get_vital_status_heart(status: String) -> String:
 	return "💚"
 
 
-static func get_village_tier_label(population: int, lang: String = "es", merged_count: int = 0, defense_tier: int = 0, walled_union_id: String = "") -> String:
-	if population >= 380 or (population >= 280 and (defense_tier >= 2 or merged_count >= 1 or walled_union_id != "")):
+static func get_village_tier_label(population: int, lang: String = "es", merged_count: int = 0, defense_tier: int = 0, is_multi_hex: bool = false) -> String:
+	if population >= 380 or (population >= 280 and (defense_tier >= 2 or merged_count >= 1 or is_multi_hex)):
 		return tr_text(lang, "IV · Metrópolis", "IV · Metropolis")
 	if population >= 240 or (population >= 170 and (defense_tier >= 1 or merged_count >= 1)):
 		return tr_text(lang, "III · Villa", "III · Town")
-	if population >= 120 or defense_tier == 1:
+	if population >= 120 or defense_tier >= 1:
 		return tr_text(lang, "II · Aldea", "II · Village")
 	return tr_text(lang, "I · Campamento", "I · Camp")
+
+
+static func get_defense_posture_label(posture: String, lang: String = "es") -> String:
+	match posture:
+		"patrol_fields":
+			return tr_text(lang, "🛡️ Patrullando cultivos", "🛡️ Patrolling fields")
+		"mobilized_garrison":
+			return tr_text(lang, "⚔️ Guarnición movilizada", "⚔️ Mobilized garrison")
+	return tr_text(lang, "🌾 Cosecha abierta", "🌾 Open harvest")
 
 
 static func evaluate_thermodynamics(vec: EvoTypes.BiophysicalVector, free_sandbox: bool = false) -> Dictionary:

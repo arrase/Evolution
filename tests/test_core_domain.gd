@@ -50,6 +50,33 @@ static func _test_catalog_and_presets(r) -> void:
 	r._assert(island.cells.size() == 169, "Finite Island radius 7 has 169 cells")
 	r._assert(island.demes.size() == 2 and island.demes.has("deme-island-1") and island.demes.has("deme-island-2"), "Finite Island starts with 2 rival clans (1v1)")
 
+	for preset_pair in [
+		[rift, "deme-rift-west", "deme-rift-east"],
+		[darwin, "deme-darwin-founder", "deme-darwin-rival"],
+		[island, "deme-island-1", "deme-island-2"]
+	]:
+		var pw: EvoTypes.WorldState = preset_pair[0]
+		var da: EvoTypes.Deme = pw.demes[preset_pair[1]]
+		var db: EvoTypes.Deme = pw.demes[preset_pair[2]]
+		r._assert(pw.next_deme_seq == 1, "Preset %s initializes next_deme_seq == 1" % pw.preset_id)
+		r._assert(da.faction_slot == "A" and db.faction_slot == "B", "Preset %s initializes founder faction_slot A and B" % pw.preset_id)
+		r._assert(da.urban_hex_ids == [da.hex_id] and db.urban_hex_ids == [db.hex_id], "Preset %s initializes urban_hex_ids == [hex_id]" % pw.preset_id)
+		r._assert(not da.is_multi_hex() and da.defense_posture == "open_harvest", "Preset %s initializes single-hex open_harvest posture" % pw.preset_id)
+
+	var perim_single := EvoTypes.urban_perimeter_hex_ids(island.demes["deme-island-1"], island)
+	var test_city := EvoTypes.Deme.new()
+	test_city.id = "deme-perim-check"
+	test_city.hex_id = "0,0"
+	test_city.urban_hex_ids = ["0,0"]
+	r._assert(EvoTypes.urban_perimeter_hex_ids(test_city, island).size() == 6, "urban_perimeter_hex_ids returns 6 exterior neighbors for interior 1-hex city")
+	test_city.urban_hex_ids = ["0,0", "1,0"]
+	var perim_two := EvoTypes.urban_perimeter_hex_ids(test_city, island)
+	r._assert(perim_two.size() == 8 and not perim_two.has("0,0") and not perim_two.has("1,0"), "urban_perimeter_hex_ids returns 8 exterior neighbors for 2-hex city and excludes own districts")
+	r._assert(test_city.is_multi_hex() and perim_single.size() > 0, "Deme.is_multi_hex() reflects urban_hex_ids.size() > 1")
+	test_city.population = 320
+	test_city.defense_tier = 2
+	r._assert(test_city.get_village_tier() == 4, "Multi-hex Tier II+ city with >= 280 pop reaches Tier IV Metropolis")
+
 	var west: EvoTypes.Deme = rift.demes["deme-rift-west"]
 	r._assert(EvoCatalog.deme_has_cultural_capacity(west, rift.traits_catalog), "West deme has cultural capacity via bio-social-instinct")
 	var injected := EvoCatalog.inject_trait_into_deme(rift, "deme-rift-west", "bio-r-strategy")
@@ -94,15 +121,9 @@ static func _test_strategy_duel_and_forge(r) -> void:
 	r._assert(lin_e.strategy_id == "strat-innovation" and lin_e.color == strat_innov.color and lin_e.biological_trait_ids == strat_innov.biological_trait_ids, "Slot B lineage node synchronized with strat-innovation")
 
 	# 3. Strategy inheritance across colonist budding migration and allopatric speciation
-	west.population = 140
-	west.energy_reserves = 200.0
-	var w_coords := HexMath.parse_id(west.hex_id)
-	var settle_hex := ""
-	for nid in HexMath.get_neighbor_ids(w_coords.x, w_coords.y, duel_world.cells):
-		var nc: EvoTypes.HexCell = duel_world.cells[nid]
-		if nc.deme_ids.is_empty() and EvoActionMenu.is_passable(nc):
-			settle_hex = nid
-			break
+	west.population = 175
+	west.energy_reserves = 220.0
+	var settle_hex := EvoActionMenu.settle_targets(west, duel_world)[0].id
 	west.chosen_action = EvoActionMenu.option("settle", settle_hex)
 	east.chosen_action = EvoActionMenu.option("forage")
 	EvoBiophysPhase.run_biophysical_phase(duel_world, "en")
@@ -111,13 +132,15 @@ static func _test_strategy_duel_and_forge(r) -> void:
 		if did != "deme-rift-west" and did != "deme-rift-east":
 			budded_daughter = duel_world.demes[did]
 			break
-	r._assert(budded_daughter != null and budded_daughter.strategy_id == "strat-trade", "Colonist budding migration preserves parent strategy_id")
+	r._assert(budded_daughter != null and budded_daughter.strategy_id == "strat-trade" and budded_daughter.faction_slot == "A", "Colonist budding migration preserves parent strategy_id and faction_slot")
+	r._assert(duel_world.next_deme_seq == 2 and budded_daughter != null and budded_daughter.urban_hex_ids == [budded_daughter.hex_id], "Colonist budding increments next_deme_seq and initializes daughter urban_hex_ids")
 
 	var spec_world := EvoCatalog.create_preset_world("preset-darwin-archipelago", "en", "strat-expansion", "strat-war")
 	spec_world.generation = 12
 	var darwin_founder: EvoTypes.Deme = spec_world.demes["deme-darwin-founder"]
 	(spec_world.cells[darwin_founder.hex_id] as EvoTypes.HexCell).deme_ids.erase(darwin_founder.id)
 	darwin_founder.hex_id = "0,-2"
+	darwin_founder.urban_hex_ids = ["0,-2"]
 	(spec_world.cells["0,-2"] as EvoTypes.HexCell).deme_ids.append(darwin_founder.id)
 	darwin_founder.isolation_turns = 10
 	var spec_entries := EvoMilestonePhase.run_milestone_phase(spec_world, "en")
@@ -200,6 +223,7 @@ static func _test_strategy_duel_and_forge(r) -> void:
 	r._assert(main.world_state.generation == 0 and main.world_state.strategy_a_id == "strat-custom-duelist" and main.world_state.strategy_b_id == "strat-trade", "set_matchup_strategies resets to Generation 0 with selected strategies")
 	r._assert((main.world_state.demes["deme-rift-west"] as EvoTypes.Deme).strategy_id == "strat-custom-duelist", "Founder deme A updated with custom strategy")
 
+	EvoOllamaClient.clear_cache()
 	main.step_generation()
 	r._assert(main.world_state.generation == 1, "Generation advances before reset_matchup")
 	main.reset_matchup()
@@ -232,13 +256,36 @@ static func _test_serialization(r) -> void:
 		"age": 2
 	})
 	state.previous_populations["deme-rift-west"] = 177
+	state.next_deme_seq = 9
+	var w_deme: EvoTypes.Deme = state.demes["deme-rift-west"]
+	var adj_hex := ""
+	for nid in EvoTypes.urban_perimeter_hex_ids(w_deme, state):
+		var c_adj: EvoTypes.HexCell = state.cells[nid]
+		if c_adj.deme_ids.is_empty() and EvoActionMenu.is_passable(c_adj):
+			adj_hex = nid
+			break
+	w_deme.urban_hex_ids.append(adj_hex)
+	(state.cells[adj_hex] as EvoTypes.HexCell).deme_ids.assign([w_deme.id])
+	w_deme.defense_posture = "patrol_fields"
+	w_deme.posture_probabilities = {"open_harvest": 0.15, "patrol_fields": 0.65, "mobilized_garrison": 0.20}
+	w_deme.posture_forecasts = {"open_harvest": "100% harvest", "patrol_fields": "90% harvest", "mobilized_garrison": "78% harvest"}
+	var ruin_cell: EvoTypes.HexCell = state.cells["0,0"]
+	ruin_cell.ruin_turns = 2
+	ruin_cell.has_ruins = true
 	var json_str := JSON.stringify(state.to_dict())
 	var parsed: Variant = JSON.parse_string(json_str)
 	r._assert(typeof(parsed) == TYPE_DICTIONARY, "Serialized state parses back as Dictionary")
 	var restored := EvoTypes.WorldState.from_dict(parsed as Dictionary)
 	r._assert(restored.generation == state.generation, "Restored generation matches")
+	r._assert(restored.next_deme_seq == 9, "Restored next_deme_seq matches")
 	r._assert(restored.cells.size() == state.cells.size(), "Restored cells count matches")
 	r._assert(restored.demes.size() == state.demes.size(), "Restored demes count matches")
 	r._assert(restored.recent_extinction_hexes == state.recent_extinction_hexes, "Restored recent_extinction_hexes matches")
 	r._assert(restored.disused_connections.size() == 1 and int(restored.disused_connections[0]["age"]) == 2, "Restored disused_connections matches")
 	r._assert(int(restored.previous_populations.get("deme-rift-west", 0)) == 177, "Restored previous_populations matches")
+	var rw_deme: EvoTypes.Deme = restored.demes["deme-rift-west"]
+	r._assert(rw_deme.faction_slot == "A" and rw_deme.is_multi_hex() and rw_deme.urban_hex_ids == [w_deme.hex_id, adj_hex], "Restored multi-hex Deme preserves faction_slot and urban_hex_ids")
+	r._assert((restored.cells[w_deme.hex_id] as EvoTypes.HexCell).deme_ids == ["deme-rift-west"] and (restored.cells[adj_hex] as EvoTypes.HexCell).deme_ids == ["deme-rift-west"], "WorldState.from_dict syncs cell.deme_ids across all multi-hex city districts")
+	r._assert(rw_deme.defense_posture == "patrol_fields" and is_equal_approx(float(rw_deme.posture_probabilities["patrol_fields"]), 0.65) and rw_deme.posture_forecasts.size() == 3, "Restored Deme preserves defense_posture, posture_probabilities and posture_forecasts")
+	var r_ruin_cell: EvoTypes.HexCell = restored.cells["0,0"]
+	r._assert(r_ruin_cell.ruin_turns == 2 and r_ruin_cell.has_ruins, "Restored HexCell preserves ruin_turns > 0 and has_ruins")

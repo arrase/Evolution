@@ -28,6 +28,12 @@ func _wait_and_save(main: EvoMainController, filename: String) -> void:
 		printerr("[CAPTURE FAIL] %s (err=%d)" % [full_path, err])
 
 
+func _step_sync(main: EvoMainController, count: int) -> void:
+	for _g in range(count):
+		EvoOllamaClient.clear_cache()
+		main.step_generation()
+
+
 func _run_captures() -> void:
 	DirAccess.make_dir_recursive_absolute(OUTPUT_DIR)
 
@@ -45,8 +51,7 @@ func _run_captures() -> void:
 
 	# 1. screenshot_rift_savanna.png (6 generations, village selected)
 	main.load_preset("preset-rift-savanna")
-	for _g in range(6):
-		main.step_generation()
+	_step_sync(main, 6)
 	main.hud.refresh(main.world_state)
 	if main.world_state.demes.has("deme-rift-east"):
 		main.hud.select_deme("deme-rift-east")
@@ -59,15 +64,13 @@ func _run_captures() -> void:
 
 	# 2. screenshot_darwin_archipelago.png (5 generations)
 	main.load_preset("preset-darwin-archipelago")
-	for _g in range(5):
-		main.step_generation()
+	_step_sync(main, 5)
 	main.hud.refresh(main.world_state)
 	await _wait_and_save(main, "screenshot_darwin_archipelago.png")
 
 	# 3. screenshot_finite_island.png (4 generations, map legend open + ecological lens)
 	main.load_preset("preset-finite-island")
-	for _g in range(4):
-		main.step_generation()
+	_step_sync(main, 4)
 	main.hud.refresh(main.world_state)
 	main.hud._on_lens_pressed("health")
 	if not main.hud._legend_panel.visible:
@@ -80,8 +83,7 @@ func _run_captures() -> void:
 		main.hud._on_legend_toggle_pressed()
 
 	# Advance Finite Island a few more turns and trigger a Baldwin & Speciation event so Chronicle and Lineage Tree are rich
-	for _g in range(4):
-		main.step_generation()
+	_step_sync(main, 4)
 	if not main.world_state.demes.is_empty():
 		var first_d: EvoTypes.Deme = main.world_state.demes.values()[0]
 		first_d.baldwin_counters["fortify"] = 8
@@ -96,13 +98,13 @@ func _run_captures() -> void:
 
 	# 5. screenshot_tree_modal.png (ensure hierarchical child lineage node exists for visual clarity)
 	main.load_preset("preset-darwin-archipelago")
-	for _g in range(4):
-		main.step_generation()
+	_step_sync(main, 4)
 	if main.world_state.demes.has("deme-darwin-founder"):
 		var f_deme: EvoTypes.Deme = main.world_state.demes["deme-darwin-founder"]
 		if main.world_state.cells.has(f_deme.hex_id):
 			(main.world_state.cells[f_deme.hex_id] as EvoTypes.HexCell).deme_ids.erase(f_deme.id)
 		f_deme.hex_id = "0,-2"
+		f_deme.urban_hex_ids = ["0,-2"]
 		(main.world_state.cells["0,-2"] as EvoTypes.HexCell).deme_ids.append(f_deme.id)
 		f_deme.isolation_turns = 10
 		EvoMilestonePhase.run_milestone_phase(main.world_state, main.lang)
@@ -117,8 +119,7 @@ func _run_captures() -> void:
 
 	# 7. screenshot_late_simulation.png (24 generations in Rift Savanna with active pacts, conflicts, and road networks)
 	main.load_preset("preset-rift-savanna")
-	for _g in range(24):
-		main.step_generation()
+	_step_sync(main, 24)
 	main.hud._milestone_banner.visible = false
 	main.hud.refresh(main.world_state)
 	var best_did: String = ""

@@ -6,7 +6,8 @@ const DEFAULT_OLLAMA_PORT: int = 11434
 const STATUS_TIMEOUT_MS: int = 1500
 const EVAL_TIMEOUT_MS: int = 60000
 const PULL_STALL_TIMEOUT_MS: int = 60000
-const MAX_CONCURRENT_JOBS: int = 8
+const MAX_CONCURRENT_JOBS: int = 4
+const MAX_CONCURRENT_PER_MODEL: int = 2
 
 static var _mutex := Mutex.new()
 static var _cached_ollama_status: Dictionary = {}
@@ -64,6 +65,7 @@ static func _default_ollama_status() -> Dictionary:
 static func clear_cache() -> void:
 	_mutex.lock()
 	_cache_epoch += 1
+	_completed_revision = 0
 	_results_by_deme.clear()
 	_pending_jobs.clear()
 	_newly_completed.clear()
@@ -404,7 +406,7 @@ static func _can_enqueue_locked() -> bool:
 	)
 
 
-## Each job: {deme_id, preferred_tag, briefing, instructions, criteria (action key -> forecast)}.
+## Each job: {deme_id, preferred_tag, briefing, posture_instructions, posture_criteria, instructions, criteria}.
 static func enqueue_jobs(jobs: Array[Dictionary]) -> void:
 	_mutex.lock()
 	var can_enqueue := _can_enqueue_locked()
@@ -469,14 +471,23 @@ static func _run_ollama_worker() -> void:
 			_mutex.unlock()
 			return
 		var status := _cached_ollama_status.duplicate(true)
-		var ctx_len := EvoUserSettings.context_length
 		var batch_epoch := _cache_epoch
 		_active_worker_epoch = batch_epoch
-		var batch: Array[Dictionary] = _pending_jobs.slice(0, MAX_CONCURRENT_JOBS)
-		_pending_jobs = _pending_jobs.slice(MAX_CONCURRENT_JOBS)
+		var batch: Array[Dictionary] = []
+		var remaining: Array[Dictionary] = []
+		var model_counts: Dictionary = {}
+		for item in _pending_jobs:
+			var resolved_tag := _resolve_ollama_model_for_tag(str(item["preferred_tag"]), status)
+			var count: int = int(model_counts[resolved_tag]) if model_counts.has(resolved_tag) else 0
+			if batch.size() < MAX_CONCURRENT_JOBS and count < MAX_CONCURRENT_PER_MODEL:
+				batch.append(item)
+				model_counts[resolved_tag] = count + 1
+			else:
+				remaining.append(item)
+		_pending_jobs = remaining
 		_mutex.unlock()
 
-		var batch_results := _evaluate_job_batch_with_ollama(batch, status, ctx_len)
+		var batch_results := _evaluate_job_batch_with_ollama(batch, status)
 		_mutex.lock()
 		if _cache_epoch == batch_epoch:
 			for deme_id in batch_results.keys():
@@ -491,13 +502,17 @@ static func _run_ollama_worker() -> void:
 	_mutex.unlock()
 
 
-static func build_payload(job: Dictionary, model_tag: String, ctx_len: int) -> Dictionary:
+static func build_payload(job: Dictionary, model_tag: String) -> Dictionary:
 	return {
 		"model": model_tag,
 		"keep_alive": "30m",
-		"options": {"num_ctx": ctx_len},
-		"state": {"briefing": str(job["briefing"])},
+		"state": str(job["briefing"]),
 		"questions": {
+			"posture": {
+				"type": "choice",
+				"instructions": str(job["posture_instructions"]),
+				"criteria": job["posture_criteria"]
+			},
 			"decision": {
 				"type": "choice",
 				"instructions": str(job["instructions"]),
@@ -511,7 +526,7 @@ static func normalize_probabilities(raw: Dictionary, keys: Array) -> Dictionary:
 	var total := 0.0
 	var clean: Dictionary = {}
 	for key in keys:
-		var val := float(raw.get(key, 0.0))
+		var val := float(raw[key]) if raw.has(key) else 0.0
 		clean[key] = val if is_finite(val) and val > 0.0 else 0.0
 		total += float(clean[key])
 	if total <= 0.0:
@@ -523,8 +538,7 @@ static func normalize_probabilities(raw: Dictionary, keys: Array) -> Dictionary:
 
 static func _evaluate_job_batch_with_ollama(
 	batch: Array[Dictionary],
-	status: Dictionary,
-	ctx_len: int
+	status: Dictionary
 ) -> Dictionary:
 	var results_by_deme: Dictionary = {}
 	var active_jobs: Array[Dictionary] = []
@@ -535,8 +549,9 @@ static func _evaluate_job_batch_with_ollama(
 		active_jobs.append({
 			"deme_id": str(item["deme_id"]),
 			"keys": (item["criteria"] as Dictionary).keys(),
+			"posture_keys": (item["posture_criteria"] as Dictionary).keys(),
 			"client": client,
-			"body": JSON.stringify(build_payload(item, model_tag, ctx_len)),
+			"body": JSON.stringify(build_payload(item, model_tag)),
 			"stage": "connecting" if err == OK else "failed",
 			"rb": PackedByteArray()
 		})
@@ -583,15 +598,21 @@ static func _evaluate_job_batch_with_ollama(
 		if body_str.is_empty():
 			continue
 		var parsed = JSON.parse_string(body_str)
-		if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("answers") or not (parsed["answers"] as Dictionary).has("decision"):
+		if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("answers"):
 			continue
-		var answer: Dictionary = parsed["answers"]["decision"]
-		var probabilities := normalize_probabilities(answer["probabilities"], job["keys"])
-		if probabilities.is_empty():
+		var answers: Dictionary = parsed["answers"]
+		if not answers.has("decision") or not answers.has("posture"):
+			continue
+		var decision_answer: Dictionary = answers["decision"]
+		var posture_answer: Dictionary = answers["posture"]
+		var probabilities := normalize_probabilities(decision_answer["probabilities"], job["keys"])
+		var posture_probabilities := normalize_probabilities(posture_answer["probabilities"], job["posture_keys"])
+		if probabilities.is_empty() or posture_probabilities.is_empty():
 			continue
 		results_by_deme[job["deme_id"]] = {
 			"probabilities": probabilities,
-			"confidence": clampf(float(answer["confidence"]), 0.0, 1.0)
+			"posture_probabilities": posture_probabilities,
+			"confidence": clampf(float(decision_answer["confidence"]), 0.0, 1.0)
 		}
 	return results_by_deme
 

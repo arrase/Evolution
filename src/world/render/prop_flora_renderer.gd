@@ -104,6 +104,8 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 			"deme": deme,
 			"deme_id": deme.id,
 			"hex_id": hex_id,
+			"is_capital": (hex_id == deme.hex_id),
+			"posture": deme.defense_posture,
 			"world_xy": v_world,
 			"top_z": top_z,
 			"pos": v_pos,
@@ -126,7 +128,8 @@ static func collect_villages(r: Node2D) -> Array[Dictionary]:
 			"hit_rect": Rect2(v_pos - Vector2(104, 92), Vector2(208, 168))
 		}
 		villages.append(v_entry)
-		r._village_by_deme_id[deme.id] = v_entry
+		if hex_id == deme.hex_id:
+			r._village_by_deme_id[deme.id] = v_entry
 	return villages
 
 
@@ -222,7 +225,7 @@ static func draw_village_plaza(r: Node2D, village: Dictionary) -> void:
 		EvoWorldOverlayRenderer.draw_ellipse_filled(ci, b_foot + Vector2(0, -3.0), 28.0, 15.5, Color("#7c5c3b") * modulate_col)
 		EvoWorldOverlayRenderer.draw_ellipse_filled(ci, b_foot + Vector2(0, -3.0), 23.0, 12.5, Color("#cbb082") * modulate_col)
 
-	var is_merged: bool = deme.merged_count > 0 or deme.walled_union_id != ""
+	var is_merged: bool = deme.merged_count > 0 or deme.is_multi_hex()
 	var plinth_r := 58.0 if is_merged else 52.0
 	var rim_r := plinth_r + 5.5
 	EvoWorldOverlayRenderer.draw_ellipse_filled(ci, plaza_center, rim_r, rim_r * 0.58, Color("#5c4028") * modulate_col)
@@ -334,8 +337,13 @@ static func collect_cell_flora_props(
 	EvoFloraPropLayout.collect_cell_flora_props(r, cell, world_xy, top_z, props)
 
 
-static func collect_village_building_props(village: Dictionary, props: Array[Prop]) -> void:
+static func collect_village_building_props(
+	state: EvoTypes.WorldState,
+	village: Dictionary,
+	props: Array[Prop]
+) -> void:
 	var deme: EvoTypes.Deme = village["deme"]
+	var cell: EvoTypes.HexCell = state.cells[str(village["hex_id"])]
 	var v_pos: Vector2 = village["pos"]
 	var m: Color = village["modulate"]
 	var eff_tier: int = deme.get_village_tier()
@@ -356,13 +364,13 @@ static func collect_village_building_props(village: Dictionary, props: Array[Pro
 		flags,
 		deme.defense_tier,
 		deme.merged_count,
-		deme.walled_union_id,
+		deme.is_multi_hex(),
 		snappedf(deme.salubrity, 0.05),
 		m,
 		v_pos
 	]
-	if deme.has_meta("_vp_key") and (deme.get_meta("_vp_key") as Array) == vp_key:
-		props.append_array(deme.get_meta("_vp_val") as Array[Prop])
+	if cell.has_meta("_vp_key") and (cell.get_meta("_vp_key") as Array) == vp_key:
+		props.append_array(cell.get_meta("_vp_val") as Array[Prop])
 		return
 
 	var v_props: Array[Prop] = []
@@ -375,8 +383,8 @@ static func collect_village_building_props(village: Dictionary, props: Array[Pro
 		p.set_foot(v_pos + off)
 		v_props.append(p)
 	_draw_settlement_props(village, v_props)
-	deme.set_meta("_vp_key", vp_key)
-	deme.set_meta("_vp_val", v_props)
+	cell.set_meta("_vp_key", vp_key)
+	cell.set_meta("_vp_val", v_props)
 	props.append_array(v_props)
 
 
@@ -391,7 +399,7 @@ static func _draw_settlement_props(village: Dictionary, props: Array[Prop]) -> v
 		var p := world_prop("prop_pact_totem", v_world, top_z, off, 2.15, m)
 		p.set_foot(v_pos + off)
 		props.append(p)
-	if deme.merged_count > 0 or deme.walled_union_id != "":
+	if deme.merged_count > 0 or deme.is_multi_hex():
 		var off := Vector2(36, 30)
 		var p := world_prop("prop_unity_monument", v_world, top_z, off, 2.15, m)
 		p.set_foot(v_pos + off)
@@ -436,7 +444,7 @@ static func build_geopolitics_by_deme(state: EvoTypes.WorldState) -> Dictionary:
 			"in_betrayal": false,
 			"in_tribute": false,
 			"in_siege": false,
-			"in_merge": d.merged_count > 0 or d.walled_union_id != "",
+			"in_merge": d.merged_count > 0 or d.is_multi_hex(),
 			"geo_icons": empty_icons
 		}
 	for pk_var in state.relations.keys():
@@ -492,7 +500,7 @@ static func build_geopolitics_by_deme(state: EvoTypes.WorldState) -> Dictionary:
 			icons.append("tribute")
 		if bool(entry["has_pact"]):
 			icons.append("pact")
-		if d.merged_count > 0 or d.walled_union_id != "" or bool(entry["in_merge"]):
+		if d.merged_count > 0 or d.is_multi_hex() or bool(entry["in_merge"]):
 			icons.append("merge")
 		if d.defense_tier > 0:
 			icons.append("defense")
