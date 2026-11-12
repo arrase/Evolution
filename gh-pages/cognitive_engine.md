@@ -1,88 +1,127 @@
-# Cognitive Engine & Payoff-Forecast Ollama Agency
+# Cognitive Agency & Ollama Engine
 
-**Evolution** features a non-blocking, dual-model **System 1 Payoff-Forecast Agency Architecture** (`EvoDecisionModel`, `EvoOllamaClient`, `EvoActionMenu`, `EvoOutcomeForecast`, `EvoSituationReport`, `EvoActionPolicy`) that evaluates each settlement's concrete, target-bound action options every generation via local **Ollama System 1 decision models** (`d3:4b` and `tev1:4b` at `POST http://127.0.0.1:11434/v1/systemone`).
-
-Instead of scoring abstract archetypes or blending LLM outputs with heuristic weights, every settlement constructs a feasible menu of **`6–14` concrete actions** where each option's `criterion` is its **quantified expected biophysical and social payoff** (`EvoOutcomeForecast.describe`), paired with a natural-language **Situation Report** (`EvoSituationReport.build`). The model scores the menu directly, and `EvoActionPolicy.sample` samples the settlement's action stochastically (`T = 0.65`) with `WorldState.rng`—with **zero heuristic blending** and **zero signature caching**.
+Rather than scripting settlement behavior through brittle rule trees or removed heuristic scorers, **Evolution** delegates strategic reasoning to local Ollama models equipped with the **`decision`** capability via `POST /v1/systemone`. Each living settlement receives an individualized, quantitative world briefing and answers two independent probability distributions simultaneously: its **rural defense posture** and its **generational action**.
 
 ---
 
-## Architecture Overview
+## 1. End-to-End Agency Pipeline
 
 ```mermaid
-flowchart TD
-    Deme["Settlement (Deme) + Strategy Doctrine + 8-Event Memory + Bilateral Relations"] --> Menu["1. EvoActionMenu.build(deme, state)\n6–14 Feasible Target-Bound Options\n(forage, intensify, fortify, innovate, settle, trade, aid,\noffer_pact, accept_pact, demand_tribute, pay_tribute,\nraid, betray, conquer, unite, accept_union)"]
-    Menu --> Forecast["2. EvoOutcomeForecast.describe(deme, opt, state)\nQuantified Expected Payoff per Option\n(Food harvest, trade bonus, win %, loot, casualties, trust/reputation)"]
-    Forecast --> Report["3. EvoSituationReport.build(deme, state)\nNatural-Language Briefing:\nDoctrine + Need/Reserves + Last Outcome + Memory + Neighbor Relations"]
-    Report --> Worker["4. Background WorkerThreadPool\nUp to 4 Concurrent HTTP Jobs\nPOST 127.0.0.1:11434/v1/systemone (num_ctx = 16384)"]
-    Worker --> Policy["5. EvoActionPolicy.sample(menu, raw_scores, rng)\nTemperature-Sharpened Policy (T = 0.65)\nAssigns deme.chosen_action, action_probabilities & action_forecasts"]
+sequenceDiagram
+    participant Turn as "EvoTurnEngine"
+    participant DM as "EvoDecisionModel"
+    participant Agency as "EvoActionMenu / Forecast / SituationReport"
+    participant Client as "EvoOllamaClient"
+    participant Ollama as "Local Ollama (/v1/systemone)"
+
+    Turn->>DM: evaluate_all_demes(state, lang, async=true)
+    DM->>Agency: prepare_deme_menu(deme, state)
+    Agency-->>DM: {briefing, instructions, criteria, posture_instructions, posture_criteria}
+    DM->>Client: enqueue_jobs(jobs) [MAX 4 global, 2/model]
+    loop WorkerThreadPool Async Dispatch
+        Client->>Ollama: POST /v1/systemone (state + questions.posture & questions.decision)
+        Ollama-->>Client: {answers: {posture: {...}, decision: {...}}}
+        Client->>DM: _completed_by_epoch[epoch][deme_id] = result
+    end
+    Note over DM: Immediate UI Preview: apply_completed_live_results() -> argmax without touching state.rng
+    Turn->>DM: finalize_turn_decisions() before next turn executes
+    DM->>Agency: sample_turn_decisions(deme, state.rng) [sorted deme_id, T = 0.45]
 ```
 
----
+### Zero Heuristic Blending
 
-## Dual-Model System 1 Routing (`d3:4b` & `tev1:4b`)
-
-Subpopulations are distributed deterministically across two specialized System 1 decision models configured in `EvoUserSettings` (`~/.config/Evolution/settings.json`):
-
-* **Primary Decision Model (`DEFAULT_PRIMARY_MODEL = "d3:4b"`)**: Assigned to Strategy A founders and their daughter settlements.
-* **Secondary Decision Model (`DEFAULT_SECONDARY_MODEL = "tev1:4b"`)**: Assigned to Strategy B founders and their daughter settlements.
-* **Default Context Window (`DEFAULT_CONTEXT_LENGTH = 16384`)**: Configurable directly from the in-game Settings popup (`num_ctx`).
-
-### Deterministic Deme Assignment (`resolve_deme_decision_model_tag`)
-1. **Lineage & Settlement Continuity**:
-   * Any daughter settlement budded via `settle` (`-m<gen>`) or founded via `conquer` (`-w<gen>`) strips its suffix so it inherits the exact model tag of its parent founder deme.
-2. **Initial Preset Subpopulations**:
-   * Assigned to **Primary (`d3:4b`)**: `deme-rift-west`, `deme-darwin-founder`, `deme-island-1`, `deme-island-3`.
-   * Assigned to **Secondary (`tev1:4b`)**: `deme-rift-east`, `deme-darwin-rival`, `deme-island-2`.
-3. **Other / Custom Demes**:
-   * Routed deterministically via a 31-bit polynomial rolling hash over `base_id`: even hash maps to `primary_model` (`d3:4b`); odd hash maps to `secondary_model` (`tev1:4b`).
-4. **Graceful Single-Model Fallback**: If only one of the two configured decision models is installed in Ollama, `EvoOllamaClient._resolve_ollama_model_for_tag` automatically routes all live requests to the ready model.
+When a simulation turns over without a model response (or when waiting on async completion), `prepare_deme_menu()` leaves uniform prior distributions across feasible choices (`1 / N`), `defense_posture = "open_harvest"`, and `chosen_action = menu[0]` (`forage`)—there is **zero fallback heuristic scorer** and **zero artificial mathematical override**.
 
 ---
 
-## Concrete Targeted Action Menu (`EvoActionMenu`)
+## 2. Feasible Action Menu & Corridors (`EvoActionMenu`)
 
-Every turn, `EvoActionMenu.build(deme, state)` generates a compact menu (`MAX_MENU_OPTIONS = 14`) of physically and socially valid options (`{ id, type, target }`):
+For each living deme, `EvoActionMenu` (`src/engine/agency/action_menu.gd`) builds up to **`MAX_OPTIONS = 14`** discrete concrete choices sorted deterministically:
 
-| Category | Option ID Format | Action Type | Feasibility Conditions |
-| :--- | :--- | :--- | :--- |
-| **Domestic** | `forage` | `forage` | Always available. Sustainable wild and rural harvest (`+10%` conservation bonus). |
-| **Domestic** | `intensify` | `intensify` | Available when `cell.current_resources > 10.0`. Overexploits land (`+35%` harvest) at the cost of `-7%` permanent carrying capacity $K$. |
-| **Domestic** | `fortify` | `fortify` | Available when `defense_tier < 3` and `energy_reserves >= FORTIFY_COST_RESERVES[tier]`. Upgrades hex-edge walls (`Palisade` $\to$ `Stone Wall` $\to$ `Castle`). |
-| **Domestic** | `innovate` | `innovate` | Available when the settlement possesses cultural capacity (`bio-encephalization` or `bio-social-instinct`) and `< 2` emergent cultural traits. |
-| **Frontier** | `settle@<hex_id>` | `settle` | Up to 2 passable empty neighbor hexes when `population >= 80` and `energy_reserves >= 45.0`. Founds a daughter settlement (`-m<gen>`). |
-| **Reactive Diplomacy** | `accept_pact@<id>` | `accept_pact` | Neighbor proposed an alliance pact (`proposal_kind == "pact"`). Seals the alliance immediately. |
-| **Reactive Diplomacy** | `accept_union@<id>` | `accept_union` | Allied neighbor proposed unification (`proposal_kind == "union"`). Merges or forms a Walled Union immediately. |
-| **Reactive Diplomacy** | `pay_tribute@<id>` | `pay_tribute` | Neighbor demanded tribute (`proposal_kind == "tribute"` and `energy_reserves >= amount`). Pays tribute for a 2-turn truce; choosing any other action refuses the ultimatum and triggers an immediate punitive raid. |
-| **Proactive Social** | `trade@<id>` | `trade` | Available with non-feuding adjacent neighbors (`feud_turns == 0`). Unilateral trade earns `55%` of trade gain + `+0.12` trust + cultural diffusion; mutual trade earns `100%` of trade gain + `+0.20` trust. |
-| **Proactive Social** | `aid@<id>` | `aid` | Available when `energy_reserves >= 50.0` and neighbor has no active feud. Transfers surplus food (`+0.25` trust, `+0.10` reputation, and seals any open pact offer). |
-| **Proactive Social** | `offer_pact@<id>` | `offer_pact` | Available when `pact_turns == 0` and `feud_turns == 0`. Seals immediately with same-lineage kin or trusted neighbors (`trust >= 0.30`); otherwise opens a pact proposal. |
-| **Proactive Social** | `unite@<id>` | `unite` | Available between established allied towns (`pact_turns >= 3`, both `village_tier >= 2`, and neither already in a `walled_union_id`). |
-| **Coercion & Conflict** | `demand_tribute@<id>` | `demand_tribute` | Available against non-allied, non-kin neighbors with `energy_reserves >= 25.0` during peacetime (`truce_turns == 0`). |
-| **Coercion & Conflict** | `raid@<id>` | `raid` | Available against non-allied neighbors when `population >= 25` and `truce_turns == 0`. |
-| **Coercion & Conflict** | `betray@<id>` | `betray` | Available against an active pact ally (`pact_turns > 0`) when `population >= 30`. Launches a surprise attack (`+35%` combat bonus, halves wall defense) at the cost of `-0.50` global reputation and a 4-turn feud. |
-| **Coercion & Conflict** | `conquer@<id>` | `conquer` | Available against non-allied, non-kin neighbors when `population >= 65`, `energy_reserves >= 35.0`, and `truce_turns == 0`. |
+1. **Always available**:
+   - `forage` (`+20%` harvest bonus)
+   - `intensify` (`+55%` harvest yield, `-7%` urban carrying capacity)
+   - `fortify` (when `defense_tier < 3` and `can_fortify` meets pop/food/hex resource gates)
+   - `innovate` (when cultural transmission is enabled and `innovation_counter < 2.0`)
+2. **Colonization Corridors (`settle`, up to `MAX_SETTLE_OPTIONS = 3`)**:
+   - Runs BFS across friendly (`self`, active pacts, peaceful kin) passable hexes (`ocean` excluded; `high_mountain` and `altitude <= 0.88` gated by `spatial_mobility >= 0.45`, else `altitude <= 0.85`).
+   - Corridor hop depth extends to **`3` hops** when `spatial_mobility >= 0.45`, else **`2` hops**.
+   - Scored toward frontier resource richness and bridge extensions (`+120` frontier bridge bonus) once the deme meets `EvoPayoffs.settle_min_pop()` and `settle_min_reserves()`.
+3. **Diplomatic & Neighbor Actions (up to `MAX_NEIGHBORS = 4` adjacent demes plus `border_field_rivals`)**:
+   - **Active Allies (`pact_turns > 0`)**: `trade`, `aid` (when reserves `>= 40`), `unite` / `accept_union` (once `pact_turns >= 3` and combined `urban_hex_ids` stay within `MAX_URBAN_HEXES = 3` or absorption conditions hold), and `betray`.
+   - **Non-Allied Foreign Neighbors**: `trade`, `offer_pact` / `accept_pact`, `demand_tribute` / `pay_tribute`, `raid` (including distance-2 border field raids against cultivated rural hexes), and `conquer` (when adjacent without truce and outside peaceful kin without feud).
 
 ---
 
-## Quantified Outcome Forecasts (`EvoOutcomeForecast`) & Situation Report (`EvoSituationReport`)
+## 3. Situation Report & Counterfactual Forecasts
 
-When querying Ollama (`POST http://127.0.0.1:11434/v1/systemone`), `EvoOllamaClient._build_system_one_payload` sends:
+### Objective Situation Briefing (`EvoSituationReport`)
 
-1. **`state` (`EvoSituationReport.build(deme, state)`)**:
-   * **Settlement & Strategy Header**: Settlement name, urban tier (`Camp`, `Village`, `Town`, `Metropolis`), strategy name, and natural-language **Strategy Doctrine** (`strat.doctrine`).
-   * **Vital & Ecological Status**: Population, stored food, per-turn food need (`EvoPayoffs.food_need`), expected base harvest (`EvoPayoffs.expected_income`), local hex biome, wild food ratio, land carrying capacity health (`K / Kmax`), owned rural farm/pasture count, fortification status, global reputation, and innovation progress.
-   * **Causal Feedback (`Last turn`)**: Exact outcome of the settlement's previous action (`deme.last_outcome`) and net food delta (`last_energy_delta`).
-   * **Personal Episodic Memory (`Recent history`)**: Up to 5 recent causal entries from the settlement's 8-event sliding memory (`deme.memory`).
-   * **Frontier & Neighbor Relations**: Best open frontier hexes (`biome`, `food`, `capacity`) and each adjacent neighbor's population, stored food, walls, relation status (`kin`, `ally`, `feud`, `truce`, `neutral`), bilateral `trust` (`[-1, +1]`), last action toward this settlement, and any open proposal (`pact`, `union`, or `tribute` ultimatum).
-2. **`decisions`**: Array of `{ id, criterion }` objects from `EvoActionMenu.build` and `EvoOutcomeForecast.describe`, where every `criterion` states the exact expected food harvest alongside action-specific payoffs, odds, casualties, and diplomatic consequences.
+`EvoSituationReport.build_with_corridors()` formats a structured natural-language telemetry snapshot (`briefing` $\to$ `payload["state"]`):
+
+- **Deme identity & geography**: Settlement name, clade faction slot, primary hex biome/season/altitude, rural field count (`crops` / `pasture`), and population, reserves, net energy delta, storage cap, defense tier, salubrity score, and infection/immunity timers.
+- **Active traits**: Plain-English physiological/cultural effects for each biological trait, cultural tradition, and emergent adaptation.
+- **`Horizons` telemetry**: Distance to the next fortify tier, settler thresholds, `innovation_counter` toward emergent tradition (`1.0`), allied `pact_turns` progress toward **Walled Union** (`>= 3`), and glacial inundation countdown if `glacial_sea_level_cycle` is enabled.
+- **Relational & Threat Context**: Reputation score (`[-1, +1]`), nearby allies/rivals with trust/feud/truce status, raid/border threats, colonization corridors, pending diplomatic proposals, `last_outcome`, and up to **`12` recent episodic memory lines**.
+
+### Counterfactual Forecasts & Strategy Instructions
+
+- **Strategy & Trait Directives (`EvoActionPolicy.build_instructions()`)**: Combines the strategy's editable `Doctrine` (`StrategyDef.doctrine`) and strategy description with per-trait behavioral imperatives (`TRAIT_DIRECTIVES`) and emergent trait summaries.
+- **Posture Instructions (`build_posture_instructions()`)**: Instructs the settlement to balance `100%` harvest in `open_harvest` against `patrol_fields` (`90%` yield, `65%` crop shield) and `mobilized_garrison` (`78%` yield, `85%` crop shield) whenever border raiders or feuds are in range.
+- **Quantified Criteria (`EvoOutcomeForecast`)**: Pre-computes exact `EvoPayoffs` food deltas, trade surpluses, raid win odds (`raid_odds`), conquest odds, field-burn risks, and union outcomes (`walled_union` vs. `absorption`) so Ollama scores concrete counterfactual payoffs instead of guessing blind mechanics.
 
 ---
 
-## Temperature-Sharpened Policy Sampling (`EvoActionPolicy`)
+## 4. Dual-Question `/v1/systemone` Wire Protocol
 
-Raw option scores returned by `/v1/systemone` are converted into an action probability distribution and sampled via `EvoActionPolicy.sample(menu, raw_scores, rng)`:
+[`EvoOllamaClient`](https://github.com/arrase/Evolution/blob/main/src/engine/cognitive/ollama_client.gd) submits a single JSON payload per deme directly to `/v1/systemone` using `WorkerThreadPool`:
 
-1. Each menu option $i$'s raw score $s_i \ge 0$ is sharpened with temperature $T = 0.65$:
-   $$w_i = \left(\max(s_i, 0.0001)\right)^{1 / T}$$
-2. Normalized probabilities $p_i = w_i / \sum_j w_j$ are stored in `deme.action_probabilities` (with the highest-probability option recorded in `deme.last_dominant_decision_id` and `deme.last_confidence`).
-3. A single concrete action (`deme.chosen_action = { id, type, target }`) is sampled from $p_i$ using `state.rng` (`RandomNumberGenerator`), enabling both decisive commitment to high-payoff options and genuine emergent variety across turns.
+```json
+{
+  "model": "d3:4b",
+  "keep_alive": "30m",
+  "state": "<EvoSituationReport briefing string>",
+  "questions": {
+    "posture": {
+      "type": "choice",
+      "instructions": "<Doctrine + posture trade-off guidance>",
+      "criteria": {
+        "open_harvest": "Open harvest (100% harvest: ~128 food...)",
+        "patrol_fields": "Patrol fields (90% harvest: ~115 food...)",
+        "mobilized_garrison": "Mobilized garrison (78% harvest: ~100 food...)"
+      }
+    },
+    "decision": {
+      "type": "choice",
+      "instructions": "<Doctrine + trait directives + biophysical summary>",
+      "criteria": {
+        "forage": "...",
+        "trade:deme-east": "...",
+        "fortify": "..."
+      }
+    }
+  }
+}
+```
+
+### Model Configuration & Key Implementation Details
+
+- **No legacy `options` or `num_ctx` overrides**: Context size is managed cleanly by the loaded Ollama model and `/v1/systemone` endpoint defaults (`Settings` omits any `num_ctx` field, and `settings.json` stores strictly `primary_model` and `secondary_model`).
+- **Two-Model Strategy Assignment (`EvoDecisionModel.resolve_model_for_slot()`)**:
+  - **Faction Slot `"A"`** routes to **`primary_model`** (default **`d3:4b`**).
+  - **Faction Slot `"B"`** routes to **`secondary_model`** (default **`tev1:4b`**).
+  - `/api/tags` startup discovery filters for models declaring `"decision"` in `capabilities`, warning via an interactive modal (`POST /api/pull`) if required models are absent or falling back cleanly if only one `decision`-capable model is installed.
+- **Thread-Pool Concurrency & Epoch Isolation**:
+  - `WorkerThreadPool` runs up to **`MAX_CONCURRENT_JOBS = 4`** total HTTP workers with a per-model cap of **`MAX_CONCURRENT_PER_MODEL = 2`**.
+  - Changing worlds, strategies, or resetting increments `EvoDecisionModel._state_epoch` and cancels stale in-flight work (`cancel_epoch()` / `clear_cache()`), ensuring discarded results from prior runs never contaminate the active `WorldState`.
+
+---
+
+## 5. Power-Temperature Sampling & Inspector Transparency
+
+Once a `/v1/systemone` response returns, `EvoActionPolicy` applies deterministic probability sharpening with **`TEMPERATURE = 0.45`**:
+
+$$P'(k) = \frac{P(k)^{1 / 0.45}}{\sum_j P(j)^{1 / 0.45}}$$
+
+1. **Non-mutating UI Preview (`apply_live_result()`)**: Immediately computes `_argmax_key()` for both `defense_posture` and `chosen_action` so the Inspector's probability bars (`★`), top choice badge, and map labels update live as worker threads complete—without consuming any numbers from `state.rng`.
+2. **Authoritative Turn Commit (`sample_turn_decisions()`)**: At the start of `advance_generation()`, `EvoDecisionModel.finalize_turn_decisions()` sorts living `deme_id` keys lexicographically and samples `defense_posture` followed by `chosen_action` from their sharpened distributions using `state.rng`.

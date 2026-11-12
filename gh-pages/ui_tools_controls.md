@@ -1,173 +1,129 @@
-# HUD, Analytical Modals & God-Mode Tools
+# UI, Tools & Controls
 
-**Evolution** presents its complex biophysical, urban-rural, and phylogenetic simulation through a warm, handcrafted field-journal user interface (`EvoMainHud`, `EvoUiStyle`) paired with a high-DPI 2.5D illustrated isometric world.
-
-![The Rift Valley — 169-Hex 2.5D Illustrated Ecosystem & HUD](assets/img/screenshot_rift_savanna.png)
+**Evolution** presents a tactile wood-and-parchment cartographic HUD (`1600×960` reference desktop layout) paired with 5 analytical map lenses, a collapsible live macro telemetry drawer, a bottom-left live chronicle feed, 10 god-mode terrain brushes, and three deep analytical modals.
 
 ---
 
-## HUD Layout & Panels (`EvoMainHud`)
+## 1. HUD Architecture & On-Screen Panels
 
-The main interface is organized into four non-intrusive peripheral docks that leave the central `169`-hex 2.5D hexagonal valley unobstructed:
-
-```mermaid
-flowchart TD
-    subgraph HUD ["EvoMainHud (CanvasLayer)"]
-        TopLeft["1. Top-Left Valley Sign, Matchup Bar & Medallions\n• Scenario Preset Selector + JSON Save/Load\n• Pre-Play 1v1 Matchup: [Strategy A] ⚔️ [Strategy B] [🔄]\n• Modal Medallions: Journal, Lineages, Forge\n• Map Lenses (Biome, Food, Health) + Valley Legend"]
-        TopRight["2. Top-Right Season Clock & Mana Panel\n• Live 72×76 Season & Tide Pixel Portrait\n• Year / Gen Counter + Play / Pause / +1 / Speed\n• Selective Pressure (⚡ Mana) Bar + Settings Gear"]
-        RightInsp["3. Right-Hand Scroll Inspector\n• Village Cycler (◀ / ▶) + Lineage Highlighter\n• Tab 1: Strategy, Tier I–IV, Salubrity, Walls & Walled Union\n• Tab 2: Milestone Meters & Trait Medallions\n• Tab 3: Hex Climate, Rural Land Use, Ruins, R & K Health"]
-        BottomDock["4. Bottom 10-Slot Hotbar & Toast Stack\n• Slots 1–0 (Inspect, Biomes, Altitude, K, Sea)\n• Brush Radius Toggle: ◯ 1x (1 hex) vs ◎ 7x (7 hexes)\n• Floating Tidal Bar + Bottom-Left Chronicle Toasts"]
-    end
-```
-
-### 1. Top-Left Valley Sign, Pre-Play Strategy Matchup, Lenses & Valley Legend (`EvoHudTopBar`)
-* **Row 1 — Scenario & State Persistence**:
-  * **Preset Dropdown**: Switch immediately between *The Rift Valley* (`preset-rift-savanna`), *Darwin's Archipelago* (`preset-darwin-archipelago`), and *The Finite Island* (`preset-finite-island`).
-  * **Export (`💾`) & Import (`📂`) World State**: Serializes or restores the complete `WorldState` (cells with `land_use`, `owner_deme_id`, and `has_ruins`, demes with `salubrity` and `walled_union_id`, custom strategies/traits/decisions, `strategy_a_id`, `strategy_b_id`, lineage tree, and chronicle history) to/from `user://evolution_world_state.json`.
-* **Row 2 — Pre-Play 1v1 Strategy Matchup Selector (`[Strategy A] ⚔️ [Strategy B] [🔄]`)**:
-  * **Strategy A & Strategy B Dropdowns**: Choose any of the **5 Base Archetypal Strategies** (`strat-cooperation` 🤝, `strat-expansion` 🧭, `strat-trade` ⚖️, `strat-war` ⚔️, `strat-innovation` 🔬) or any custom user-forged strategy (`origin = "user"` loaded from `~/.config/Evolution/user_catalog.json`) for Slot A (`state.strategy_a_id`) and Slot B (`state.strategy_b_id`).
-  * **Live Generation 0 Reconfiguration**: While the simulation is at **Generation 0 (`state.generation == 0`)**, changing either dropdown immediately applies the chosen strategy to the corresponding founding lineage and deme via `EvoCatalog.apply_strategy_to_deme` and re-evaluates initial decision probabilities.
-  * **Reset Duel Button (`🔄` — `hud_matchup_reset`)**: Resets the active preset back to Generation 0 at any time with the currently selected `Strategy A ⚔️ Strategy B` matchup.
-* **Row 3 — Analytical Modal Medallions**:
-  * **`📖 Journal / Diario`**: Opens the *Naturalist's Notebook* (`EvoNotebookModal`).
-  * **`🌳 Lineages / Linajes`**: Opens the *Phylo-Cultural Lineage Tree* (`EvoTreeModal`).
-  * **`⚗️ Forge / Forja`**: Opens the *Strategy, Trait & Decision Forge* (`EvoLabModal`).
-* **Row 4 — Map Lenses & Valley Legend**:
-  * **`🌿 Biome / Bioma`**: Renders high-DPI `256x224` illustrated biome hex tiles (`hex_terrain.gdshader`), subtly shifting toward ochre/brown when a hexagon's carrying capacity $K$ is degraded.
-  * **`🌾 Food / Alimento`**: Visualizes current biomass ratio $R / K_{\max}$ across 50 quantized bands along a barren-brown (`#8c583a`) $\to$ amber (`#eab308`) $\to$ lush-green (`#65f06c`) gradient.
-  * **`💚 Health / Salud`**: Visualizes structural habitat integrity $K / K_{\max}$:
-    * **Healthy ($\ge 85\%$ $K_{\max}$)**: Emerald mint (`#6ee7b7`).
-    * **Stressed ($60\%\text{–}84\%$ $K_{\max}$)**: Amber (`#fbbf24`) with a dashed orange perimeter border (`#f59e0b`).
-    * **Collapsed ($< 60\%$ $K_{\max}$ — Tragedy of the Commons)**: Coral red (`#f87171`) with a thick dashed crimson border (`#ef4444`).
-  * **`🗺️ Legend / Leyenda`**: Toggles the floating *Valley Legend* card detailing the live **Strategy Duel Counter (`legend_strategies`)** (showing each active strategy's color swatch, emblem icon, name, living settlement count, and total population), all 7 biome swatches, the **4 urban settlement categories (`I–IV`: `I · Camp`, `II · Village`, `III · Town`, `IV · Metropolis`)**, the 3 inter-settlement path symbols (`🛣️`, `⚔️`, `🧭`), and the **Geopolitical Legend (`legend_geopolitics`)** (`🤝 Pact / Alliance`, `🏛️ City Unification`, `🪙 Tribute / Truce`, `⚔️ War / Invasion`, `🏰 Active Siege`, `🔥 Raid / Plunder`, and `🗡️ Betrayal`).
-
-### 2. Top-Right Season Clock, Playback & Settings Popup
-* **Dynamic Season & Tide Portrait (`SeasonTidePortrait`)**: A custom-drawn $72 \times 76$ pixel-art vignette displaying a radiant sun over green hills during `wet_warm` ($\gamma = 1.20$), a crescent moon with falling snow over slate hills during `dry_cold` ($\gamma = 0.75$), and a live water-level gauge (`🌊 %d%%`) tracking global `sea_level`.
-* **Time & Playback Controls**:
-  * Displays `📅 Yr X · Gen Y` (`year = generation / 2 + 1`) and the active season name.
-  * **`▶ Play` / `⏸ Pause`** (<kbd>Space</kbd>), **`⏭ +1`** (single-generation step), and **`1x` (`1.50s/gen`) / `2x` (`0.30s/gen`)** speed toggle.
-* **Selective Pressure ("Mana") Bar**: Tracks available intervention points (`⚡ 30 pts` initial, `+15/gen` passive regeneration).
-* **Settings, Cognitive Engine & Camera Popup (`⚙️`)**:
-  * **Cognitive Engines Diagnostic Card**: Live count of settlements assigned to Primary (`d3:4b`) and Secondary (`tev1:4b`) System 1 models, active `num_ctx`, and mean confidence `%`.
-  * **Model & Context Configuration**: Dropdown selectors for Primary and Secondary Ollama decision models, free-text `num_ctx` input (persisted to `~/.config/Evolution/settings.json`), and a manual model refresh button (`🔄`).
-  * **Simulation Rules & Language**: Switch UI language (`ES` / `EN`), toggle `Auto-pause on milestones` (`auto_pause_on_milestone`), `Unlimited Mana` (`unlimited_pressure_mode`), and `Free Sandbox` (`free_sandbox_mode` — bypasses thermodynamic cost enforcement).
-  * **Camera Presets**: One-click pitch presets (`32°`, `48°`, `68°`), zoom controls, and `🎯 Reset` (with horizontal yaw locked at `0.0°` so 2.5D illustrated building facades and drop shadows remain consistently oriented).
+1. **Top-Left Valley Sign & Medallions (`EvoHudTopBar`)**:
+   - **World Preset Dropdown**: Instant generation of `Rift Savanna`, `Darwin's Archipelago`, or `Finite Island`, alongside **Export/Import JSON** snapshot buttons and **Reset**.
+   - **Strategy A vs. Strategy B Selector**: Assigns competing starting archetypes (`strat-cooperation`, `strat-expansion`, `strat-trade`, `strat-war`, `strat-innovation`, or custom Forge creations).
+   - **Suite Buttons**: Direct access to **🔬 Forge**, **🌿 Phylogeny**, and **📖 Chronicle**.
+   - **5-Lens Bar & Map Fit**: One-click switches for `Biome`, `Food`, `Health`, `Diplomacy`, and `Territory`, plus **`Map`** (`F` full-valley framing) and **`🗺️` Legend** toggle.
+2. **Top-Center Stats Strip & History Chart (`EvoHudStatsStrip`)**:
+   - Displays head-to-head **Strategy A vs. Strategy B** telemetry across Population, Food Ratio, Average Salubrity, and Owned Rural Hexes.
+   - Tapping **`📈`** expands the **History Chart Drawer** plotting Strategy A vs. Strategy B trajectories up to `200` generations (`STATS_HISTORY_LIMIT = 200`).
+3. **Top-Right Season/Tide Dial & Playback Clock**:
+   - **Procedural `SeasonTidePortrait`**: Draws live sunlight (`wet_warm`) vs. moonlit snowfall (`dry_cold`) above a dynamic waterline reflecting planetary `sea_level` (`%`).
+   - **Playback Controls**: Play/Pause (**Space**), manual **Step Generation**, speed cycler (**`0.5x`**, **`1x`**, **`3x`** corresponding to `4.0 s`, `2.0 s`, and `0.6 s` turn intervals), Settings gear (**`⚙`**), and the **`⚡` Selective Pressure Mana** meter (`+15/turn`).
+4. **Right Docked 3-Tab Inspector (`EvoHudInspectorPanel`)**:
+   - **`🏘️ Village`**: Identity badges (faction slot, lineage, vital status: `Thriving`, `Stable`, `Struggling`, `Starving`, `Extinct`), active rural **Defense Posture** (`open_harvest`, `patrol_fields`, `mobilized_garrison`) and posture distribution, **`Intake / Need`** caloric ledger, **`Walled Union (%d united districts)`** counter on multi-hex unions, **`Infected (Nt)` / `Immune (Nt)`** epidemic state, top-3 **`Chosen Action`** probability bars (`★`), clickable **`Relations & Paths`** partner cards, **`🎯 Forecast`**, **`📜 Last outcome`**, and **`🧠 Memory (last 3)`** episodic log.
+   - **`🧬 Traits`**: Active biological traits (up to 3 emergent) and cultural traditions (up to 3 emergent), with exact clamped 6-axis vector totals.
+   - **`🌿 Habitat`**: Biome climate (`T`, `H`, altitude, $K/K_{\max}$, seasonal regen), remaining biomass $R$, land use (`wild`, `crops`, `pasture`, rural owner), and `ruin_turns` decay timer.
+5. **Bottom-Left Live Chronicle Feed (`EvoHudBannersToasts`)**:
+   - Collapsible real-time event log (`▾`/`▸`) displaying up to `30` recent chronicle cards (`G<gen> · (<q,r>) · <Title>`), color-coded by event type and filtered across `5` category pills (`all`, `war`, `diplomacy`, `health`, `evolution`). Clicking any entry centers the camera directly onto that hex.
+6. **Bottom-Center 10-Slot Hotbar & Brush Switcher (`EvoHudHotbarDock`)**:
+   - Keys `1`–`9` & `0` plus `1x` (single tile) / `7x` (radius-2 ring) area selector and a dynamic contextual sub-bar above the dock (including `high_mountain`, `coastal_shallows`, `ocean`, and `sea_level` raise/lower actions).
 
 ---
 
-## Visual Strategy, Urban Tier, Hinterland & Walled Union Identification on the 2.5D Map
+## 2. Five Analytical Map Lenses (`Tab` to Cycle)
 
-![Settlement Tiers I–III, Perimeter Walls & Cultivated Rural Hinterlands](assets/img/screenshot_settlement_tiers_hinterlands.png)
+| Lens | Analytical Purpose |
+| :--- | :--- |
+| **`biome`** | Standard terrain visualization with 2.5D hex columns, biome props, roads, fort walls, and settlements (`assets/img/screenshot_rift_savanna.png`). |
+| **`food`** | Overlays harvestable biomass $R$, carrying capacity degradation below `60%` $K_{\max}$, and rural agricultural/pasture productivity. |
+| **`health`** | Highlights deme `salubrity` levels (`[0.05..1.0]`), active epidemic contagion pulses, and post-recovery immunity shields. |
+| **`diplomacy`** | Maps bilateral trust hues, active pacts, tribute truces, active feuds, and geodesic trade/war corridors between urban centers. |
+| **`territory`** | Outlines consolidated urban districts, Walled Union cores, and outer borders of owned `crops` and `pasture` hinterlands cleanly without internal seam noise. |
 
-Every settlement's founding **Evolutionary Strategy** (`deme.strategy_id`), **4-Tier Urban Category (`I..IV`)**, **Urban Salubrity (`salubrity`)**, **Hex-Edge Perimeter Fortifications** (`defense_tier: 0..3`), **Rural Hinterlands (`crops` and `pasture`)**, and **Continuous Multi-Hex Walled Union (`walled_union_id`)** are immediately recognizable across the 2.5D isometric valley:
+<div class="projects-grid">
 
-1. **Hex Strategy Perimeter Rings & Rural Territory Crests (`EvoWorldOverlayRenderer`)**: Every inhabited or cultivated hexagon displays a crisp perimeter ring tinted in its owner strategy's color (`Strategy A` vs. `Strategy B`), and cultivated rural hinterlands (`crops` or `pasture`) display a compact owner crest pill (`<Emblem> A/B · <Owner> (q,r)`) so territorial control is clear at a glance.
-2. **Floating Settlement Billboards with Roman Tier (`I..IV`), Salubrity Dot & Fortified Shield (`EvoWorldOverlayRenderer.draw_village_billboard`)**:
-   * **Fortified Strategy Shield & Roman Category**: Each settlement displays an overhead dark-wood billboard featuring a strategy-colored emblem shield (`A · ...` / `B · ...`, or `A★` / `B★` when unified) whose border reflects its `defense_tier` (**bronze `#b45309`** for Lv.1 Palisade, **silver `#cbd5e1`** for Lv.2 Stone Wall, and **gold `#fbbf24`** for Lv.3 Castle), alongside its Roman urban category and headcount (`I · 42 pop`, `II · 135 pop`, `III · 250 pop`, `IV · 390 pop`).
-   * **Urban Salubrity Indicator Dot**: Whenever `deme.salubrity < 0.75` or `deme.get_village_tier() >= 3`, a color-coded salubrity status dot renders beside the population label (**emerald** $\ge 75\%$, **amber** $40\%\text{–}74\%$, **crimson** $< 40\%$ epidemic risk).
-   * **Geopolitical Side Pills**: Displays contextual side pills alongside the billboard whenever the settlement is fortified (`icon_defense`: `Lv1`, `Lv2`, `Lv3`), unified (`icon_merge`), or actively engaged in a siege (`icon_siege`), war (`icon_war`), betrayal (`icon_betrayal`), raid (`icon_raid`), tribute (`icon_tribute`), or pact (`icon_pact`).
-3. **2.5D Hex-Edge Perimeter Walls & Continuous Multi-Hex Walled Unions (`EvoRoadNetworkRenderer.draw_settlement_perimeter_walls`)**:
-   * **Single-Hex Perimeter Walls (`wall_r = 0.78`)**: Fortified and Tier III–IV settlements erect 2.5D perimeter walls along their 6 hex edges—timber palisades (`palisade_wall`) at Lv.1, crenellated stone walls (`stone_wall`) at Lv.2, and thick bastion-reinforced stone curtain walls with corner towers at Lv.3.
-   * **Shared Edge Culling in Multi-Hex Walled Unions (`walled_union_id != ""`)**: When two or three adjacent same-tier settlements form a **Continuous Multi-Hex Walled Union**, `draw_settlement_perimeter_walls` **automatically culls the internal wall along their shared hex edge**, uniting their outer perimeters into a single continuous multi-hex fortress connected by a paved central union boulevard (`draw_merge_avenue`).
-4. **Full-Hex 4-Tier Architecture, Rural Hinterlands & Persistent Ruins (`EvoPropFloraRenderer`)**:
-   * **4-Tier Urban Plazas**: Distributes `128x128`–`160x160` `#23150c` ink-outlined isometric buildings across the full hex (`hut_thatch` + `campfire` at Tier I; `house_clay` + `granary` at Tier II; `house_stone` + `temple_totem` + `windmill` at Tier III; `citadel_keep` + `cathedral` + `watchtower` at Tier IV).
-   * **Rural Hinterland Improvements (`land_use = "crops" | "pasture"`)**: Suppresses interior wild trees on claimed rural hexes to place golden wheat fields (`crop_field`) and `windmill`s on `"crops"` hexes or fenced livestock corrals (`pasture_pen`) and `granary` barns on `"pasture"` hexes, linked to the parent city by rural farm tracks (`draw_rural_farm_track`) with animated `covered_wagon`s.
-   * **Persistent Stone Ruins (`has_ruins == true`)**: Any hex where a settlement went extinct or a rural hinterland was pillaged during a raid displays weathered stone ruins (`ruins_stone`) until re-colonized or re-cultivated.
+  <div class="feature-card">
+    <h3>Food Lens (Finite Island)</h3>
+    <img src="assets/img/screenshot_lens_food.png" alt="Food Map Lens">
+    <p>Visualizes carrying capacity bottlenecks and remaining forageable biomass across urban cores and arid steppes.</p>
+  </div>
 
----
+  <div class="feature-card">
+    <h3>Diplomacy Lens</h3>
+    <img src="assets/img/screenshot_lens_diplomacy.png" alt="Diplomacy Map Lens">
+    <p>Reveals trust polarity, pacts, active truces/feuds, and cross-frontier diplomatic &amp; trade connections.</p>
+  </div>
 
-## Right-Hand Scroll Inspector (`EvoHudInspectorPanel`)
+  <div class="feature-card">
+    <h3>Territory Lens</h3>
+    <img src="assets/img/screenshot_lens_territory.png" alt="Territory Map Lens">
+    <p>Renders continuous faction territory perimeters linking fortified urban centers with rural fields and pastures.</p>
+  </div>
 
-The collapsible parchment Scroll Inspector on the right side of the screen provides deep, zero-information-loss telemetry on any selected settlement or hexagon:
-
-* **Inspector Header**:
-  * **Settlement Cycler (`◀` / `▶` & Dropdown)**: Lists all living demes sorted by population descending (`<strategy_icon> <Name> (q,r) — <pop> pop.`), allowing instant cycling across every settlement in the valley.
-  * **Model Badge & Lineage Map Highlight (`✨ Lineage`)**: Shows the deme's assigned System 1 model (`d3:4b` or `tev1:4b`), confidence `%`, axial coordinates, and a toggle button that dims unrelated settlements on the 2.5D map while highlighting all settlements of the active lineage.
-
-=== "Tab 1: 🧠 Village (`Aldea`)"
-
-    * **Prominent Strategy Banner & Vitals Card**:
-      * **Strategy Banner & Lineage**: Full-width colored banner displaying the settlement's founding **Evolutionary Strategy** (`🛡️ Strategy: <icon> <Strategy Name>`), species lineage name, headcount, and 4-tier urban category (`I · Camp`, `II · Village`, `III · Town`, `IV · Metropolis`).
-      * **Caloric Reserves (`🍯`) & Turn Energy Delta (`⚡`)**: Progress bar tracking stored `energy_reserves`, net caloric balance $\Delta E$, and unified vital status badge (`💚 Thriving`, `💙 Stable`, `💛 Declining`, `❤️‍🩹 Starving`).
-      * **Urban Salubrity (`🏥 Salubrity`)**: Displays `deme.salubrity` as a percentage (`0%–100%`), reflecting urban crowding, multi-hex union density, and sanitation traits (`cul-communal-conservation`, `bio-k-strategy`).
-      * **Fortification Level (`🏰 Defense`)**: Displays `Lv.0 Unfortified`, `Lv.1 Palisade (+45%)`, `Lv.2 Stone Wall (+95%)`, or `Lv.3 Castle (+155%)`.
-      * **City Unification (`🏛️ Unification`) & Walled Union (`🧱 Walled Union`)**: Displays `Unified City (N peoples)` when `deme.merged_count > 0` (Asymmetric Category Absorption) and `Active (<walled_union_id>)` when the city belongs to a **Continuous Multi-Hex Walled Union**.
-    * **Dominant Intention (`🧠`)**: Displays the top 3 behavioral decisions from `last_decision_probabilities` as horizontal probability bars, marking the dominant intention with a gold star (`★`).
-    * **Pacts & Alliances (`🤝`) & Geopolitical Relations (`🛣️`)**:
-      * **Pacts Summary**: Lists all active formal Alliance Pacts (`>= 2` consecutive cooperative turns) and partner names.
-      * **Relations & Paths**: Exhaustive listing of active **Alliance Pacts (`🤝`)**, **Multi-Turn Vendettas (`🩸`)**, **Fortified Sieges (`🏰`)**, **Tributes (`🪙`)**, **Wars of Conquest (`⚔️`)**, **Plunder Raids (`🔥`)**, **Pact Betrayals (`🗡️`)**, cooperation/trade/union routes (`🛣️`), territorial disputes (`⚔️`), migratory expeditions (`🧭`), severed/disused roads (`🚧` with turn age), and neighboring settlements (`🏘️`).
-    * **Naturalist's Note (`💬`)**: Contextual behavioral justification generated by the cognitive engine.
-
-=== "Tab 2: 🧬 Traits (`Rasgos`)"
-
-    * **Evolutionary Milestone Progress Meters**:
-      * **Genetic Assimilation (Baldwin)**: Tracks `max(baldwin_counters)` toward the `8 gen` threshold (`#0d9488`).
-      * **Cultural Innovation**: Tracks `innovation_counter` ($0\text{–}100\%$) toward synthesizing a new cultural tradition (`#7e22ce`).
-      * **Allopatric Isolation**: Tracks `isolation_turns` toward the `10 gen` speciation threshold (`#1d4ed8`).
-    * **Active Trait & Tradition Medallions**: Interactive badges for every biological (`🧬`) and cultural (`🔥`) trait carried by the deme, with hover tooltips displaying its full 6-axis biophysical vector, plus a direct shortcut to open the **Trait & Decision Forge**.
-
-=== "Tab 3: 🌿 Habitat (`Hábitat`)"
-
-    * Automatically activates when left-clicking an uninhabited or rural hinterland hex in `Inspect` mode.
-    * Displays the biome icon, localized biome name, axial coordinates `(q, r)`, **Temperature (`🌡️`)**, **Humidity (`💧`)**, **Altitude (`⛰️`)**, **Rural Land Use (`🚜 Land use: Crop fields / Pasturelands · <Owner>`)** when `cell.land_use in ["crops", "pasture"]`, **Ruins Status (`🏚️ Status: Ruins`)** when `cell.has_ruins == true`, **Available Biomass (`🌾 R / K`)**, and color-coded **Ecological Health (`💚 K / Kmax`)**.
+</div>
 
 ---
 
-## Interactive Analytical Modals
+## 3. Macro Telemetry & Settlement Tiers
 
-### 1. Naturalist's Notebook — Evolutionary Chronicle (`EvoNotebookModal`)
+![Strategy Comparison History Chart](assets/img/screenshot_stats_chart.png)
 
-![Naturalist's Notebook — Evolutionary Chronicle Modal](assets/img/screenshot_notebook_modal.png)
+*Expanding the top-center `📈` chart drawer overlays Strategy A vs. Strategy B trajectories across `Population`, `Food Ratio`, `Avg Salubrity`, and `Rural Hexes` over a rolling 200-generation window.*
 
-* **19 Category Filters (`FILTER_KEYS`)**: Filter historical events by `All (all)`, `War (war)`, `Siege (siege)`, `Raid (raid)`, `Tribute (tribute)`, `Pacts (pact)`, `Union (merge)`, `Defense (fortify)`, `Betrayal (betrayal)`, `Baldwin Effect (baldwin_trait)`, `Cultural Innovation (cultural_innovation)`, `Allopatric Speciation (allopatric_speciation)`, `Symbiosis (symbiosis)`, `Tragedy of the Commons (tragedy_of_commons)`, `Cultural Loss (cultural_loss)`, `Extinction (extinction)`, **`Epidemics (epidemic)`**, `Evolutionary Hegemony (single_survivor)`, or `Ecological Equilibrium (ecological_equilibrium)`.
-* **Causal Event Cards**: Displays up to 100 reverse-chronological entries color-coded by event type, including the generation badge (`G%d`), hex coordinate, headline, and full causal narrative.
-* **One-Click Map Jump (`📍 View on map`)**: Clicking any Chronicle entry closes the modal, selects the target hexagon and deme, and smoothly pans the 2.5D camera directly to the site of the milestone.
+![Village Tiers & Rural Hinterlands](assets/img/screenshot_settlement_tiers_hinterlands.png)
 
----
-
-### 2. Phylo-Cultural Lineage Tree (`EvoTreeModal`)
-
-![Phylo-Cultural Lineage Tree Modal](assets/img/screenshot_tree_modal.png)
-
-* **Hierarchical Phylogenetic Canvas**: Automatically lays out root and child `LineageNode` cards left-to-right by evolutionary depth and connects parent-child divergences with cubic Bézier curves. Supports click-and-drag panning across large evolutionary trees.
-* **Live Species & Strategy Telemetry**: Each card displays the lineage's color emblem, inherited `strategy_id` badge, species name, founding generation (`G%d`), divergence mechanism (*Ancestral*, *Allopatric Speciation*, *Baldwin Assimilation*, *Cultural Schism*), founder hex, acquired trait count, and live status (`● N living villages` in green or `✕ Extinct at G%d` in red).
-* **Map Lineage Highlighting (`✨ Highlight Lineage on Map`)**: Selecting any lineage node populates the right-hand detail sidebar (showing all acquired traits and active settlements `[I..IV · pop · model · (q,r)]`) and lets you project pulsing lineage highlights across the 2.5D world map.
+*Village Tiers (`I`–`IV`), stone perimeter fortifications, rural `crops` / `pasture` hinterlands, and defensive patrol watchtowers rendered directly onto the hex terrain (reference shot from an earlier 3-lens HUD build).*
 
 ---
 
-### 3. Strategy, Trait & Decision Forge — Evolutionary Laboratory (`EvoLabModal`)
+## 4. Analytical Modals & Settings
 
-![Trait & Decision Forge — Evolutionary Laboratory Modal](assets/img/screenshot_lab_modal.png)
+### Bio-Cultural Forge (`EvoLabModal`, 3 Tabs)
 
-* **4 Catalog Tabs**:
-  1. **`🛡️ Strategies` (`strategy`)**: Create, edit, and preview custom **Evolutionary Strategies** (`EvoTypes.StrategyDef`) for 1v1 duels.
-  2. **`🧬 Biological Traits` (`biological`)**: Inspect, modify, or craft heritable biological adaptations (`bio-*`).
-  3. **`🔥 Cultural Traditions` (`cultural`)**: Inspect, modify, or craft socially transmitted traditions (`cul-*`).
-  4. **`⚖️ Behavioral Decisions` (`decision`)**: Inspect, modify, or craft collective behavioral archetypes (`dec-*`).
-* **`🛡️ Strategies` Builder & Duel Slot Assignment**:
-  * **Emblem (`lab_strat_icon`) & Color (`lab_strat_color`) Pickers**: Choose a visual shield emblem (e.g., `🤝`, `🧭`, `⚖️`, `⚔️`, `🔬`, `🛡️`, `🌿`, `🔥`, `👑`, `⚡`) and hex color swatch for the strategy.
-  * **Compatible Trait Checkboxes (`lab_strat_traits`)**: Select any combination of biological (`bio-*`) and cultural (`cul-*`) traits from the catalog. The builder automatically enforces mutual exclusion between `bio-r-strategy` and `bio-k-strategy` and requires at least one cultural-capacity biological trait (`bio-encephalization` or `bio-social-instinct`) before cultural traditions can be active.
-  * **Combined Biophysical Footprint Preview (`lab_strat_vector`)**: Live 6-axis readout computed via `EvoCatalog.compute_strategy_vector(strategy, state.traits_catalog)`.
-  * **Save & Assign to Duel (`💾 Save Strategy`, `Set as Strategy A`, `Set as Strategy B`)**: Saves the custom strategy (`strat-custom-*`, `origin = "user"`) into `state.strategies_catalog` and persists all user-created strategies, traits, and decisions to **`~/.config/Evolution/user_catalog.json`**.
-* **Interactive 6-Axis Vector Sliders & Live Thermodynamic Balance Meter** (for Traits & Decisions):
-  * Fine-tune `metabolic_cost`, `extraction_efficiency`, `ecological_impact`, `spatial_mobility`, `social_cohesion` ($[-1.0, +1.0]$), and `transmission_threshold` ($[0.0, +1.0]$).
-  * Continuously computes positive advantages $A^+$, actual cost $C_{\text{curr}}$, and required cost $C_{\text{req}} = \max(0, 0.5 \cdot (A^+ - 0.60))$, with one-click **`⚖️ Auto-Balance Vector`**, **`💾 Save to Catalog`**, and **`💉 Inject into Selected Village`**.
+![Bio-Cultural Forge](assets/img/screenshot_lab_modal.png)
+
+> *Note: The current Forge on `HEAD` streamlines editing into **3 tabs**: **`🛡️ Strategies`**, **`🧬 Biological Traits`**, and **`🔥 Cultural Traditions`**—replacing legacy decision editing with editable natural-language **Strategy `Doctrine`** prompts (`screenshot_lab_modal.png` reflects commit `728a9de` before the 4th Decisions tab was retired).*
+
+- **`🛡️ Strategies`**: Configure emblem icon, clade color, compatible biological/cultural trait checkboxes, live 6-axis preview, Strategy **Doctrine** (`TextEdit` passed to Ollama), and Strategy A/B matchup assignment.
+- **`🧬 Biological Traits` & `🔥 Cultural Traditions`**: Tune 6 continuous vector sliders (`[-1.0, +1.0]`, threshold `[0.0, 1.0]`) against the live thermodynamic `BASE_BUDGET = 0.60` balance bar, toggle `enables_cultural_transmission`, **Auto-Balance**, save to `~/.config/Evolution/user_catalog.json`, or **💉 Inject into Village** on the map.
+
+### Evolutionary Chronicle (`EvoNotebookModal`, 19 Filters)
+
+![Evolutionary Chronicle](assets/img/screenshot_notebook_modal.png)
+
+Searchable longitudinal log supporting **19 event filter pills**: `all`, `war`, `siege`, `raid`, `tribute`, `pact`, `merge`, `fortify`, `betrayal`, `baldwin_trait`, `cultural_innovation`, `allopatric_speciation`, `symbiosis`, `tragedy_of_commons`, `cultural_loss`, `extinction`, `epidemic`, `single_survivor`, and `ecological_equilibrium`. Each entry links directly to the hex where the milestone occurred.
+
+### Phylogeny Tree (`EvoTreeModal`)
+
+![Phylogeny Tree](assets/img/screenshot_tree_modal.png)
+
+Pannable ancestral diagram showing root clades, extinction generations, acquired trait milestones, and branching **`allopatric_speciation`** daughter clades colorized across `SPECIATION_PALETTE`. Clicking **Highlight Clade** illuminates every living settlement descended from that branch across the terrain.
+
+### Settings Popup (`EvoHudSettingsModals`)
+
+- **Model Selection & Diagnostics**: Independent **`Primary Model` (Slot A)** and **`Secondary Model` (Slot B)** selectors filtered by Ollama's `"decision"` `/api/tags` capability, with a diagnostic counter and refresh button (`settings.json` stores `primary_model` and `secondary_model`; no manual `num_ctx` override).
+- **Language**: Instant **`ES` / `EN`** switch updating HUD chrome, Chronicle templates, tooltips, and catalogs.
+- **Simulation Modes**: **`Auto-pause on milestones`**, **`Unlimited Energy`** (free selective pressure brushes), and **`Free Sandbox`** (relaxes thermodynamic auto-balancing in the Forge).
+- **Camera Presets**: Quick pitch buttons (`32°`, `48°`, `68°`), `Map` full-valley framing, and `🎯 Reset`.
 
 ---
 
-## God-Mode Hotbar & Selective Pressure Brushes (`EvoHudHotbarDock`)
+## 5. God-Mode Hotbar (`1`–`9` & `0`) & Shortcuts
 
-The bottom dock provides **10 hotbar slots** (<kbd>1</kbd>–<kbd>9</kbd>, <kbd>0</kbd>) paired with a **Brush Radius Toggle** (`◯ 1x` single hex vs. `◎ 7x` center hex + 6 neighbors):
+Selecting a brush (`1x` or `7x` radius) spends Selective Pressure (`⚡` mana) in standard mode:
 
-| Slot & Key | Tool Name (EN / ES) | Internal ID & Sub-Mode | Cost | Exact Biophysical Effect on Target Hexagons |
-| :---: | :--- | :--- | :---: | :--- |
-| **1** (<kbd>1</kbd>) | **Naturalist's Loupe**<br>*Lupa del Naturalista* | `inspect` | `0` | Selects settlements or hexes for inspection; left-drag pans the camera. |
-| **2** (<kbd>2</kbd>) | **Jungle Seeds**<br>*Semillas de Selva* | `set_biome`<br>`tropical_forest` | `⚡10` | Converts hexes to `tropical_forest` ($T=+0.45$, $H=0.85$, alt clamped to $[0.28, 0.65]$ and $\ge \text{sea\_level}+0.05$, restores terrestrial $K$ and $R$ minimums). |
-| **3** (<kbd>3</kbd>) | **Savanna Seeds**<br>*Semillas de Sabana* | `set_biome`<br>`savanna` | `⚡10` | Converts hexes to `savanna` ($T=+0.50$, $H=0.40$, alt $[0.28, 0.65]$, restores terrestrial $K$ and $R$ minimums). |
-| **4** (<kbd>4</kbd>) | **Desert Dust**<br>*Polvo del Desierto* | `set_biome`<br>`arid_steppe` | `⚡10` | Converts hexes to `arid_steppe` ($T=+0.65$, $H=0.20$, alt $[0.30, 0.70]$, induces arid cooperation/migration pressure). |
-| **5** (<kbd>5</kbd>) | **Boreal Crystal**<br>*Cristal Boreal* | `set_biome`<br>`tundra` | `⚡10` | Converts hexes to sub-zero `tundra` ($T=-0.55$, $H=0.35$, alt $[0.35, 0.74]$, imposes thermal metabolic stress). |
-| **6** (<kbd>6</kbd>) | **Peak Chisel**<br>*Cincel de Cumbre* | `adjust_altitude`<br>`raise` (`+0.18`) | `⚡15` | Raises hex `altitude` by $+0.18$ (clamped $[0, 1]$). Emerges `ocean` hexes ($\ge \text{sea\_level}$) into `coastal_shallows` ($<0.25$) or `savanna`; uplifts hexes $\ge 0.78$ into `high_mountain` ($T \le -0.30$). |
-| **7** (<kbd>7</kbd>) | **Valley Pickaxe**<br>*Pico de Valle* | `adjust_altitude`<br>`lower` (`-0.18`) | `⚡15` | Lowers hex `altitude` by $-0.18$. Submerges hexes below `sea_level` into `ocean` (displacing or drowning resident demes and revalidating walled unions); lowers `high_mountain` ($<0.78$) into passable `savanna` or `arid_steppe`. |
-| **8** (<kbd>8</kbd>) | **Golden Watering Can**<br>*Regadera Dorada* | `adjust_carrying_capacity`<br>`enrich` (`+25%`) | `⚡10` | Multiplies hex carrying capacity $K$ by $\times 1.25$ (up to $K_{\max}$) and boosts current biomass $R$ by $\ge +25\%$. |
-| **9** (<kbd>9</kbd>) | **Drought Sickle**<br>*Hoz de Sequía* | `adjust_carrying_capacity`<br>`deplete` (`-25%`) | `⚡10` | Multiplies hex carrying capacity $K$ and current biomass $R$ by $\times 0.75$ (clamped $\ge 10.0$). |
-| **10** (<kbd>0</kbd>) | **Tidal Conch**<br>*Caracola de Mareas* | `sea_level` + Sub-Bar | `⚡25` / `⚡10` | Opens the **Tidal Sub-Options Bar**: adjust global `sea_level` by **$+5\%$ (`+0.05`)** or **$-5\%$ (`-0.05`)** (`⚡25`, clamped $[0.0, 0.50]$), or equip brush sub-modes for `coastal_shallows`, `ocean`, and `high_mountain` (`⚡10`). |
+| Key | Tool Slot | Effect & Cost (`EvoTurnEngine`) |
+| :---: | :--- | :--- |
+| **`1`** | `inspect` | Inspect hex cells and settlements without spending mana (`⚡0`). Allows left-drag camera panning. |
+| **`2`–`5`** | `set_biome` | Paint `tropical_forest`, `savanna`, `arid_steppe`, or `tundra` (`high_mountain`, `coastal_shallows`, `ocean` via sub-bar) (`⚡10`). Resets tile to healthy (`K = 90% Kmax`, `R = 85% K`) and clamps altitude to biome bounds & `>= sea_level + 0.02`. |
+| **`6`** | `adjust_altitude` (Raise) | Raise tile elevation by **`+0.18`** (`⚡15`), creating ridges or raising reefs out of the sea. |
+| **`7`** | `adjust_altitude` (Lower) | Lower tile elevation by **`-0.18`** (`⚡15`), carving valley passes or flooding coastal land. |
+| **`8`** | `adjust_carrying_capacity` (Enrich) | Enrich local carrying capacity $K$ by **`+25%`** (`⚡10`). |
+| **`9`** | `adjust_carrying_capacity` (Deplete) | Deplete local carrying capacity $K$ by **`-25%`** (`⚡10`). |
+| **`0`** | `sea_level` | Reveals contextual `+5%` / `-5%` global `sea_level` adjustment buttons (`±0.05`, `⚡25`). |
+
+### Complete Keyboard & Mouse Reference
+
+- **Movement**: `W`/`A`/`S`/`D`, Arrow keys, Middle-drag, or Left-drag in `Inspect` mode (`MAX_PAN_RADIUS = 3800.0`).
+- **Pitch Tilt**: Right-drag, `Shift`/`Alt + Left-drag` (`28°`–`75°`, default `48°`), or `R` (`+8°`).
+- **Zoom**: Mouse wheel toward cursor or `+` / `-` (`0.12×`–`3.00×`, default `0.82×`).
+- **View Framing**: `F` fits full map (`6235.38 × 4178.0` world span); `Home` resets pan (`-175, 26`), zoom (`0.82`), and pitch (`48°`).
+- **Flow & Lenses**: `Space` plays/pauses; `Tab` cycles all 5 map lenses; `Escape` closes active modals or returns active brush to `Inspect`.
