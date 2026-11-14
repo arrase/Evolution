@@ -131,6 +131,7 @@ func _process(delta: float) -> void:
 
 	if active_lens != _last_active_lens:
 		_last_active_lens = active_lens
+		_dirty = true
 		_overlay_dirty = true
 
 	if _dirty:
@@ -247,6 +248,9 @@ func _update_ocean_shader_season() -> void:
 	var is_wet := _last_season == "wet_warm"
 	_ocean_shader_mat.set_shader_parameter("deep_color", Vector4(0.055, 0.20, 0.32, 1.0) if is_wet else Vector4(0.043, 0.157, 0.251, 1.0))
 	_ocean_shader_mat.set_shader_parameter("mid_color", Vector4(0.095, 0.34, 0.51, 1.0) if is_wet else Vector4(0.075, 0.27, 0.42, 1.0))
+	if active_lens == "biome":
+		_terrain_layer.modulate = Color(1.03, 0.99, 0.94, 1.0) if is_wet else Color(0.90, 0.95, 1.03, 1.0)
+	_anim_layer.queue_redraw()
 
 
 func refresh_village_decisions() -> void:
@@ -293,7 +297,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				if mb.position.distance_to(_press_pos) < 10.0 and active_tool == "inspect":
 					var hit_deme := _pick_deme_at(mb.position)
 					if not hit_deme.is_empty():
-						deme_clicked.emit(str(hit_deme["deme_id"]), str(hit_deme["hex_id"]))
+						var hit_deme_id := str(hit_deme.get("deme_id", ""))
+						var hit_hex_id := str(hit_deme.get("hex_id", ""))
+						if hit_deme_id != "":
+							if _is_edge_ping_entry(hit_deme, hit_hex_id):
+								_focus_camera_on_hex(hit_hex_id)
+							deme_clicked.emit(hit_deme_id, hit_hex_id)
+						elif hit_hex_id != "":
+							_focus_camera_on_hex(hit_hex_id)
+							hex_clicked.emit(hit_hex_id, MOUSE_BUTTON_LEFT)
 					else:
 						var hit_hex := _pick_hex_at(mb.position)
 						if hit_hex != "":
@@ -439,13 +451,14 @@ func _layout_columns() -> void:
 			if column.get_index() != i:
 				_terrain_layer.move_child(column, i)
 
-	_terrain_layer.modulate = Color(0.94, 0.96, 0.99, 1.0) if (active_lens == "biome" and world_state.season == "dry_cold") else Color.WHITE
 	if active_lens == "biome":
+		_terrain_layer.modulate = Color(0.90, 0.95, 1.03, 1.0) if world_state.season == "dry_cold" else Color(1.03, 0.99, 0.94, 1.0)
 		_anim_layer.modulate = Color.WHITE
 		_network_layer.modulate = Color.WHITE
 	else:
-		_anim_layer.modulate = Color(1.0, 1.0, 1.0, 0.42)
-		_network_layer.modulate = Color(1.0, 1.0, 1.0, 0.35)
+		_terrain_layer.modulate = Color.WHITE
+		_anim_layer.modulate = Color(1.0, 1.0, 1.0, 0.94)
+		_network_layer.modulate = Color(1.0, 1.0, 1.0, 0.90)
 
 	for i in range(_sorted_hex_ids.size()):
 		var hex_id := _sorted_hex_ids[i]
@@ -610,6 +623,27 @@ func _draw_animated() -> void:
 				_anim_layer.draw_rect(Rect2(v_pos.x - beam_w * 0.5, v_pos.y - 180.0, beam_w, 180.0), beam_col, true)
 
 	EvoPropFloraRenderer.draw_props(self)
+	if world_state == null or _villages.is_empty():
+		return
+
+	var season_gain := 1.0 if world_state.season == "dry_cold" else 0.52
+	var lens_gain := 1.0 if active_lens == "biome" else 0.40
+	for village in _villages:
+		var v_pos: Vector2 = village["pos"]
+		if not _visible_world_rect.has_point(v_pos):
+			continue
+		var tier := int(village["tier"])
+		var phase := v_pos.x * 0.037 + v_pos.y * 0.053
+		var flicker := 1.0 + 0.11 * sin(_anim_time * 6.7 + phase) + 0.06 * sin(_anim_time * 13.3 + phase * 1.7)
+		var dim_gain := 0.35 if bool(village["is_dimmed"]) else 1.0
+		var intensity := season_gain * lens_gain * dim_gain * flicker
+		var base_r := (88.0 + float(tier) * 14.0) * (1.0 + (flicker - 1.0) * 0.22)
+		var glow_center := v_pos + Vector2(0.0, -4.0)
+		var hearth_center := v_pos + (Vector2(0.0, 20.0) if tier >= 4 else Vector2(0.0, 2.0))
+		_anim_layer.draw_circle(glow_center, base_r, Color(1.0, 0.60, 0.16, 0.030 * intensity))
+		_anim_layer.draw_circle(glow_center, base_r * 0.68, Color(1.0, 0.69, 0.24, 0.036 * intensity))
+		_anim_layer.draw_circle(glow_center, base_r * 0.42, Color(1.0, 0.78, 0.34, 0.044 * intensity))
+		_anim_layer.draw_circle(hearth_center, 26.0 * (0.94 + 0.06 * flicker), Color(1.0, 0.88, 0.48, 0.052 * intensity))
 
 
 func _draw_overlay() -> void:
@@ -644,6 +678,27 @@ func _pick_deme_at(screen_pos: Vector2) -> Dictionary:
 		if (entry["rect"] as Rect2).has_point(screen_pos):
 			return entry
 	return {}
+
+
+func _is_edge_ping_entry(entry: Dictionary, hex_id: String) -> bool:
+	if entry.has("is_edge_ping") and bool(entry["is_edge_ping"]):
+		return true
+	if hex_id == "" or not _hex_centers.has(hex_id):
+		return false
+	var vp_size := get_viewport_rect().size if is_inside_tree() else Vector2(1600.0, 960.0)
+	var safe_rect := Rect2(Vector2.ZERO, vp_size).grow(-36.0)
+	var screen_hex_pos := _world_layer.transform * (_hex_centers[hex_id] as Vector2)
+	if safe_rect.has_point(screen_hex_pos):
+		return false
+	return is_equal_approx((entry["rect"] as Rect2).size.y, 30.0) or not Rect2(Vector2.ZERO, vp_size).grow(64.0).has_point(screen_hex_pos)
+
+
+func _focus_camera_on_hex(hex_id: String) -> void:
+	if camera == null or world_state == null or not world_state.cells.has(hex_id):
+		return
+	var cell: EvoTypes.HexCell = world_state.cells[hex_id]
+	var focus_alt := maxf(cell.altitude, world_state.sea_level) if cell.biome == "ocean" else cell.altitude
+	camera.focus_on_hex(cell.q, cell.r, focus_alt)
 
 
 func _pick_hex_at(screen_pos: Vector2) -> String:

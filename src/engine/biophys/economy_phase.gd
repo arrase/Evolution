@@ -56,6 +56,7 @@ static func harvest(state: EvoTypes.WorldState, lang: String) -> Dictionary:
 			EvoSettlementPhase.push_flow(state, deme, other, "exchange", 0.45)
 			EvoRelations.adjust_reputation(deme, 0.02)
 			EvoRelations.remember(other, state, "%s traded with you (+trust)." % deme.name)
+		EvoTypes.push_event(state, "trade", deme.hex_id, other.hex_id, deme.id, other.id, gain, 0)
 	for did in trade_gain_by_deme.keys():
 		income_by_deme[did] = float(income_by_deme[did]) + float(trade_gain_by_deme[did])
 

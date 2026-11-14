@@ -56,11 +56,11 @@ static func get_theme() -> Theme:
 static func build_theme() -> Theme:
 	var theme := Theme.new()
 
-	var btn_normal := make_button_style(COLOR_BTN_NORMAL, COLOR_WOOD_BG, 2)
-	var btn_hover := make_button_style(COLOR_BTN_HOVER, COLOR_GOLD_BEVEL, 2)
-	var btn_pressed := make_button_style(COLOR_BTN_PRESSED, COLOR_WOOD_DARK, 2)
-	var btn_disabled := make_button_style(Color("#e2d5be", 0.65), Color("#9e8468", 0.65), 1)
-	var btn_focus := make_button_style(COLOR_BTN_ACTIVE_BG, COLOR_BTN_ACTIVE_BORDER, 2)
+	var btn_normal := make_button_style(COLOR_BTN_NORMAL, COLOR_WOOD_BG, 1, 5, 2)
+	var btn_hover := make_button_style(COLOR_BTN_HOVER, COLOR_GOLD_BEVEL, 1, 5, 2)
+	var btn_pressed := make_button_style(COLOR_BTN_PRESSED, COLOR_WOOD_DARK, 1, 5, 2)
+	var btn_disabled := make_button_style(Color("#e2d5be", 0.65), Color("#9e8468", 0.65), 1, 5, 2)
+	var btn_focus := make_button_style(COLOR_BTN_ACTIVE_BG, COLOR_BTN_ACTIVE_BORDER, 2, 5, 2)
 
 	theme.set_stylebox("normal", "Button", btn_normal)
 	theme.set_stylebox("hover", "Button", btn_hover)
@@ -73,7 +73,7 @@ static func build_theme() -> Theme:
 	theme.set_color("font_pressed_color", "Button", COLOR_WOOD_DARK)
 	theme.set_color("font_focus_color", "Button", COLOR_INK)
 	theme.set_color("font_disabled_color", "Button", COLOR_MUTED)
-	theme.set_font_size("font_size", "Button", 12)
+	theme.set_font_size("font_size", "Button", 11)
 
 	theme.set_stylebox("normal", "OptionButton", btn_normal)
 	theme.set_stylebox("hover", "OptionButton", btn_hover)
@@ -82,27 +82,27 @@ static func build_theme() -> Theme:
 	theme.set_color("font_color", "OptionButton", COLOR_INK)
 	theme.set_color("font_hover_color", "OptionButton", COLOR_INK)
 	theme.set_color("font_pressed_color", "OptionButton", COLOR_WOOD_DARK)
-	theme.set_font_size("font_size", "OptionButton", 12)
+	theme.set_font_size("font_size", "OptionButton", 11)
 
 	theme.set_color("font_color", "CheckBox", COLOR_INK)
 	theme.set_color("font_hover_color", "CheckBox", COLOR_INK)
 	theme.set_color("font_pressed_color", "CheckBox", COLOR_WOOD_DARK)
-	theme.set_font_size("font_size", "CheckBox", 12)
+	theme.set_font_size("font_size", "CheckBox", 11)
 
 	theme.set_color("font_color", "Label", COLOR_INK)
-	theme.set_font_size("font_size", "Label", 12)
+	theme.set_font_size("font_size", "Label", 11)
 
-	var tooltip_box := make_parchment_card(Color("#fff9eb"), COLOR_GOLD_BEVEL, 8)
-	tooltip_box.set_border_width_all(2)
+	var tooltip_box := make_parchment_card(Color("#fff9eb", 0.96), COLOR_GOLD_BEVEL, 6)
+	tooltip_box.set_border_width_all(1)
 	theme.set_stylebox("panel", "TooltipPanel", tooltip_box)
 	theme.set_color("font_color", "TooltipLabel", COLOR_WOOD_DARK)
-	theme.set_font_size("font_size", "TooltipLabel", 12)
+	theme.set_font_size("font_size", "TooltipLabel", 11)
 
 	theme.set_stylebox("panel", "PanelContainer", make_parchment_panel())
-	theme.set_stylebox("panel", "PopupMenu", make_wood_frame_box())
+	theme.set_stylebox("panel", "PopupMenu", make_wood_frame_box(5))
 	theme.set_color("font_color", "PopupMenu", COLOR_CREAM_TEXT)
 	theme.set_color("font_hover_color", "PopupMenu", COLOR_GOLD_TEXT)
-	theme.set_stylebox("hover", "PopupMenu", make_button_style(COLOR_WOOD_LIGHT, COLOR_GOLD_BEVEL, 1))
+	theme.set_stylebox("hover", "PopupMenu", make_button_style(COLOR_WOOD_LIGHT, COLOR_GOLD_BEVEL, 1, 5, 2))
 
 	var input_normal := make_parchment_card(Color("#fff9eb"), COLOR_PARCHMENT_BORDER)
 	var input_focus := make_parchment_card(Color("#fffdf7"), COLOR_GOLD_BRIGHT)
@@ -141,18 +141,18 @@ static func build_theme() -> Theme:
 	return theme
 
 
-static func make_wood_frame_box(padding: int = 8) -> StyleBoxFlat:
+static func make_wood_frame_box(padding: int = 5) -> StyleBoxFlat:
 	var key := "wood_frame:%d" % padding
 	if _stylebox_cache.has(key):
 		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
-	box.bg_color = COLOR_WOOD_BG
+	box.bg_color = Color(COLOR_WOOD_BG, 0.90)
 	box.border_color = COLOR_GOLD_BEVEL
-	box.set_border_width_all(3)
-	box.set_corner_radius_all(6)
-	box.shadow_color = Color(0.06, 0.03, 0.01, 0.52)
-	box.shadow_size = 7
-	box.shadow_offset = Vector2(0, 3)
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(5)
+	box.shadow_color = Color(0.06, 0.03, 0.01, 0.36)
+	box.shadow_size = 4
+	box.shadow_offset = Vector2(0, 2)
 	box.content_margin_left = padding
 	box.content_margin_right = padding
 	box.content_margin_top = padding
@@ -161,15 +161,15 @@ static func make_wood_frame_box(padding: int = 8) -> StyleBoxFlat:
 	return box
 
 
-static func make_wood_header_box(padding_h: int = 10, padding_v: int = 6) -> StyleBoxFlat:
+static func make_wood_header_box(padding_h: int = 6, padding_v: int = 4) -> StyleBoxFlat:
 	var key := "wood_header:%d:%d" % [padding_h, padding_v]
 	if _stylebox_cache.has(key):
 		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
-	box.bg_color = COLOR_WOOD_DARK
+	box.bg_color = Color(COLOR_WOOD_DARK, 0.92)
 	box.border_color = COLOR_GOLD_BEVEL
-	box.set_border_width_all(2)
-	box.set_corner_radius_all(5)
+	box.set_border_width_all(1)
+	box.set_corner_radius_all(4)
 	box.content_margin_left = padding_h
 	box.content_margin_right = padding_h
 	box.content_margin_top = padding_v
@@ -178,18 +178,18 @@ static func make_wood_header_box(padding_h: int = 10, padding_v: int = 6) -> Sty
 	return box
 
 
-static func make_hotbar_frame_box(padding_h: int = 10, padding_v: int = 8) -> StyleBoxFlat:
+static func make_hotbar_frame_box(padding_h: int = 6, padding_v: int = 4) -> StyleBoxFlat:
 	var key := "hotbar_frame:%d:%d" % [padding_h, padding_v]
 	if _stylebox_cache.has(key):
 		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
-	box.bg_color = COLOR_WOOD_PLANK
+	box.bg_color = Color(COLOR_WOOD_PLANK, 0.90)
 	box.border_color = COLOR_GOLD_BEVEL
-	box.set_border_width_all(3)
-	box.set_corner_radius_all(7)
-	box.shadow_color = Color(0.05, 0.02, 0.01, 0.58)
-	box.shadow_size = 8
-	box.shadow_offset = Vector2(0, 4)
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(5)
+	box.shadow_color = Color(0.05, 0.02, 0.01, 0.40)
+	box.shadow_size = 4
+	box.shadow_offset = Vector2(0, 2)
 	box.content_margin_left = padding_h
 	box.content_margin_right = padding_h
 	box.content_margin_top = padding_v
@@ -204,24 +204,24 @@ static func make_hotbar_slot_style(is_active: bool, is_hover: bool = false) -> S
 		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
 	if is_active:
-		box.bg_color = COLOR_SLOT_ACTIVE
+		box.bg_color = Color(COLOR_SLOT_ACTIVE, 0.96)
 		box.border_color = Color("#dc2626")
-		box.set_border_width_all(3)
-		box.shadow_color = Color(0.96, 0.62, 0.04, 0.45)
-		box.shadow_size = 4
+		box.set_border_width_all(2)
+		box.shadow_color = Color(0.96, 0.62, 0.04, 0.40)
+		box.shadow_size = 3
 	elif is_hover:
-		box.bg_color = COLOR_SLOT_HOVER
+		box.bg_color = Color(COLOR_SLOT_HOVER, 0.94)
 		box.border_color = COLOR_GOLD_BRIGHT
-		box.set_border_width_all(2)
+		box.set_border_width_all(1)
 	else:
-		box.bg_color = COLOR_SLOT_BG
+		box.bg_color = Color(COLOR_SLOT_BG, 0.90)
 		box.border_color = COLOR_SLOT_BORDER
-		box.set_border_width_all(2)
+		box.set_border_width_all(1)
 	box.set_corner_radius_all(4)
-	box.content_margin_left = 3
-	box.content_margin_right = 3
-	box.content_margin_top = 3
-	box.content_margin_bottom = 3
+	box.content_margin_left = 2
+	box.content_margin_right = 2
+	box.content_margin_top = 2
+	box.content_margin_bottom = 2
 	_stylebox_cache[key] = box
 	return box
 
@@ -233,18 +233,19 @@ static func apply_hotbar_slot_style(btn: Button, is_active: bool) -> void:
 	btn.add_theme_stylebox_override("focus", make_hotbar_slot_style(is_active, false))
 
 
-static func make_parchment_panel(padding: int = 10, alt: bool = false) -> StyleBoxFlat:
+static func make_parchment_panel(padding: int = 6, alt: bool = false) -> StyleBoxFlat:
 	var key := "parchment_panel:%d:%s" % [padding, str(alt)]
 	if _stylebox_cache.has(key):
 		return _stylebox_cache[key]
+	var base_col := COLOR_PARCHMENT_ALT if alt else COLOR_PARCHMENT
 	var box := StyleBoxFlat.new()
-	box.bg_color = COLOR_PARCHMENT_ALT if alt else COLOR_PARCHMENT
+	box.bg_color = Color(base_col, 0.90)
 	box.border_color = COLOR_PARCHMENT_BORDER
-	box.set_border_width_all(2)
-	box.set_corner_radius_all(5)
-	box.shadow_color = Color(0.18, 0.09, 0.03, 0.18)
-	box.shadow_size = 3
-	box.shadow_offset = Vector2(0, 2)
+	box.set_border_width_all(1)
+	box.set_corner_radius_all(4)
+	box.shadow_color = Color(0.18, 0.09, 0.03, 0.14)
+	box.shadow_size = 2
+	box.shadow_offset = Vector2(0, 1)
 	box.content_margin_left = padding
 	box.content_margin_right = padding
 	box.content_margin_top = padding
@@ -253,16 +254,16 @@ static func make_parchment_panel(padding: int = 10, alt: bool = false) -> StyleB
 	return box
 
 
-static func make_parchment_card(bg: Color = COLOR_PARCHMENT_ALT, border: Color = COLOR_PARCHMENT_BORDER, padding: int = 8) -> StyleBoxFlat:
+static func make_parchment_card(bg: Color = COLOR_PARCHMENT_ALT, border: Color = COLOR_PARCHMENT_BORDER, padding: int = 5) -> StyleBoxFlat:
 	var key := "parchment_card:%s:%s:%d" % [bg.to_html(), border.to_html(), padding]
 	if _stylebox_cache.has(key):
 		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
-	box.bg_color = bg
+	box.bg_color = Color(bg, 0.91) if is_equal_approx(bg.a, 1.0) else bg
 	box.border_color = border
 	box.set_border_width_all(1)
 	box.set_corner_radius_all(4)
-	box.shadow_color = Color(0.18, 0.09, 0.03, 0.10)
+	box.shadow_color = Color(0.18, 0.09, 0.03, 0.08)
 	box.shadow_size = 1
 	box.shadow_offset = Vector2(0, 1)
 	box.content_margin_left = padding
@@ -273,12 +274,12 @@ static func make_parchment_card(bg: Color = COLOR_PARCHMENT_ALT, border: Color =
 	return box
 
 
-static func make_button_style(bg: Color, border: Color, border_width: int = 2, padding_h: int = 7, padding_v: int = 4) -> StyleBoxFlat:
+static func make_button_style(bg: Color, border: Color, border_width: int = 1, padding_h: int = 5, padding_v: int = 2) -> StyleBoxFlat:
 	var key := "button_style:%s:%s:%d:%d:%d" % [bg.to_html(), border.to_html(), border_width, padding_h, padding_v]
 	if _stylebox_cache.has(key):
 		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
-	box.bg_color = bg
+	box.bg_color = Color(bg, 0.92) if is_equal_approx(bg.a, 1.0) else bg
 	box.border_color = border
 	box.set_border_width_all(border_width)
 	box.set_corner_radius_all(4)
@@ -290,7 +291,7 @@ static func make_button_style(bg: Color, border: Color, border_width: int = 2, p
 	return box
 
 
-static func make_active_button_style(padding_h: int = 7, padding_v: int = 4) -> StyleBoxFlat:
+static func make_active_button_style(padding_h: int = 5, padding_v: int = 2) -> StyleBoxFlat:
 	var key := "active_button_style:%d:%d" % [padding_h, padding_v]
 	if _stylebox_cache.has(key):
 		return _stylebox_cache[key]
@@ -304,10 +305,12 @@ static func apply_button_active(btn: Button, is_active: bool) -> void:
 		var active_box := make_active_button_style()
 		btn.add_theme_stylebox_override("normal", active_box)
 		btn.add_theme_stylebox_override("hover", active_box)
+		btn.add_theme_stylebox_override("pressed", active_box)
 		btn.add_theme_color_override("font_color", COLOR_WOOD_DARK)
 	else:
 		btn.remove_theme_stylebox_override("normal")
 		btn.remove_theme_stylebox_override("hover")
+		btn.remove_theme_stylebox_override("pressed")
 		btn.remove_theme_color_override("font_color")
 
 
@@ -316,21 +319,21 @@ static func make_badge_style(bg_color: Color, border_color: Color = Color.TRANSP
 	if _stylebox_cache.has(key):
 		return _stylebox_cache[key]
 	var box := StyleBoxFlat.new()
-	box.bg_color = bg_color
+	box.bg_color = Color(bg_color, 0.90) if is_equal_approx(bg_color.a, 1.0) else bg_color
 	box.border_color = bg_color.darkened(0.28) if border_color == Color.TRANSPARENT else border_color
 	box.set_border_width_all(1)
 	box.set_corner_radius_all(4)
-	box.content_margin_left = 6
-	box.content_margin_right = 6
-	box.content_margin_top = 2
-	box.content_margin_bottom = 2
+	box.content_margin_left = 5
+	box.content_margin_right = 5
+	box.content_margin_top = 1
+	box.content_margin_bottom = 1
 	_stylebox_cache[key] = box
 	return box
 
 
 static func make_progress_bg() -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()
-	box.bg_color = Color("#d8be94")
+	box.bg_color = Color("#d8be94", 0.90)
 	box.border_color = Color("#7c4d25")
 	box.set_border_width_all(1)
 	box.set_corner_radius_all(3)
@@ -353,15 +356,15 @@ static func style_progress_bar(bar: ProgressBar, fill_color: Color) -> void:
 
 static func get_event_type_color(event_type: String) -> Color:
 	match event_type:
-		"war":
+		"war", "conflict":
 			return Color("ef4444")
-		"war_repelled":
+		"war_repelled", "raid_repelled":
 			return Color("#ea580c")
 		"raid":
 			return Color("f97316")
 		"pillage":
 			return Color("#ea580c")
-		"pact":
+		"pact", "diplomacy":
 			return Color("10b981")
 		"betrayal":
 			return Color("be123c")
@@ -369,7 +372,7 @@ static func get_event_type_color(event_type: String) -> Color:
 			return Color("#be123c")
 		"fortify", "defense":
 			return Color("#3b82f6")
-		"merge", "walled_union", "absorption":
+		"merge", "walled_union", "absorption", "union", "milestone":
 			return Color("#eab308")
 		"colonize":
 			return Color("#0ea5e9")
@@ -377,13 +380,13 @@ static func get_event_type_color(event_type: String) -> Color:
 			return Color("#f59e0b")
 		"siege":
 			return Color("#dc2626")
-		"baldwin_trait":
+		"baldwin_trait", "baldwin":
 			return Color("#0d9488")
 		"cultural_innovation":
 			return Color("#7e22ce")
-		"allopatric_speciation":
+		"allopatric_speciation", "speciation":
 			return Color("#2563eb")
-		"symbiosis":
+		"symbiosis", "economy", "harvest":
 			return Color("#15803d")
 		"tragedy_of_commons", "famine":
 			return Color("#d97706")
@@ -391,7 +394,7 @@ static func get_event_type_color(event_type: String) -> Color:
 			return Color("#c2410c")
 		"extinction":
 			return Color("#b91c1c")
-		"epidemic":
+		"epidemic", "plague":
 			return Color("#65a30d")
 		"epidemic_spread":
 			return Color("#84cc16")
@@ -414,6 +417,8 @@ static func get_event_type_label(event_type: String, lang: String = "es") -> Str
 			return EvoI18n.t(lang, "event_war")
 		"war_repelled":
 			return tr_text(lang, "Guerra Repelida", "War Repelled")
+		"raid_repelled":
+			return tr_text(lang, "Saqueo Repelido", "Raid Repelled")
 		"raid":
 			return EvoI18n.t(lang, "event_raid")
 		"pillage":
@@ -436,11 +441,11 @@ static func get_event_type_label(event_type: String, lang: String = "es") -> Str
 			return EvoI18n.t(lang, "event_tribute")
 		"siege":
 			return EvoI18n.t(lang, "event_siege")
-		"baldwin_trait":
+		"baldwin_trait", "baldwin":
 			return tr_text(lang, "Efecto Baldwin", "Baldwin Effect")
 		"cultural_innovation":
 			return tr_text(lang, "Innovación Cultural", "Cultural Innovation")
-		"allopatric_speciation":
+		"allopatric_speciation", "speciation":
 			return tr_text(lang, "Especiación Alopátrica", "Allopatric Speciation")
 		"symbiosis":
 			return tr_text(lang, "Simbiosis", "Symbiosis")
@@ -452,13 +457,13 @@ static func get_event_type_label(event_type: String, lang: String = "es") -> Str
 			return tr_text(lang, "Pérdida Cultural", "Cultural Loss")
 		"extinction":
 			return tr_text(lang, "Extinción", "Extinction")
-		"epidemic":
+		"epidemic", "plague":
 			return tr_text(lang, "Epidemia", "Epidemic")
 		"epidemic_spread":
 			return tr_text(lang, "Contagio Epidémico", "Epidemic Contagion")
 		"epidemic_recovered":
 			return tr_text(lang, "Inmunidad Adquirida", "Immunity Acquired")
-		"walled_union":
+		"walled_union", "union":
 			return tr_text(lang, "Unión Amurallada", "Walled Union")
 		"total_extinction":
 			return EvoI18n.t(lang, "chronicle.type.total_extinction")

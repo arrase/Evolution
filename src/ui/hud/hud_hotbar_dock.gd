@@ -23,37 +23,37 @@ static func build_bottom_hotbar(hud: Control) -> void:
 	hud._sub_options_panel.anchor_right = 0.5
 	hud._sub_options_panel.anchor_top = 1.0
 	hud._sub_options_panel.anchor_bottom = 1.0
-	hud._sub_options_panel.offset_left = -280
-	hud._sub_options_panel.offset_right = 280
-	hud._sub_options_panel.offset_top = -112
-	hud._sub_options_panel.offset_bottom = -76
+	hud._sub_options_panel.offset_left = -464
+	hud._sub_options_panel.offset_right = 8
+	hud._sub_options_panel.offset_top = -88
+	hud._sub_options_panel.offset_bottom = -54
 	hud._sub_options_panel.z_index = 16
-	hud._sub_options_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(5))
+	hud._sub_options_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(4))
 	hud.add_child(hud._sub_options_panel)
 
 	hud._sub_options_flow = HFlowContainer.new()
 	hud._sub_options_flow.alignment = FlowContainer.ALIGNMENT_CENTER
-	hud._sub_options_flow.add_theme_constant_override("h_separation", 6)
-	hud._sub_options_flow.add_theme_constant_override("v_separation", 4)
+	hud._sub_options_flow.add_theme_constant_override("h_separation", 4)
+	hud._sub_options_flow.add_theme_constant_override("v_separation", 3)
 	hud._sub_options_panel.add_child(hud._sub_options_flow)
 
-	# 2. 10-Slot Inventory Hotbar + Brush Radius Switcher
+	# 2. Compact 10-Slot Inventory Hotbar + Brush Radius Switcher
 	var hotbar_frame := PanelContainer.new()
 	hotbar_frame.anchor_left = 0.5
 	hotbar_frame.anchor_right = 0.5
 	hotbar_frame.anchor_top = 1.0
 	hotbar_frame.anchor_bottom = 1.0
-	hotbar_frame.offset_left = -336
-	hotbar_frame.offset_right = 336
-	hotbar_frame.offset_top = -70
+	hotbar_frame.offset_left = -464
+	hotbar_frame.offset_right = 8
+	hotbar_frame.offset_top = -50
 	hotbar_frame.offset_bottom = -6
 	hotbar_frame.z_index = 15
-	hotbar_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_hotbar_frame_box(8, 5))
+	hotbar_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_hotbar_frame_box(5, 3))
 	hud.add_child(hotbar_frame)
 
 	var hb_row := HBoxContainer.new()
 	hb_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	hb_row.add_theme_constant_override("separation", 4)
+	hb_row.add_theme_constant_override("separation", 3)
 	hotbar_frame.add_child(hb_row)
 
 	hud._hotbar_slot_buttons.clear()
@@ -65,7 +65,7 @@ static func build_bottom_hotbar(hud: Control) -> void:
 		var tool_id: String = str(slot_def["tool"])
 
 		var slot_btn := Button.new()
-		slot_btn.custom_minimum_size = Vector2(54, 54)
+		slot_btn.custom_minimum_size = Vector2(38, 38)
 		slot_btn.pressed.connect(hud._on_hotbar_slot_pressed.bind(s_idx))
 		hb_row.add_child(slot_btn)
 		hud._hotbar_slot_buttons.append(slot_btn)
@@ -73,7 +73,6 @@ static func build_bottom_hotbar(hud: Control) -> void:
 		if not hud._tool_buttons.has(tool_id):
 			hud._tool_buttons[tool_id] = slot_btn
 
-		# Slot internal overlay: Key number (top-left), Pixel Icon (center), Cost (bottom-right)
 		var slot_overlay := Control.new()
 		slot_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		slot_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -81,8 +80,8 @@ static func build_bottom_hotbar(hud: Control) -> void:
 
 		var key_lbl := Label.new()
 		key_lbl.text = key_str
-		key_lbl.position = Vector2(4, 1)
-		key_lbl.add_theme_font_size_override("font_size", 10)
+		key_lbl.position = Vector2(3, 0)
+		key_lbl.add_theme_font_size_override("font_size", 9)
 		key_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 		key_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot_overlay.add_child(key_lbl)
@@ -92,71 +91,113 @@ static func build_bottom_hotbar(hud: Control) -> void:
 		icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		icon_rect.position = Vector2(13, 11)
-		icon_rect.size = Vector2(28, 28)
+		icon_rect.position = Vector2(9, 7)
+		icon_rect.size = Vector2(20, 20)
 		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot_overlay.add_child(icon_rect)
 
 		if cost_val > 0:
 			var cost_lbl := Label.new()
 			cost_lbl.text = "⚡%d" % cost_val
-			cost_lbl.position = Vector2(22, 37)
-			cost_lbl.size = Vector2(29, 14)
+			cost_lbl.position = Vector2(11, 25)
+			cost_lbl.size = Vector2(25, 12)
 			cost_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-			cost_lbl.add_theme_font_size_override("font_size", 9)
+			cost_lbl.add_theme_font_size_override("font_size", 8)
 			cost_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 			cost_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			slot_overlay.add_child(cost_lbl)
 
-	# Separator & Brush Size Switcher inside the right end of the hotbar
 	var v_sep := VSeparator.new()
 	hb_row.add_child(v_sep)
 
 	var brush_vbox := VBoxContainer.new()
 	brush_vbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	brush_vbox.add_theme_constant_override("separation", 3)
+	brush_vbox.add_theme_constant_override("separation", 2)
 	hb_row.add_child(brush_vbox)
 
 	hud._radius_1_btn = Button.new()
-	hud._radius_1_btn.custom_minimum_size = Vector2(58, 25)
-	hud._radius_1_btn.add_theme_font_size_override("font_size", 11)
+	hud._radius_1_btn.custom_minimum_size = Vector2(46, 18)
+	hud._radius_1_btn.add_theme_font_size_override("font_size", 9)
 	hud._radius_1_btn.pressed.connect(hud._on_brush_radius_pressed.bind(1))
 	brush_vbox.add_child(hud._radius_1_btn)
 
 	hud._radius_2_btn = Button.new()
-	hud._radius_2_btn.custom_minimum_size = Vector2(58, 25)
-	hud._radius_2_btn.add_theme_font_size_override("font_size", 11)
+	hud._radius_2_btn.custom_minimum_size = Vector2(46, 18)
+	hud._radius_2_btn.add_theme_font_size_override("font_size", 9)
 	hud._radius_2_btn.pressed.connect(hud._on_brush_radius_pressed.bind(2))
 	brush_vbox.add_child(hud._radius_2_btn)
+
+	# 3. Compact Lens Dock + Fit Map + Legend Toggle paired beside the hotbar
+	hud._lens_strip_panel = PanelContainer.new()
+	hud._lens_strip_panel.anchor_left = 0.5
+	hud._lens_strip_panel.anchor_right = 0.5
+	hud._lens_strip_panel.anchor_top = 1.0
+	hud._lens_strip_panel.anchor_bottom = 1.0
+	hud._lens_strip_panel.offset_left = 14
+	hud._lens_strip_panel.offset_right = 468
+	hud._lens_strip_panel.offset_top = -42
+	hud._lens_strip_panel.offset_bottom = -6
+	hud._lens_strip_panel.z_index = 15
+	hud._lens_strip_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_hotbar_frame_box(5, 3))
+	hud.add_child(hud._lens_strip_panel)
+
+	var lens_hbox := HBoxContainer.new()
+	lens_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	lens_hbox.add_theme_constant_override("separation", 3)
+	hud._lens_strip_panel.add_child(lens_hbox)
+
+	hud._lens_buttons.clear()
+	for l_id in ["biome", "food", "health", "diplomacy", "territory"]:
+		var l_btn := Button.new()
+		l_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		l_btn.add_theme_font_size_override("font_size", 10)
+		l_btn.pressed.connect(hud._on_lens_pressed.bind(l_id))
+		lens_hbox.add_child(l_btn)
+		hud._lens_buttons[l_id] = l_btn
+
+	var fit_map_btn := Button.new()
+	fit_map_btn.text = "Mapa"
+	fit_map_btn.tooltip_text = "Vista de mapa completo (Tecla F / 0)"
+	fit_map_btn.add_theme_font_size_override("font_size", 10)
+	fit_map_btn.pressed.connect(hud._on_cam_preset_pressed.bind("fit", 0.0))
+	lens_hbox.add_child(fit_map_btn)
+	hud.set_meta("_fit_map_btn", fit_map_btn)
+
+	hud._legend_toggle_btn = Button.new()
+	hud._legend_toggle_btn.custom_minimum_size = Vector2(28, 0)
+	hud._legend_toggle_btn.add_theme_font_size_override("font_size", 10)
+	hud._legend_toggle_btn.pressed.connect(hud._on_legend_toggle_pressed)
+	lens_hbox.add_child(hud._legend_toggle_btn)
 
 
 static func build_legend_panel(hud: Control) -> void:
 	hud._legend_panel = PanelContainer.new()
 	hud._legend_panel.visible = false
-	hud._legend_panel.anchor_left = 0.0
-	hud._legend_panel.anchor_right = 0.0
-	hud._legend_panel.anchor_top = 0.0
-	hud._legend_panel.anchor_bottom = 0.0
-	hud._legend_panel.offset_left = 454
-	hud._legend_panel.offset_right = 762
-	hud._legend_panel.offset_top = 76
-	hud._legend_panel.offset_bottom = 490
+	hud._legend_panel.anchor_left = 0.5
+	hud._legend_panel.anchor_right = 0.5
+	hud._legend_panel.anchor_top = 1.0
+	hud._legend_panel.anchor_bottom = 1.0
+	hud._legend_panel.offset_left = 184
+	hud._legend_panel.offset_right = 468
+	hud._legend_panel.offset_top = -274
+	hud._legend_panel.offset_bottom = -46
 	hud._legend_panel.z_index = 22
-	hud._legend_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
+	hud._legend_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(4))
 	hud.add_child(hud._legend_panel)
 
 	var inner := PanelContainer.new()
-	inner.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(8, false))
+	inner.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(5, false))
 	hud._legend_panel.add_child(inner)
 
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	inner.add_child(scroll)
 
 	hud._legend_vbox = VBoxContainer.new()
 	hud._legend_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hud._legend_vbox.add_theme_constant_override("separation", 4)
+	hud._legend_vbox.add_theme_constant_override("separation", 3)
 	scroll.add_child(hud._legend_vbox)
 
 
@@ -278,7 +319,7 @@ static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lan
 	if state != null and not state.strategies_catalog.is_empty():
 		var strat_header := Label.new()
 		strat_header.text = "⚔️ %s" % EvoI18n.t(lang, "legend_strategies")
-		strat_header.add_theme_font_size_override("font_size", 13)
+		strat_header.add_theme_font_size_override("font_size", 11)
 		strat_header.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 		hud._legend_vbox.add_child(strat_header)
 
@@ -310,11 +351,11 @@ static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lan
 					total_pop += d.population
 
 			var s_row := HBoxContainer.new()
-			s_row.add_theme_constant_override("separation", 6)
+			s_row.add_theme_constant_override("separation", 4)
 			hud._legend_vbox.add_child(s_row)
 
 			var s_sw := ColorRect.new()
-			s_sw.custom_minimum_size = Vector2(12, 12)
+			s_sw.custom_minimum_size = Vector2(10, 10)
 			s_sw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			s_sw.color = Color.from_string(strat.color, Color("#10B981"))
 			s_row.add_child(s_sw)
@@ -330,7 +371,9 @@ static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lan
 
 			var s_lbl := Label.new()
 			s_lbl.text = s_lbl_text
-			s_lbl.add_theme_font_size_override("font_size", 11)
+			s_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			s_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			s_lbl.add_theme_font_size_override("font_size", 10)
 			s_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 			s_row.add_child(s_lbl)
 
@@ -338,7 +381,7 @@ static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lan
 		hud._legend_vbox.add_child(sep)
 
 	var title := Label.new()
-	title.add_theme_font_size_override("font_size", 13)
+	title.add_theme_font_size_override("font_size", 11)
 	title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._legend_vbox.add_child(title)
 
@@ -398,18 +441,18 @@ static func refresh_legend_for_hud(hud: Control, state: EvoTypes.WorldState, lan
 
 static func _add_legend_row(vbox: VBoxContainer, color: Color, text: String, icon_key: String = "") -> void:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
+	row.add_theme_constant_override("separation", 4)
 	vbox.add_child(row)
 
 	var sw := ColorRect.new()
-	sw.custom_minimum_size = Vector2(12, 12)
+	sw.custom_minimum_size = Vector2(10, 10)
 	sw.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	sw.color = color
 	row.add_child(sw)
 
 	if icon_key != "":
 		var icon_rect := TextureRect.new()
-		icon_rect.custom_minimum_size = Vector2(14, 14)
+		icon_rect.custom_minimum_size = Vector2(12, 12)
 		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -420,6 +463,6 @@ static func _add_legend_row(vbox: VBoxContainer, color: Color, text: String, ico
 	lbl.text = text
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_font_size_override("font_size", 10)
 	lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_INK)
 	row.add_child(lbl)

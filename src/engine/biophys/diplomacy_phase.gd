@@ -53,7 +53,7 @@ static func resolve(state: EvoTypes.WorldState, lang: String, income_by_deme: Di
 				if EvoRelations.has_open_proposal(state, other.id, deme.id, "pact"):
 					_form_pact(deme, other, state, lang)
 			"demand_tribute":
-				_demand_tribute(deme, other, state)
+				_demand_tribute(deme, other, state, lang)
 			"pay_tribute":
 				if EvoRelations.has_open_proposal(state, other.id, deme.id, "tribute"):
 					_pay_tribute(deme, other, state, lang)
@@ -75,6 +75,7 @@ static func _aid(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: EvoTypes.Worl
 	EvoRelations.remember(deme, state, "You gave %d food in aid to %s%s." % [int(amount), other.name, EvoRelations.posture_tag(deme)])
 	EvoRelations.remember(other, state, "%s gave you %d food." % [deme.name, int(amount)])
 	EvoSettlementPhase.push_flow(state, deme, other, "cooperate", 0.6)
+	EvoTypes.push_event(state, "aid", deme.hex_id, other.hex_id, deme.id, other.id, amount, 0)
 	if rel.proposal_from == other.id and rel.proposal_kind == "pact":
 		_form_pact(deme, other, state, lang)
 
@@ -109,6 +110,10 @@ static func _offer(
 	EvoRelations.propose(state, deme, other, kind, 0.0)
 	deme.last_outcome = "You proposed %s to %s; they will answer next turn." % [label, other.name]
 	EvoRelations.remember(deme, state, "You proposed %s to %s%s." % [label, other.name, EvoRelations.posture_tag(deme)])
+	var ev_type := "offer_union" if kind == "union" else "offer_pact"
+	EvoTypes.push_event(state, ev_type, deme.hex_id, other.hex_id, deme.id, other.id, 0.0, 0)
+	var params := {"deme_a": deme.name, "deme_b": other.name, "hex_a": deme.hex_id, "hex_b": other.hex_id}
+	EvoSettlementPhase.chronicle(state, "chronicle-%s-%d-%s-%s" % [ev_type, state.generation, deme.id, other.id], "diplomacy", lang, "chronicle_" + ev_type, params, deme.hex_id, deme)
 
 
 static func _form_pact(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: EvoTypes.WorldState, lang: String) -> void:
@@ -123,7 +128,7 @@ static func _form_pact(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: EvoType
 	EvoSettlementPhase.chronicle(state, "chronicle-pact-%d-%s" % [state.generation, EvoTypes.make_pair_key(deme.id, other.id)], "pact", lang, "chronicle_pact", params, deme.hex_id, deme)
 
 
-static func _demand_tribute(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: EvoTypes.WorldState) -> void:
+static func _demand_tribute(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: EvoTypes.WorldState, lang: String) -> void:
 	var rel := EvoTypes.get_relation(state, deme.id, other.id)
 	if rel.pact_turns > 0 or rel.truce_turns > 0 or rel.proposal_from != "":
 		deme.last_outcome = "You cannot demand tribute from %s now." % other.name
@@ -133,6 +138,9 @@ static func _demand_tribute(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: Ev
 	deme.last_outcome = "You demanded %d food from %s; they answer next turn." % [int(amount), other.name]
 	EvoRelations.remember(deme, state, "You demanded %d food tribute from %s%s." % [int(amount), other.name, EvoRelations.posture_tag(deme)])
 	EvoRelations.remember(other, state, "%s demanded %d food tribute from you." % [deme.name, int(amount)])
+	EvoTypes.push_event(state, "demand_tribute", deme.hex_id, other.hex_id, deme.id, other.id, amount, 0)
+	var params := {"demander": deme.name, "target": other.name, "amount": str(int(amount)), "hex": other.hex_id}
+	EvoSettlementPhase.chronicle(state, "chronicle-demand-tribute-%d-%s-%s" % [state.generation, deme.id, other.id], "diplomacy", lang, "chronicle_demand_tribute", params, other.hex_id, deme)
 
 
 static func _pay_tribute(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: EvoTypes.WorldState, lang: String) -> void:

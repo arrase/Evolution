@@ -182,6 +182,8 @@ const STRINGS: Dictionary = {
 		"chronicle.type.epidemic_spread": "Contagio Epidémico",
 		"chronicle.type.epidemic_recovered": "Inmunidad Post-Epidemia",
 		"chronicle.type.famine": "Hambruna Severa",
+		"chronicle.type.diplomacy": "Diplomacia",
+		"chronicle.type.raid_repelled": "Asalto Repelido",
 		"filter_war": "Guerra",
 		"filter_raid": "Saqueo",
 		"filter_pact": "Pactos",
@@ -243,6 +245,14 @@ const STRINGS: Dictionary = {
 		"chronicle_famine_desc": "El déficit calórico severo provocó una hambruna en {deme} ({hex}), con una pérdida de {casualties} habitantes.",
 		"chronicle_walled_union_title": "Unión Amurallada en ({hex})",
 		"chronicle_walled_union_desc": "{deme_a} y {deme_b} unificaron sus murallas perimetrales en una ciudad multi-hexágono ({hex}).",
+		"chronicle_raid_repelled_title": "Asalto Repelido en ({hex})",
+		"chronicle_raid_repelled_desc": "{defender} repelió el asalto de {raider} en ({hex}), causando {casualties} bajas.",
+		"chronicle_offer_pact_title": "Oferta de Pacto a {deme_b}",
+		"chronicle_offer_pact_desc": "{deme_a} ({hex_a}) propuso un pacto de alianza a {deme_b} ({hex_b}).",
+		"chronicle_offer_union_title": "Propuesta de Unión a {deme_b}",
+		"chronicle_offer_union_desc": "{deme_a} ({hex_a}) propuso unificar asentamientos con {deme_b} ({hex_b}).",
+		"chronicle_demand_tribute_title": "Exigencia de Tributo a {target}",
+		"chronicle_demand_tribute_desc": "{demander} exigió {amount} reservas de tributo a {target} en ({hex}).",
 		"strategy.strat-cooperation.name": "Alianza Cooperativa",
 		"strategy.strat-cooperation.desc": "Fomenta la cohesión social, la conservación comunal del hábitat y el almacenamiento.",
 		"strategy.strat-cooperation.doctrine": "Alianza Cooperativa: valoras la solidaridad, cumples tu palabra y proteges a tus vecinos; recuerdas quién te ayudó.",
@@ -453,6 +463,8 @@ const STRINGS: Dictionary = {
 		"chronicle.type.epidemic_spread": "Epidemic Contagion",
 		"chronicle.type.epidemic_recovered": "Epidemic Recovery",
 		"chronicle.type.famine": "Severe Famine",
+		"chronicle.type.diplomacy": "Diplomacy",
+		"chronicle.type.raid_repelled": "Raid Repelled",
 		"filter_war": "War",
 		"filter_raid": "Raid",
 		"filter_pact": "Pacts",
@@ -514,6 +526,14 @@ const STRINGS: Dictionary = {
 		"chronicle_famine_desc": "Severe caloric deficit triggered famine in {deme} ({hex}), causing a loss of {casualties} inhabitants.",
 		"chronicle_walled_union_title": "Walled Union at ({hex})",
 		"chronicle_walled_union_desc": "{deme_a} and {deme_b} joined their perimeter walls into a multi-hex city ({hex}).",
+		"chronicle_raid_repelled_title": "Raid Repelled at ({hex})",
+		"chronicle_raid_repelled_desc": "{defender} repelled the raid by {raider} at ({hex}), causing {casualties} casualties.",
+		"chronicle_offer_pact_title": "Pact Offered to {deme_b}",
+		"chronicle_offer_pact_desc": "{deme_a} ({hex_a}) offered an alliance pact to {deme_b} ({hex_b}).",
+		"chronicle_offer_union_title": "Union Proposed to {deme_b}",
+		"chronicle_offer_union_desc": "{deme_a} ({hex_a}) proposed a settlement union to {deme_b} ({hex_b}).",
+		"chronicle_demand_tribute_title": "Tribute Demanded from {target}",
+		"chronicle_demand_tribute_desc": "{demander} demanded {amount} food in tribute from {target} at ({hex}).",
 		"strategy.strat-cooperation.name": "Cooperative Alliance",
 		"strategy.strat-cooperation.desc": "Fosters social cohesion, communal habitat conservation, and resource buffering.",
 		"strategy.strat-cooperation.doctrine": "Cooperative Alliance: you value solidarity, keep your word and protect your neighbors; you remember who helped you.",
@@ -547,8 +567,85 @@ const STRINGS: Dictionary = {
 }
 
 
+const EVENT_VERBS: Dictionary = {
+	"es": {
+		"raid": "Saqueo",
+		"raid_repelled": "Repelido",
+		"pillage": "Pillaje",
+		"war": "Guerra",
+		"war_repelled": "Defensa",
+		"siege": "Asedio",
+		"betrayal": "Traición",
+		"pact": "Alianza",
+		"walled_union": "Unión",
+		"union": "Unión",
+		"merge": "Unión",
+		"absorption": "Absorción",
+		"offer_pact": "Pacto?",
+		"offer_union": "Unión?",
+		"demand_tribute": "Tributo!",
+		"tribute": "Tributo",
+		"aid": "Ayuda",
+		"trade": "Comercio",
+		"colonize": "Colonia",
+		"fortify": "Muralla",
+		"epidemic": "Epidemia",
+		"plague": "Epidemia",
+		"epidemic_spread": "Contagio",
+		"epidemic_recovered": "Inmune",
+		"famine": "Hambruna",
+		"extinction": "Extinción",
+		"allopatric_speciation": "Especiación",
+		"speciation": "Especiación",
+		"cultural_innovation": "Innovación",
+		"baldwin_trait": "Baldwin",
+		"symbiosis": "Simbiosis",
+		"diplomacy": "Diplomacia"
+	},
+	"en": {
+		"raid": "Raid",
+		"raid_repelled": "Repelled",
+		"pillage": "Pillage",
+		"war": "War",
+		"war_repelled": "Defended",
+		"siege": "Siege",
+		"betrayal": "Betrayal",
+		"pact": "Pact",
+		"walled_union": "Union",
+		"union": "Union",
+		"merge": "Union",
+		"absorption": "Absorbed",
+		"offer_pact": "Pact?",
+		"offer_union": "Union?",
+		"demand_tribute": "Tribute!",
+		"tribute": "Tribute",
+		"aid": "Aid",
+		"trade": "Trade",
+		"colonize": "Colony",
+		"fortify": "Fortified",
+		"epidemic": "Plague",
+		"plague": "Plague",
+		"epidemic_spread": "Contagion",
+		"epidemic_recovered": "Immune",
+		"famine": "Famine",
+		"extinction": "Extinction",
+		"allopatric_speciation": "Speciation",
+		"speciation": "Speciation",
+		"cultural_innovation": "Innovation",
+		"baldwin_trait": "Baldwin",
+		"symbiosis": "Symbiosis",
+		"diplomacy": "Diplomacy"
+	}
+}
+
+
 static func resolve_lang(lang: String) -> String:
 	return "en" if lang == "en" else "es"
+
+
+static func event_verb(ev_type: String, lang: String) -> String:
+	var table: Dictionary = EVENT_VERBS[resolve_lang(lang)]
+	return str(table[ev_type]) if table.has(ev_type) else ev_type
 
 
 static func t(lang: String, key: String, params: Dictionary = {}) -> String:

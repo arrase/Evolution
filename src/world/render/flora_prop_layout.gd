@@ -54,7 +54,7 @@ static func compute_cell_flora_key(r: Node2D, cell: EvoTypes.HexCell, top_z: flo
 	var prop_count: int = clampi(int(round(float(base_count) * (0.55 + 0.45 * k_ratio))), 6, 13)
 	var v_count := cell.deme_ids.size()
 	if v_count > 0:
-		prop_count = clampi(prop_count - v_count, 5, 10)
+		prop_count = clampi(prop_count - 4, 3, 6)
 	var k_band: int = 0 if k_ratio < 0.60 else (1 if k_ratio < 0.85 else 2)
 	var link_mask: int = 0
 	if v_count > 0:
@@ -285,14 +285,15 @@ static func collect_cell_flora_props(
 	var village_local_centers: Array[Vector2] = []
 	if v_count > 0:
 		village_local_centers.append(Vector2.ZERO)
-		prop_count = clampi(prop_count - v_count, 5, 10)
+		prop_count = clampi(prop_count - 4, 3, 6)
 
 	var road_corridors := get_cell_road_corridors_local(r, cell, village_local_centers)
 	var placed_offsets: Array[Vector2] = []
-	var village_clear_r := 138.0
+	var village_clear_r := 188.0
 	var village_clear_r_sq := village_clear_r * village_clear_r
 	var village_clear_r2_sq := (village_clear_r - 2.0) * (village_clear_r - 2.0)
-	var max_rad_sq := (HexMath.HEX_SIZE * 0.84) * (HexMath.HEX_SIZE * 0.84)
+	var max_rad := HexMath.HEX_SIZE * (0.85 if v_count > 0 else 0.84)
+	var max_rad_sq := max_rad * max_rad
 	var inner_count: int = 0 if v_count > 0 else maxi(2, prop_count / 3)
 	var outer_count: int = prop_count - inner_count
 
@@ -308,7 +309,7 @@ static func collect_cell_flora_props(
 			var o_idx := idx - inner_count
 			angle = (TAU * float(o_idx) / float(maxi(1, outer_count))) + 0.32 + float(s1 % 31 - 15) * 0.032
 			if v_count > 0:
-				rad_norm = 0.66 + float(s2 % 18) * 0.01
+				rad_norm = 0.79 + float(s2 % 6) * 0.01
 			else:
 				rad_norm = 0.50 + float(s2 % 28) * 0.01
 
@@ -319,7 +320,7 @@ static func collect_cell_flora_props(
 			var d_sq := local_off.distance_squared_to(vc)
 			if d_sq < village_clear_r_sq:
 				var push_dir := (local_off - vc).normalized() if d_sq > 0.0001 else Vector2(cos(angle), sin(angle))
-				local_off = vc + push_dir * (village_clear_r + 8.0)
+				local_off = vc + push_dir * (village_clear_r + 4.0)
 				if local_off.length_squared() > max_rad_sq:
 					valid_spot = false
 				break

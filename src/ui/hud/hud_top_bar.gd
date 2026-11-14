@@ -33,10 +33,11 @@ class SeasonTidePortrait extends Control:
 		var r := Rect2(Vector2.ZERO, size)
 		if r.size.x < 10.0 or r.size.y < 10.0:
 			return
+		var sc := clampf(minf(r.size.x, r.size.y) / 72.0, 0.52, 1.0)
 		# Sky background
 		var sky_top := Color("#7dd3fc") if is_wet_warm else Color("#334155")
 		var sky_bot := Color("#fef08a") if is_wet_warm else Color("#94a3b8")
-		var steps := 12
+		var steps := 10
 		for i in range(steps):
 			var t := float(i) / float(steps)
 			var y0 := r.size.y * t
@@ -44,64 +45,58 @@ class SeasonTidePortrait extends Control:
 			draw_rect(Rect2(0, y0, r.size.x, h0), sky_top.lerp(sky_bot, t), true)
 
 		if is_wet_warm:
-			# Radiant pixel sun
 			var sun_c := Vector2(r.size.x * 0.72, r.size.y * 0.24)
-			draw_circle(sun_c, 13.0, Color(1.0, 0.85, 0.25, 0.35))
-			draw_circle(sun_c, 9.0, Color("#f59e0b"))
-			draw_circle(sun_c, 6.5, Color("#fef08a"))
+			draw_circle(sun_c, 12.0 * sc, Color(1.0, 0.85, 0.25, 0.35))
+			draw_circle(sun_c, 8.0 * sc, Color("#f59e0b"))
+			draw_circle(sun_c, 5.5 * sc, Color("#fef08a"))
 		else:
-			# Pale winter moon & snowflakes
 			var moon_c := Vector2(r.size.x * 0.74, r.size.y * 0.22)
-			draw_circle(moon_c, 7.5, Color("#e2e8f0"))
-			draw_circle(moon_c + Vector2(2.5, -1.5), 6.0, sky_top)
-			for sx in [14, 28, 46, 64, 78, 22, 54]:
-				var sy := int(sx * 1.3) % int(maxf(20.0, r.size.y * 0.55)) + 6
+			draw_circle(moon_c, 7.0 * sc, Color("#e2e8f0"))
+			draw_circle(moon_c + Vector2(2.2 * sc, -1.3 * sc), 5.5 * sc, sky_top)
+			for fx in [0.18, 0.36, 0.56, 0.78, 0.28, 0.66]:
+				var sx := r.size.x * float(fx)
+				var sy := float(int(sx * 1.7) % int(maxf(12.0, r.size.y * 0.50))) + 4.0
 				draw_rect(Rect2(sx, sy, 2, 2), Color("#f8fafc"), true)
 
-		# Compute water line first so hills clamp cleanly above the sea
 		var water_frac := clampf(0.18 + sea_level_ratio * 0.55, 0.14, 0.48)
 		var water_h := r.size.y * water_frac
 		var water_y := r.size.y - water_h
 
-		# Distant mountain & rolling hills clamped at water_y
 		var hill_back := Color("#15803d") if is_wet_warm else Color("#64748b")
 		var hill_front := Color("#22c55e") if is_wet_warm else Color("#cbd5e1")
-		var horizon_y := minf(r.size.y * 0.50, water_y - 6.0)
+		var horizon_y := minf(r.size.y * 0.52, water_y - 4.0)
 		var back_poly := PackedVector2Array([
 			Vector2(0.0, water_y),
-			Vector2(0.0, horizon_y + 4.0),
-			Vector2(r.size.x * 0.26, horizon_y - 3.0),
-			Vector2(r.size.x * 0.54, horizon_y + 2.0),
-			Vector2(r.size.x * 0.78, horizon_y - 2.0),
-			Vector2(r.size.x, horizon_y + 3.0),
+			Vector2(0.0, horizon_y + 3.0 * sc),
+			Vector2(r.size.x * 0.26, horizon_y - 3.0 * sc),
+			Vector2(r.size.x * 0.54, horizon_y + 2.0 * sc),
+			Vector2(r.size.x * 0.78, horizon_y - 2.0 * sc),
+			Vector2(r.size.x, horizon_y + 2.5 * sc),
 			Vector2(r.size.x, water_y),
 		])
 		draw_colored_polygon(back_poly, hill_back)
 		var front_poly := PackedVector2Array([
 			Vector2(0.0, water_y),
-			Vector2(0.0, horizon_y + 7.0),
-			Vector2(r.size.x * 0.36, horizon_y + 1.0),
-			Vector2(r.size.x * 0.66, horizon_y + 5.0),
-			Vector2(r.size.x, horizon_y + 2.0),
+			Vector2(0.0, horizon_y + 5.5 * sc),
+			Vector2(r.size.x * 0.36, horizon_y + 1.0 * sc),
+			Vector2(r.size.x * 0.66, horizon_y + 4.0 * sc),
+			Vector2(r.size.x, horizon_y + 1.5 * sc),
 			Vector2(r.size.x, water_y),
 		])
 		draw_colored_polygon(front_poly, hill_front)
 
-		# Pixel tree silhouette on hill
 		var tx := r.size.x * 0.32
-		var ty := horizon_y - 1.0
-		draw_rect(Rect2(tx - 1.0, ty - 3.0, 2.0, 5.0), Color("#5c3218"), true)
-		draw_circle(Vector2(tx, ty - 5.0), 3.5, Color("#166534") if is_wet_warm else Color("#f1f5f9"))
+		var ty := horizon_y - 0.5
+		draw_rect(Rect2(tx - 1.0, ty - 2.5 * sc, 2.0, 4.5 * sc), Color("#5c3218"), true)
+		draw_circle(Vector2(tx, ty - 4.0 * sc), maxf(2.2, 3.4 * sc), Color("#166534") if is_wet_warm else Color("#f1f5f9"))
 
-		# Sea level tide at bottom
 		var sea_col := Color("#0284c7") if is_wet_warm else Color("#1e3a8a")
 		var foam_col := Color("#7dd3fc") if is_wet_warm else Color("#bae6fd")
 		draw_rect(Rect2(0, water_y, r.size.x, water_h), sea_col, true)
-		draw_rect(Rect2(0, water_y, r.size.x, 2.0), foam_col, true)
+		draw_rect(Rect2(0, water_y, r.size.x, 1.5), foam_col, true)
 
-		# Inner wooden frame border + brass corner rivets
-		draw_rect(r, EvoUiStyle.COLOR_WOOD_DARK, false, 2.0)
-		for corner in [Vector2(3, 3), Vector2(r.size.x - 5, 3), Vector2(3, r.size.y - 5), Vector2(r.size.x - 5, r.size.y - 5)]:
+		draw_rect(r, EvoUiStyle.COLOR_WOOD_DARK, false, 1.0)
+		for corner in [Vector2(2, 2), Vector2(r.size.x - 4, 2), Vector2(2, r.size.y - 4), Vector2(r.size.x - 4, r.size.y - 4)]:
 			draw_rect(Rect2(corner, Vector2(2, 2)), EvoUiStyle.COLOR_GOLD_BRIGHT, true)
 
 
@@ -111,50 +106,53 @@ static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 	sign_frame.anchor_right = 0.0
 	sign_frame.anchor_top = 0.0
 	sign_frame.anchor_bottom = 0.0
-	sign_frame.offset_left = 10
-	sign_frame.offset_right = 446
-	sign_frame.offset_top = 10
-	sign_frame.offset_bottom = 156
-	sign_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(6))
+	sign_frame.offset_left = 8
+	sign_frame.offset_right = 336
+	sign_frame.offset_top = 8
+	sign_frame.offset_bottom = 96
+	sign_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(4))
 	hud.add_child(sign_frame)
 
 	var sign_vbox := VBoxContainer.new()
-	sign_vbox.add_theme_constant_override("separation", 4)
+	sign_vbox.add_theme_constant_override("separation", 3)
 	sign_frame.add_child(sign_vbox)
 
 	# Row 1: World Preset Selector + Compact Save/Load Buttons
 	var preset_row := HBoxContainer.new()
-	preset_row.add_theme_constant_override("separation", 4)
+	preset_row.add_theme_constant_override("separation", 3)
 	sign_vbox.add_child(preset_row)
 
 	hud._preset_option = OptionButton.new()
 	hud._preset_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hud._preset_option.fit_to_longest_item = false
 	hud._preset_option.clip_text = true
+	hud._preset_option.add_theme_font_size_override("font_size", 10)
 	hud._preset_option.item_selected.connect(hud._on_preset_selected)
 	preset_row.add_child(hud._preset_option)
 
 	hud._export_btn = Button.new()
-	hud._export_btn.custom_minimum_size = Vector2(30, 26)
+	hud._export_btn.custom_minimum_size = Vector2(24, 22)
+	hud._export_btn.add_theme_font_size_override("font_size", 10)
 	hud._export_btn.pressed.connect(hud._on_export_pressed)
 	preset_row.add_child(hud._export_btn)
 
 	hud._import_btn = Button.new()
-	hud._import_btn.custom_minimum_size = Vector2(30, 26)
+	hud._import_btn.custom_minimum_size = Vector2(24, 22)
+	hud._import_btn.add_theme_font_size_override("font_size", 10)
 	hud._import_btn.pressed.connect(hud._on_import_pressed)
 	preset_row.add_child(hud._import_btn)
 
 	# Row 2: 1v1 Strategy Matchup Selector Panel (Estrategia A ⚔️ Estrategia B [🔄])
 	var matchup_card := PanelContainer.new()
-	matchup_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_PARCHMENT_ALT, EvoUiStyle.COLOR_GOLD_BEVEL, 4))
+	matchup_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_PARCHMENT_ALT, EvoUiStyle.COLOR_GOLD_BEVEL, 3))
 	sign_vbox.add_child(matchup_card)
 
 	var matchup_row := HBoxContainer.new()
-	matchup_row.add_theme_constant_override("separation", 4)
+	matchup_row.add_theme_constant_override("separation", 3)
 	matchup_card.add_child(matchup_row)
 
 	var sw_a := ColorRect.new()
-	sw_a.custom_minimum_size = Vector2(14, 14)
+	sw_a.custom_minimum_size = Vector2(10, 10)
 	sw_a.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	sw_a.color = Color("#10B981")
 	matchup_row.add_child(sw_a)
@@ -164,18 +162,18 @@ static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 	opt_a.fit_to_longest_item = false
 	opt_a.clip_text = true
 	opt_a.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	opt_a.add_theme_font_size_override("font_size", 11)
+	opt_a.add_theme_font_size_override("font_size", 10)
 	opt_a.item_selected.connect(hud._on_strategy_option_selected)
 	matchup_row.add_child(opt_a)
 
 	var vs_lbl := Label.new()
 	vs_lbl.text = "⚔️"
 	vs_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	vs_lbl.add_theme_font_size_override("font_size", 11)
+	vs_lbl.add_theme_font_size_override("font_size", 10)
 	matchup_row.add_child(vs_lbl)
 
 	var sw_b := ColorRect.new()
-	sw_b.custom_minimum_size = Vector2(14, 14)
+	sw_b.custom_minimum_size = Vector2(10, 10)
 	sw_b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	sw_b.color = Color("#EF4444")
 	matchup_row.add_child(sw_b)
@@ -185,14 +183,14 @@ static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 	opt_b.fit_to_longest_item = false
 	opt_b.clip_text = true
 	opt_b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	opt_b.add_theme_font_size_override("font_size", 11)
+	opt_b.add_theme_font_size_override("font_size", 10)
 	opt_b.item_selected.connect(hud._on_strategy_option_selected)
 	matchup_row.add_child(opt_b)
 
 	var reset_btn := Button.new()
 	reset_btn.text = "🔄"
-	reset_btn.custom_minimum_size = Vector2(28, 24)
-	reset_btn.add_theme_font_size_override("font_size", 11)
+	reset_btn.custom_minimum_size = Vector2(24, 20)
+	reset_btn.add_theme_font_size_override("font_size", 10)
 	reset_btn.pressed.connect(hud._on_matchup_reset_pressed)
 	matchup_row.add_child(reset_btn)
 
@@ -205,52 +203,26 @@ static func build_top_left_valley_sign_and_medallions(hud: Control) -> void:
 
 	# Row 3: 3 Artifact Buttons (Diario, Linajes, Forja)
 	var artifacts_row := HBoxContainer.new()
-	artifacts_row.add_theme_constant_override("separation", 4)
+	artifacts_row.add_theme_constant_override("separation", 3)
 	sign_vbox.add_child(artifacts_row)
 
 	hud._notebook_btn = Button.new()
 	hud._notebook_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._notebook_btn.add_theme_font_size_override("font_size", 10)
 	hud._notebook_btn.pressed.connect(hud.open_notebook_modal)
 	artifacts_row.add_child(hud._notebook_btn)
 
 	hud._tree_btn = Button.new()
 	hud._tree_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._tree_btn.add_theme_font_size_override("font_size", 10)
 	hud._tree_btn.pressed.connect(hud._on_tree_btn_pressed)
 	artifacts_row.add_child(hud._tree_btn)
 
 	hud._lab_btn = Button.new()
 	hud._lab_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._lab_btn.add_theme_font_size_override("font_size", 10)
 	hud._lab_btn.pressed.connect(hud.open_lab_modal)
 	artifacts_row.add_child(hud._lab_btn)
-
-	# Row 4: Compact Lens Pills + Map Legend Toggle
-	hud._lens_strip_panel = PanelContainer.new()
-	hud._lens_strip_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_PARCHMENT, EvoUiStyle.COLOR_GOLD_BEVEL, 4))
-	sign_vbox.add_child(hud._lens_strip_panel)
-
-	var lens_hbox := HBoxContainer.new()
-	lens_hbox.add_theme_constant_override("separation", 4)
-	hud._lens_strip_panel.add_child(lens_hbox)
-
-	for l_id in ["biome", "food", "health", "diplomacy", "territory"]:
-		var l_btn := Button.new()
-		l_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		l_btn.add_theme_font_size_override("font_size", 10)
-		l_btn.pressed.connect(hud._on_lens_pressed.bind(l_id))
-		lens_hbox.add_child(l_btn)
-		hud._lens_buttons[l_id] = l_btn
-
-	var fit_map_btn := Button.new()
-	fit_map_btn.text = "Mapa"
-	fit_map_btn.tooltip_text = "Vista de mapa completo (Tecla F / 0)"
-	fit_map_btn.add_theme_font_size_override("font_size", 10)
-	fit_map_btn.pressed.connect(hud._on_cam_preset_pressed.bind("fit", 0.0))
-	lens_hbox.add_child(fit_map_btn)
-
-	hud._legend_toggle_btn = Button.new()
-	hud._legend_toggle_btn.add_theme_font_size_override("font_size", 10)
-	hud._legend_toggle_btn.pressed.connect(hud._on_legend_toggle_pressed)
-	lens_hbox.add_child(hud._legend_toggle_btn)
 
 
 static func build_top_right_clock(hud: Control) -> void:
@@ -259,62 +231,62 @@ static func build_top_right_clock(hud: Control) -> void:
 	clock_frame.anchor_right = 1.0
 	clock_frame.anchor_top = 0.0
 	clock_frame.anchor_bottom = 0.0
-	clock_frame.offset_left = -356
-	clock_frame.offset_right = -10
-	clock_frame.offset_top = 10
-	clock_frame.offset_bottom = 126
-	clock_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
+	clock_frame.offset_left = -292
+	clock_frame.offset_right = -8
+	clock_frame.offset_top = 8
+	clock_frame.offset_bottom = 90
+	clock_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(4))
 	hud.add_child(clock_frame)
 
 	var clock_hbox := HBoxContainer.new()
-	clock_hbox.add_theme_constant_override("separation", 7)
+	clock_hbox.add_theme_constant_override("separation", 5)
 	clock_frame.add_child(clock_hbox)
 
-	# Left: Illustrated Season & Tide Window
+	# Left: Compact Illustrated Season & Tide Window
 	var portrait_card := PanelContainer.new()
-	portrait_card.custom_minimum_size = Vector2(80, 0)
-	portrait_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_WOOD_DARK, EvoUiStyle.COLOR_GOLD_BEVEL, 3))
+	portrait_card.custom_minimum_size = Vector2(48, 0)
+	portrait_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(EvoUiStyle.COLOR_WOOD_DARK, EvoUiStyle.COLOR_GOLD_BEVEL, 2))
 	clock_hbox.add_child(portrait_card)
 
 	var portrait_vbox := VBoxContainer.new()
-	portrait_vbox.add_theme_constant_override("separation", 2)
+	portrait_vbox.add_theme_constant_override("separation", 1)
 	portrait_card.add_child(portrait_vbox)
 
 	hud._season_portrait = SeasonTidePortrait.new()
 	hud._season_portrait.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hud._season_portrait.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	hud._season_portrait.custom_minimum_size = Vector2(72, 76)
+	hud._season_portrait.custom_minimum_size = Vector2(42, 44)
 	portrait_vbox.add_child(hud._season_portrait)
 
 	var tide_row := HBoxContainer.new()
 	tide_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	tide_row.add_theme_constant_override("separation", 3)
+	tide_row.add_theme_constant_override("separation", 2)
 	portrait_vbox.add_child(tide_row)
 
 	hud._sea_level_label = Label.new()
 	hud._sea_level_label.text = "🌊 12%"
-	hud._sea_level_label.add_theme_font_size_override("font_size", 11)
+	hud._sea_level_label.add_theme_font_size_override("font_size", 9)
 	hud._sea_level_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
 	tide_row.add_child(hud._sea_level_label)
 
-	# Right: Generation Dial, Time Controls & Mana Bar
+	# Right: Generation Dial, Time Controls & Compact Mana Bar
 	var dial_panel := PanelContainer.new()
 	dial_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	dial_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(6, false))
+	dial_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(4, false))
 	clock_hbox.add_child(dial_panel)
 
 	var dial_vbox := VBoxContainer.new()
-	dial_vbox.add_theme_constant_override("separation", 4)
+	dial_vbox.add_theme_constant_override("separation", 3)
 	dial_panel.add_child(dial_vbox)
 
 	# Row 1: Generation & Season Banner
 	var gen_row := HBoxContainer.new()
-	gen_row.add_theme_constant_override("separation", 6)
+	gen_row.add_theme_constant_override("separation", 4)
 	dial_vbox.add_child(gen_row)
 
 	hud._gen_label = Label.new()
 	hud._gen_label.text = "📅 Gen 0"
-	hud._gen_label.add_theme_font_size_override("font_size", 13)
+	hud._gen_label.add_theme_font_size_override("font_size", 11)
 	hud._gen_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	gen_row.add_child(hud._gen_label)
 
@@ -323,64 +295,81 @@ static func build_top_right_clock(hud: Control) -> void:
 	hud._season_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hud._season_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	hud._season_label.clip_text = true
-	hud._season_label.add_theme_font_size_override("font_size", 11)
+	hud._season_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	hud._season_label.add_theme_font_size_override("font_size", 10)
 	hud._season_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	gen_row.add_child(hud._season_label)
 
-	# Row 2: Tactile Wood/Gold Time Controls + Settings Gear
+	# Row 2: Time Controls + Follow Events Camera Toggle + Settings Gear
 	var time_row := HBoxContainer.new()
-	time_row.add_theme_constant_override("separation", 4)
+	time_row.add_theme_constant_override("separation", 3)
 	dial_vbox.add_child(time_row)
 
 	hud._play_btn = Button.new()
 	hud._play_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._play_btn.add_theme_font_size_override("font_size", 10)
 	hud._play_btn.pressed.connect(hud._on_play_pressed)
 	time_row.add_child(hud._play_btn)
 
 	hud._step_btn = Button.new()
-	hud._step_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._step_btn.add_theme_font_size_override("font_size", 10)
 	hud._step_btn.pressed.connect(hud._on_step_pressed)
 	time_row.add_child(hud._step_btn)
 
 	hud._speed_btn = Button.new()
+	hud._speed_btn.add_theme_font_size_override("font_size", 10)
 	hud._speed_btn.pressed.connect(hud._on_speed_pressed)
 	time_row.add_child(hud._speed_btn)
+
+	hud._follow_events_btn = Button.new()
+	hud._follow_events_btn.toggle_mode = true
+	hud._follow_events_btn.button_pressed = false
+	hud._follow_events_btn.text = "🎥"
+	hud._follow_events_btn.custom_minimum_size = Vector2(24, 21)
+	hud._follow_events_btn.add_theme_font_size_override("font_size", 10)
+	hud._follow_events_btn.toggled.connect(hud._on_follow_events_toggled)
+	time_row.add_child(hud._follow_events_btn)
 
 	hud._settings_btn = Button.new()
 	hud._settings_btn.icon = EvoUiStyle.get_pixel_icon("settings_gear")
 	hud._settings_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hud._settings_btn.custom_minimum_size = Vector2(30, 0)
+	hud._settings_btn.custom_minimum_size = Vector2(24, 21)
 	hud._settings_btn.pressed.connect(hud._on_settings_btn_pressed)
 	time_row.add_child(hud._settings_btn)
 
-	# Row 3: Selective Pressure / Mana Bar
+	# Row 3: Compact Single-Row Selective Pressure / Mana Bar
 	var mana_box := PanelContainer.new()
 	mana_box.add_theme_stylebox_override("panel", EvoUiStyle.make_badge_style(EvoUiStyle.COLOR_WOOD_DARK, EvoUiStyle.COLOR_GOLD_BEVEL))
 	dial_vbox.add_child(mana_box)
 
-	var mana_vbox := VBoxContainer.new()
-	mana_vbox.add_theme_constant_override("separation", 2)
-	mana_box.add_child(mana_vbox)
+	var mana_hbox := HBoxContainer.new()
+	mana_hbox.add_theme_constant_override("separation", 5)
+	mana_box.add_child(mana_hbox)
 
 	hud._pressure_label = Label.new()
-	hud._pressure_label.text = "⚡ 30 pts · +15/gen"
-	hud._pressure_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hud._pressure_label.text = "⚡ 30 · +15/g"
 	hud._pressure_label.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
-	hud._pressure_label.add_theme_font_size_override("font_size", 11)
-	mana_vbox.add_child(hud._pressure_label)
+	hud._pressure_label.add_theme_font_size_override("font_size", 9)
+	mana_hbox.add_child(hud._pressure_label)
 
 	hud._pressure_bar = ProgressBar.new()
+	hud._pressure_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hud._pressure_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hud._pressure_bar.min_value = 0.0
 	hud._pressure_bar.max_value = 100.0
 	hud._pressure_bar.value = 30.0
 	hud._pressure_bar.show_percentage = false
-	hud._pressure_bar.custom_minimum_size = Vector2(0, 6)
+	hud._pressure_bar.custom_minimum_size = Vector2(42, 6)
 	EvoUiStyle.style_progress_bar(hud._pressure_bar, Color("#22c55e"))
-	mana_vbox.add_child(hud._pressure_bar)
+	mana_hbox.add_child(hud._pressure_bar)
 
 
 static func build_settings_popup(hud: Control) -> void:
 	EvoHudSettingsModals.build_settings_popup(hud)
+	hud._settings_popup.offset_left = -668
+	hud._settings_popup.offset_right = -298
+	hud._settings_popup.offset_top = 44
+	hud._settings_popup.offset_bottom = 444
 
 
 static func refresh_strategies_for_hud(hud: Control, state: EvoTypes.WorldState, lang: String = "es") -> void:
@@ -518,6 +507,14 @@ static func update_static_labels(hud: Control) -> void:
 	hud._speed_btn.text = str(speed_labels[clampi(hud._speed_index, 0, 2)])
 	EvoUiStyle.apply_button_active(hud._speed_btn, hud._speed_index != 1)
 
+	hud._follow_events_btn.text = "🎥"
+	hud._follow_events_btn.tooltip_text = EvoUiStyle.tr_text(
+		hud._lang,
+		"Seguir eventos clave del turno",
+		"Follow key turn events"
+	)
+	EvoUiStyle.apply_button_active(hud._follow_events_btn, hud._follow_events_btn.button_pressed)
+
 	hud._notebook_btn.text = EvoUiStyle.tr_text(hud._lang, "📖 Diario", "📖 Journal")
 	hud._tree_btn.text = EvoUiStyle.tr_text(hud._lang, "🌳 Linajes", "🌳 Lineages")
 	hud._lab_btn.text = EvoUiStyle.tr_text(hud._lang, "⚗️ Forja", "⚗️ Forge")
@@ -535,6 +532,15 @@ static func update_static_labels(hud: Control) -> void:
 		var l_btn := hud._lens_buttons[l_id] as Button
 		l_btn.text = EvoI18n.t(hud._lang, "lens." + l_id)
 		EvoUiStyle.apply_button_active(l_btn, hud._active_lens == l_id)
+
+	var fit_map_btn := hud.get_meta("_fit_map_btn", null) as Button
+	if fit_map_btn != null:
+		fit_map_btn.text = EvoUiStyle.tr_text(hud._lang, "Mapa", "Map")
+		fit_map_btn.tooltip_text = EvoUiStyle.tr_text(
+			hud._lang,
+			"Vista de mapa completo (Tecla F / 0)",
+			"Full map view (Key F / 0)"
+		)
 
 	hud._legend_toggle_btn.text = "🗺️"
 	hud._legend_toggle_btn.tooltip_text = EvoUiStyle.tr_text(hud._lang, "🗺️ Leyenda", "🗺️ Legend")
@@ -570,10 +576,10 @@ static func update_top_bar_state(hud: Control) -> void:
 	hud._season_portrait.set_state(is_wet, hud._world_state.sea_level)
 
 	if hud._world_state.unlimited_pressure_mode:
-		hud._pressure_label.text = EvoUiStyle.tr_text(hud._lang, "⚡ ∞ Maná Ilimitado", "⚡ ∞ Unlimited Mana")
+		hud._pressure_label.text = EvoUiStyle.tr_text(hud._lang, "⚡ ∞ Maná", "⚡ ∞ Mana")
 		hud._pressure_bar.value = 100.0
 	else:
-		hud._pressure_label.text = "⚡ %d pts · +%d/gen" % [hud._world_state.selective_pressure_points, hud._world_state.selective_pressure_regen_per_turn]
+		hud._pressure_label.text = "⚡ %d · +%d/g" % [hud._world_state.selective_pressure_points, hud._world_state.selective_pressure_regen_per_turn]
 		hud._pressure_bar.value = clampf(float(hud._world_state.selective_pressure_points), 0.0, 100.0)
 
 	EvoHudSettingsModals.refresh_settings_popup(hud)

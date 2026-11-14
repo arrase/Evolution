@@ -15,6 +15,7 @@ var lang: String = "es"
 
 var is_playing: bool = false
 var speed_index: int = 1
+var follow_events_enabled: bool = false
 var quit_on_close_enabled: bool = true
 var _play_timer: float = 0.0
 var _last_model_revision: int = 0
@@ -135,6 +136,7 @@ func _connect_signals() -> void:
 	hud.play_pause_toggled.connect(_on_play_pause_toggled)
 	hud.step_generation_requested.connect(step_generation)
 	hud.speed_changed.connect(_on_speed_changed)
+	hud.follow_events_toggled.connect(_on_follow_events_toggled)
 	hud.language_changed.connect(_on_language_changed)
 	hud.settings_changed.connect(_on_settings_changed)
 	hud.decision_models_changed.connect(_on_decision_models_changed)
@@ -334,6 +336,46 @@ func step_generation() -> void:
 	hud.refresh(world_state)
 	world_renderer.set("replay_seconds", STEP_INTERVALS[clampi(speed_index, 0, STEP_INTERVALS.size() - 1)])
 	world_renderer.refresh()
+	if follow_events_enabled and not world_state.turn_events.is_empty():
+		_focus_camera_on_priority_turn_event()
+
+
+func _focus_camera_on_priority_turn_event() -> void:
+	var best_event: Dictionary = world_state.turn_events[0]
+	var best_rank := _turn_event_priority(str(best_event["type"]))
+	for i in range(1, world_state.turn_events.size()):
+		var candidate: Dictionary = world_state.turn_events[i]
+		var rank := _turn_event_priority(str(candidate["type"]))
+		if rank < best_rank:
+			best_rank = rank
+			best_event = candidate
+	var to_hex := str(best_event["to_hex"])
+	if world_state.cells.has(to_hex):
+		var cell: EvoTypes.HexCell = world_state.cells[to_hex]
+		camera.focus_on_hex(cell.q, cell.r, cell.altitude)
+
+
+static func _turn_event_priority(ev_type: String) -> int:
+	match ev_type:
+		"extinction", "total_extinction":
+			return 0
+		"speciation", "allopatric_speciation":
+			return 1
+		"union", "walled_union", "absorption", "merge":
+			return 2
+		"betrayal":
+			return 3
+		"war":
+			return 4
+		"siege":
+			return 5
+		"raid":
+			return 6
+		"raid_repelled", "war_repelled":
+			return 7
+		"pact":
+			return 8
+	return 99
 
 
 func _apply_brush_at_hex(hex_id: String) -> void:
@@ -448,6 +490,10 @@ func _on_quit_requested() -> void:
 func _on_speed_changed(p_speed_index: int) -> void:
 	speed_index = p_speed_index
 	_play_timer = 0.0
+
+
+func _on_follow_events_toggled(enabled: bool) -> void:
+	follow_events_enabled = enabled
 
 
 func _on_language_changed(new_lang: String) -> void:

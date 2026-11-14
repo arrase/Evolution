@@ -37,9 +37,10 @@ const SPECIATION_PALETTE: Array[String] = [
 ]
 
 const EVENT_TYPES: Array[String] = [
-	"pact", "betrayal", "raid", "tribute", "pillage",
+	"pact", "betrayal", "raid", "raid_repelled", "tribute", "pillage",
 	"war", "war_repelled", "siege", "fortify", "walled_union",
-	"absorption", "colonize", "epidemic", "epidemic_spread",
+	"absorption", "colonize", "offer_pact", "offer_union", "demand_tribute",
+	"aid", "trade", "epidemic", "epidemic_spread",
 	"epidemic_recovered", "famine", "extinction",
 	"allopatric_speciation", "cultural_innovation", "baldwin_trait", "symbiosis"
 ]
@@ -1007,7 +1008,7 @@ static func compute_world_stats(state: WorldState) -> Dictionary:
 
 	var wars_count: int = 0
 	for ev in state.turn_events:
-		if str(ev["type"]) in ["war", "war_repelled", "siege", "raid", "betrayal"]:
+		if str(ev["type"]) in ["war", "war_repelled", "siege", "raid", "raid_repelled", "betrayal"]:
 			wars_count += 1
 
 	return {

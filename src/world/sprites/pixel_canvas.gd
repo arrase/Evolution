@@ -13,7 +13,28 @@ static func _new_canvas(w: int, h: int) -> Image:
 static func _hash2d(x: int, y: int, seed_val: int = 0) -> int:
 	var h: int = (x * 374761393) + (y * 668265263) + (seed_val * 1442695041)
 	h = (h ^ (h >> 13)) * 1274126177
-	return abs(h ^ (h >> 16))
+	return absi(h ^ (h >> 16))
+
+
+static func _value_noise2d(x: float, y: float, seed_val: int) -> float:
+	var ix := int(floor(x))
+	var iy := int(floor(y))
+	var fx := x - float(ix)
+	var fy := y - float(iy)
+	var ux := fx * fx * (3.0 - 2.0 * fx)
+	var uy := fy * fy * (3.0 - 2.0 * fy)
+	var n00 := float(_hash2d(ix, iy, seed_val) & 1023) / 1023.0
+	var n10 := float(_hash2d(ix + 1, iy, seed_val) & 1023) / 1023.0
+	var n01 := float(_hash2d(ix, iy + 1, seed_val) & 1023) / 1023.0
+	var n11 := float(_hash2d(ix + 1, iy + 1, seed_val) & 1023) / 1023.0
+	return lerpf(lerpf(n00, n10, ux), lerpf(n01, n11, ux), uy)
+
+
+static func _fbm2d(x: float, y: float, seed_val: int) -> float:
+	var v := _value_noise2d(x, y, seed_val) * 0.58
+	v += _value_noise2d(x * 2.07 + 13.7, y * 2.07 + 7.3, seed_val + 31) * 0.29
+	v += _value_noise2d(x * 4.31 + 29.1, y * 4.31 + 19.4, seed_val + 73) * 0.13
+	return v
 
 
 static func _px(img: Image, x: int, y: int, col: Color) -> void:
@@ -63,23 +84,26 @@ static func _rect_outlined(img: Image, x: int, y: int, w: int, h: int, fill: Col
 static func _drop_shadow(img: Image, cx: float, cy: float, rx: float, ry: float, alpha: float = 0.34) -> void:
 	if rx <= 0.5 or ry <= 0.5:
 		return
+	var scx := cx + rx * 0.10
+	var scy := cy + ry * 0.08
 	var w := img.get_width()
 	var h := img.get_height()
-	var y0 := maxi(0, int(floor(cy - ry - 1.0)))
-	var y1 := mini(h - 1, int(ceil(cy + ry + 1.0)))
-	var x0 := maxi(0, int(floor(cx - rx - 1.0)))
-	var x1 := mini(w - 1, int(ceil(cx + rx + 1.0)))
+	var y0 := maxi(0, int(floor(scy - ry - 1.0)))
+	var y1 := mini(h - 1, int(ceil(scy + ry + 1.0)))
+	var x0 := maxi(0, int(floor(scx - rx - 1.0)))
+	var x1 := mini(w - 1, int(ceil(scx + rx + 1.0)))
 	for py in range(y0, y1 + 1):
-		var ny := (float(py) - cy) / ry
+		var ny := (float(py) - scy) / ry
 		var ny2 := ny * ny
 		if ny2 >= 1.0:
 			continue
 		for px_i in range(x0, x1 + 1):
-			var nx := (float(px_i) - cx) / rx
+			var nx := (float(px_i) - scx) / rx
 			var d2 := nx * nx + ny2
 			if d2 < 1.0:
-				var falloff := clampf((1.0 - sqrt(d2)) * 2.2, 0.0, 1.0)
-				_blend_px(img, px_i, py, Color(0.05, 0.03, 0.02, alpha * falloff))
+				var falloff := 1.0 - sqrt(d2)
+				var smooth_a := alpha * clampf(falloff * falloff * 2.1, 0.0, 1.0)
+				_blend_px(img, px_i, py, Color(0.05, 0.03, 0.02, smooth_a))
 
 
 static func _aa_circle(img: Image, cx: float, cy: float, r: float, col: Color) -> void:
@@ -260,14 +284,26 @@ static func _poly_filled(img: Image, points: PackedVector2Array, top_col: Color,
 		while k + 1 < nodes.size():
 			var x_left := nodes[k]
 			var x_right := nodes[k + 1]
-			var ix_start := maxi(0, int(ceil(x_left - 0.5)))
-			var ix_end := mini(w - 1, int(floor(x_right + 0.5)))
-			if ix_end >= ix_start:
-				if row_col.a >= 0.995:
-					img.fill_rect(Rect2i(ix_start, py, ix_end - ix_start + 1, 1), row_col)
-				else:
-					for px_i in range(ix_start, ix_end + 1):
-						_blend_px(img, px_i, py, row_col)
+			var ix_l := int(floor(x_left))
+			var ix_r := int(floor(x_right))
+			if ix_l == ix_r:
+				var cov := clampf(x_right - x_left, 0.0, 1.0)
+				_blend_px(img, ix_l, py, Color(row_col.r, row_col.g, row_col.b, row_col.a * cov))
+			else:
+				var cov_l := clampf(float(ix_l + 1) - x_left, 0.0, 1.0)
+				if cov_l > 0.0:
+					_blend_px(img, ix_l, py, Color(row_col.r, row_col.g, row_col.b, row_col.a * cov_l))
+				var span_start := maxi(0, ix_l + 1)
+				var span_end := mini(w - 1, ix_r - 1)
+				if span_end >= span_start:
+					if row_col.a >= 0.995:
+						img.fill_rect(Rect2i(span_start, py, span_end - span_start + 1, 1), row_col)
+					else:
+						for px_i in range(span_start, span_end + 1):
+							_blend_px(img, px_i, py, row_col)
+				var cov_r := clampf(x_right - float(ix_r), 0.0, 1.0)
+				if cov_r > 0.0:
+					_blend_px(img, ix_r, py, Color(row_col.r, row_col.g, row_col.b, row_col.a * cov_r))
 			k += 2
 
 
@@ -313,13 +349,22 @@ static func _draw_isometric_box(
 
 	if h > 0.5:
 		var left_face := PackedVector2Array([t_left, t_front, b_front, b_left])
-		_poly_outlined(img, left_face, left_col.lightened(0.06), left_col.darkened(0.08), C_OUTLINE, outline_w)
+		_poly_filled(img, left_face, left_col.lightened(0.08), left_col.darkened(0.09))
 
 		var right_face := PackedVector2Array([t_front, t_right, b_right, b_front])
-		_poly_outlined(img, right_face, right_col.lightened(0.04), right_col.darkened(0.10), C_OUTLINE, outline_w)
+		_poly_filled(img, right_face, right_col.lightened(0.02), right_col.darkened(0.15))
+
+		_aa_line(img, t_front.x - 1.2, t_front.y + 1.0, b_front.x - 1.2, b_front.y - 1.0, Color(1.0, 0.97, 0.88, 0.24), 1.8)
+
+		if outline_w > 0.0:
+			_aa_line(img, b_left.x, b_left.y, b_front.x, b_front.y, C_OUTLINE, outline_w)
+			_aa_line(img, b_front.x, b_front.y, b_right.x, b_right.y, C_OUTLINE, outline_w)
+			_aa_line(img, t_left.x, t_left.y, b_left.x, b_left.y, C_OUTLINE, outline_w)
+			_aa_line(img, t_front.x, t_front.y, b_front.x, b_front.y, C_OUTLINE, outline_w * 0.92)
+			_aa_line(img, t_right.x, t_right.y, b_right.x, b_right.y, C_OUTLINE, outline_w)
 
 	var top_face := PackedVector2Array([t_back, t_right, t_front, t_left])
-	_poly_outlined(img, top_face, top_col.lightened(0.06), top_col.darkened(0.04), C_OUTLINE, outline_w)
+	_poly_outlined(img, top_face, top_col.lightened(0.08), top_col.darkened(0.04), C_OUTLINE, outline_w)
 
 
 static func _draw_pitched_roof(
@@ -342,14 +387,116 @@ static func _draw_pitched_roof(
 	var p_front := Vector2(cx - w * 0.5, cy - w * 0.25 - roof_h)
 	var p_back := p_front + Vector2(d, -d * 0.5)
 
-	# Back-left slope (drawn first so front faces occlude it cleanly)
+	# Cast eave shadow onto the upper walls below the roof overhang
+	var shadow_r := PackedVector2Array([
+		e_front, e_right, e_right + Vector2(-2.0, 6.0), e_front + Vector2(0.0, 6.5)
+	])
+	_poly_filled(img, shadow_r, Color(0.07, 0.04, 0.02, 0.36), Color(0.07, 0.04, 0.02, 0.06))
+	var shadow_l := PackedVector2Array([
+		e_left + Vector2(2.0, 1.0), e_front, e_front + Vector2(0.0, 5.0), e_left + Vector2(2.0, 5.0)
+	])
+	_poly_filled(img, shadow_l, Color(0.07, 0.04, 0.02, 0.26), Color(0.07, 0.04, 0.02, 0.04))
+
+	# Back-left sunlit slope (135 deg top-left light)
 	var left_slope := PackedVector2Array([e_left, e_back, p_back, p_front])
-	_poly_outlined(img, left_slope, left_slope_col.lightened(0.06), left_slope_col.darkened(0.08), C_OUTLINE, outline_w)
+	_poly_outlined(img, left_slope, left_slope_col.lightened(0.10), left_slope_col.darkened(0.04), C_OUTLINE, outline_w)
 
-	# Front-left triangular gable wall
+	# Front-left triangular sunlit gable wall with under-verge shadow
 	var gable_face := PackedVector2Array([e_left, p_front, e_front])
-	_poly_outlined(img, gable_face, gable_col.lightened(0.05), gable_col.darkened(0.06), C_OUTLINE, outline_w)
+	_poly_outlined(img, gable_face, gable_col.lightened(0.06), gable_col.darkened(0.05), C_OUTLINE, outline_w)
+	_aa_line(img, e_left.x + 2.0, e_left.y + 1.5, p_front.x, p_front.y + 3.0, Color(0.08, 0.04, 0.02, 0.28), 2.4)
+	_aa_line(img, p_front.x, p_front.y + 3.0, e_front.x - 2.0, e_front.y + 1.5, Color(0.08, 0.04, 0.02, 0.32), 2.4)
 
-	# Front-right main visible roof slope
+	# Front-right main visible roof slope (cooler shaded side)
 	var right_slope := PackedVector2Array([p_front, p_back, e_right, e_front])
-	_poly_outlined(img, right_slope, right_slope_col.lightened(0.08), right_slope_col.darkened(0.10), C_OUTLINE, outline_w)
+	_poly_outlined(img, right_slope, right_slope_col.lightened(0.06), right_slope_col.darkened(0.12), C_OUTLINE, outline_w)
+	_aa_line(img, p_front.x, p_front.y + 1.2, p_back.x, p_back.y + 1.2, right_slope_col.lightened(0.22), 1.8)
+
+
+static func _draw_roof_courses(
+	img: Image,
+	cx: float,
+	cy: float,
+	w: float,
+	d: float,
+	roof_h: float,
+	rows: int,
+	course_col: Color,
+	hi_col: Color,
+	is_thatch: bool
+) -> void:
+	var e_front := Vector2(cx, cy)
+	var e_right := Vector2(cx + d, cy - d * 0.5)
+	var p_front := Vector2(cx - w * 0.5, cy - w * 0.25 - roof_h)
+	var p_back := p_front + Vector2(d, -d * 0.5)
+
+	for r_i in range(1, rows):
+		var t := float(r_i) / float(rows)
+		var a := p_front.lerp(e_front, t)
+		var b := p_back.lerp(e_right, t)
+		if is_thatch:
+			var segs := 7
+			for s_i in range(segs):
+				var u := (float(s_i) + 0.5) / float(segs)
+				var pt := a.lerp(b, u)
+				var slope_dir := (e_front - p_front).normalized()
+				_aa_line(img, pt.x, pt.y - 2.5, pt.x + slope_dir.x * 5.0, pt.y + slope_dir.y * 5.0, course_col, 1.5)
+				if (s_i + r_i) % 2 == 0:
+					_aa_line(img, pt.x - 1.0, pt.y - 2.0, pt.x + slope_dir.x * 3.8 - 1.0, pt.y + slope_dir.y * 3.8, hi_col, 1.2)
+		else:
+			_aa_line(img, a.x + 1.5, a.y - 0.8, b.x - 1.5, b.y + 0.8, course_col, 1.5)
+			_aa_line(img, a.x + 1.5, a.y + 0.6, b.x - 1.5, b.y + 2.2, hi_col, 1.0)
+
+
+static func _draw_iso_window(
+	img: Image,
+	cx: float,
+	cy: float,
+	hw: float,
+	hh: float,
+	on_right_wall: bool,
+	glow_top: Color,
+	glow_bot: Color
+) -> void:
+	var slope := -0.5 if on_right_wall else 0.5
+	var p0 := Vector2(cx - hw, cy - hw * slope - hh)
+	var p1 := Vector2(cx + hw, cy + hw * slope - hh)
+	var p2 := Vector2(cx + hw, cy + hw * slope + hh)
+	var p3 := Vector2(cx - hw, cy - hw * slope + hh)
+	var sill_a := p3 + Vector2(-1.0, 1.2)
+	var sill_b := p2 + Vector2(1.0, 1.2)
+	_aa_ellipse(img, cx, cy, hw * 1.6, hh * 1.4, Color(glow_top.r, glow_top.g, glow_top.b, 0.22))
+	_poly_outlined(img, PackedVector2Array([p0, p1, p2, p3]), glow_top, glow_bot, C_OUTLINE, 1.8)
+	_aa_line(img, cx, cy - hh, cx, cy + hh, C_OUTLINE, 1.3)
+	_aa_line(img, (p0.x + p3.x) * 0.5, (p0.y + p3.y) * 0.5, (p1.x + p2.x) * 0.5, (p1.y + p2.y) * 0.5, C_OUTLINE, 1.2)
+	_aa_line(img, sill_a.x, sill_a.y, sill_b.x, sill_b.y, C_OUTLINE, 2.0)
+
+
+static func _draw_foliage_clump(
+	img: Image,
+	cx: float,
+	cy: float,
+	r: float,
+	col_shadow: Color,
+	col_mid: Color,
+	col_light: Color
+) -> void:
+	var ow := 2.0
+	var lobes := [
+		Vector3(cx - r * 0.30, cy + r * 0.08, r * 0.72),
+		Vector3(cx + r * 0.30, cy + r * 0.12, r * 0.70),
+		Vector3(cx, cy - r * 0.18, r * 0.80),
+		Vector3(cx, cy + r * 0.16, r * 0.74)
+	]
+	for lb in lobes:
+		_aa_circle(img, lb.x, lb.y, lb.z + ow, C_OUTLINE)
+	for lb in lobes:
+		_aa_circle(img, lb.x, lb.y, lb.z, col_shadow)
+
+	_aa_circle(img, cx - r * 0.24, cy, r * 0.64, col_mid)
+	_aa_circle(img, cx + r * 0.16, cy - r * 0.04, r * 0.56, col_mid)
+	_aa_circle(img, cx - r * 0.04, cy - r * 0.20, r * 0.70, col_mid)
+
+	_aa_circle(img, cx - r * 0.24, cy - r * 0.22, r * 0.48, col_light)
+	_aa_circle(img, cx + r * 0.02, cy - r * 0.30, r * 0.40, col_light)
+	_aa_ellipse(img, cx - r * 0.28, cy - r * 0.34, r * 0.28, r * 0.18, col_light.lightened(0.22))

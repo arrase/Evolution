@@ -8,6 +8,7 @@ signal state_imported(new_state: EvoTypes.WorldState)
 signal play_pause_toggled(is_playing: bool)
 signal step_generation_requested()
 signal speed_changed(speed_index: int)
+signal follow_events_toggled(enabled: bool)
 signal language_changed(lang: String)
 signal settings_changed(auto_pause: bool, unlimited_pressure: bool, free_sandbox: bool)
 signal decision_models_changed()
@@ -69,6 +70,7 @@ var _sea_level_label: Label
 var _play_btn: Button
 var _step_btn: Button
 var _speed_btn: Button
+var _follow_events_btn: Button
 var _pressure_bar: ProgressBar
 var _pressure_label: Label
 var _settings_btn: Button
@@ -374,8 +376,6 @@ func refresh_strategies(state: EvoTypes.WorldState, lang: String = "es") -> void
 
 
 func _rebuild_active_inspector_sheet() -> void:
-	if _inspector_minimized:
-		return
 	if _inspector_tab == "habitat":
 		_rebuild_hex_sheet()
 	else:
@@ -561,7 +561,7 @@ func _on_toggle_inspector_minimize() -> void:
 	_inspector_minimized = not _inspector_minimized
 	_inspector_body_vbox.visible = not _inspector_minimized
 	_inspector_minimize_btn.text = "▸" if _inspector_minimized else "▾"
-	_inspector_frame.offset_bottom = 228 if _inspector_minimized else 865
+	_inspector_frame.offset_bottom = 172 if _inspector_minimized else 696
 	if not _inspector_minimized:
 		_rebuild_active_inspector_sheet()
 
@@ -641,6 +641,11 @@ func _on_speed_pressed() -> void:
 	_speed_index = (_speed_index + 1) % 3
 	_update_static_labels()
 	speed_changed.emit(_speed_index)
+
+
+func _on_follow_events_toggled(toggled_on: bool) -> void:
+	EvoUiStyle.apply_button_active(_follow_events_btn, toggled_on)
+	follow_events_toggled.emit(toggled_on)
 
 
 func _on_tree_btn_pressed() -> void:

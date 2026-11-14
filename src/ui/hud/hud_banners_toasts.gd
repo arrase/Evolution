@@ -10,15 +10,27 @@ const EVENT_FEED_FILTER_IDS: Array[String] = [
 ]
 
 const EVENT_FEED_FILTER_MAP: Dictionary = {
-	"war": ["war", "war_repelled", "siege", "raid", "betrayal", "pillage"],
-	"diplomacy": ["pact", "tribute", "merge", "walled_union", "absorption", "colonize"],
-	"health": ["epidemic", "epidemic_spread", "epidemic_recovered", "famine", "tragedy_of_commons"],
+	"war": ["war", "war_repelled", "raid", "raid_repelled", "siege", "betrayal", "pillage", "vendetta", "conflict"],
+	"diplomacy": ["pact", "tribute", "merge", "walled_union", "union", "absorption", "colonize", "diplomacy"],
+	"health": ["epidemic", "epidemic_spread", "epidemic_recovered", "plague", "famine", "tragedy_of_commons", "economy", "harvest"],
 	"evolution": [
-		"baldwin_trait", "cultural_innovation", "allopatric_speciation", "symbiosis",
+		"baldwin_trait", "baldwin", "cultural_innovation", "allopatric_speciation", "speciation", "symbiosis",
 		"cultural_loss", "extinction", "total_extinction", "single_survivor",
-		"ecological_equilibrium", "fortify"
+		"ecological_equilibrium", "fortify", "defense", "milestone"
 	]
 }
+
+const GROUPABLE_ENV_TYPES: Array[String] = [
+	"famine",
+	"plague",
+	"epidemic",
+	"epidemic_spread",
+	"epidemic_recovered",
+	"tragedy_of_commons"
+]
+
+static var _coord_strip_regex: RegEx = null
+static var _row_style_cache: Dictionary = {}
 
 
 static func build_banners_and_toasts(hud: Control) -> void:
@@ -29,36 +41,36 @@ static func build_banners_and_toasts(hud: Control) -> void:
 	hud._milestone_banner.anchor_right = 0.5
 	hud._milestone_banner.anchor_top = 0.0
 	hud._milestone_banner.anchor_bottom = 0.0
-	hud._milestone_banner.offset_left = -220
-	hud._milestone_banner.offset_right = 220
-	hud._milestone_banner.offset_top = 76
-	hud._milestone_banner.offset_bottom = 156
+	hud._milestone_banner.offset_left = -205
+	hud._milestone_banner.offset_right = 205
+	hud._milestone_banner.offset_top = 44
+	hud._milestone_banner.offset_bottom = 108
 	hud._milestone_banner.z_index = 25
-	var banner_style := EvoUiStyle.make_parchment_card(Color("#fef3c7"), EvoUiStyle.COLOR_GOLD_BRIGHT, 8)
-	banner_style.border_width_left = 4
-	banner_style.border_width_right = 4
-	banner_style.border_width_top = 3
-	banner_style.border_width_bottom = 3
+	var banner_style := EvoUiStyle.make_parchment_card(Color("#fef3c7", 0.94), EvoUiStyle.COLOR_GOLD_BRIGHT, 6)
+	banner_style.border_width_left = 3
+	banner_style.border_width_right = 3
+	banner_style.border_width_top = 2
+	banner_style.border_width_bottom = 2
 	hud._milestone_banner.add_theme_stylebox_override("panel", banner_style)
 	hud.add_child(hud._milestone_banner)
 
 	var b_hbox := HBoxContainer.new()
-	b_hbox.add_theme_constant_override("separation", 8)
+	b_hbox.add_theme_constant_override("separation", 6)
 	hud._milestone_banner.add_child(b_hbox)
 
 	var b_vbox := VBoxContainer.new()
 	b_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	b_vbox.add_theme_constant_override("separation", 3)
+	b_vbox.add_theme_constant_override("separation", 2)
 	b_hbox.add_child(b_vbox)
 
 	hud._banner_title_lbl = Label.new()
-	hud._banner_title_lbl.add_theme_font_size_override("font_size", 14)
+	hud._banner_title_lbl.add_theme_font_size_override("font_size", 12)
 	hud._banner_title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._banner_title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	b_vbox.add_child(hud._banner_title_lbl)
 
 	hud._banner_summary_lbl = Label.new()
-	hud._banner_summary_lbl.add_theme_font_size_override("font_size", 11)
+	hud._banner_summary_lbl.add_theme_font_size_override("font_size", 10)
 	hud._banner_summary_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	hud._banner_summary_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	b_vbox.add_child(hud._banner_summary_lbl)
@@ -77,34 +89,34 @@ static func build_event_feed_panel(hud: Control) -> void:
 	hud._event_feed_panel.anchor_right = 0.0
 	hud._event_feed_panel.anchor_top = 1.0
 	hud._event_feed_panel.anchor_bottom = 1.0
-	hud._event_feed_panel.offset_left = 10
-	hud._event_feed_panel.offset_right = 380
-	hud._event_feed_panel.offset_top = -270
-	hud._event_feed_panel.offset_bottom = -10
+	hud._event_feed_panel.offset_left = 8
+	hud._event_feed_panel.offset_right = 316
+	hud._event_feed_panel.offset_top = -182
+	hud._event_feed_panel.offset_bottom = -6
 	hud._event_feed_panel.z_index = 18
-	hud._event_feed_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(5))
+	hud._event_feed_panel.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(4))
 	hud.add_child(hud._event_feed_panel)
 
 	var outer_vbox := VBoxContainer.new()
-	outer_vbox.add_theme_constant_override("separation", 4)
+	outer_vbox.add_theme_constant_override("separation", 3)
 	hud._event_feed_panel.add_child(outer_vbox)
 
 	# Header Row: Title + Filter Pills + Collapse Button
 	var header_row := HBoxContainer.new()
-	header_row.add_theme_constant_override("separation", 3)
+	header_row.add_theme_constant_override("separation", 2)
 	outer_vbox.add_child(header_row)
 
 	var title_lbl := Label.new()
 	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_lbl.clip_text = true
-	title_lbl.add_theme_font_size_override("font_size", 11)
+	title_lbl.add_theme_font_size_override("font_size", 10)
 	title_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_GOLD_TEXT)
 	header_row.add_child(title_lbl)
 
 	var filter_btns: Dictionary = {}
 	for f_id in EVENT_FEED_FILTER_IDS:
 		var f_btn := Button.new()
-		f_btn.custom_minimum_size = Vector2(26, 22)
+		f_btn.custom_minimum_size = Vector2(22, 20)
 		f_btn.add_theme_font_size_override("font_size", 10)
 		f_btn.pressed.connect(func() -> void:
 			hud._event_feed_filter = f_id
@@ -115,18 +127,18 @@ static func build_event_feed_panel(hud: Control) -> void:
 
 	var body_card := PanelContainer.new()
 	body_card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	body_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(5, false))
+	body_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(4, false))
 	outer_vbox.add_child(body_card)
 
 	var collapse_btn := Button.new()
 	collapse_btn.text = "▾"
-	collapse_btn.custom_minimum_size = Vector2(22, 22)
+	collapse_btn.custom_minimum_size = Vector2(20, 20)
 	collapse_btn.add_theme_font_size_override("font_size", 10)
 	collapse_btn.pressed.connect(func() -> void:
 		hud._event_feed_collapsed = not hud._event_feed_collapsed
 		body_card.visible = not hud._event_feed_collapsed
 		collapse_btn.text = "▸" if hud._event_feed_collapsed else "▾"
-		hud._event_feed_panel.offset_top = -46 if hud._event_feed_collapsed else -270
+		hud._event_feed_panel.offset_top = -36 if hud._event_feed_collapsed else -182
 	)
 	header_row.add_child(collapse_btn)
 
@@ -138,7 +150,7 @@ static func build_event_feed_panel(hud: Control) -> void:
 
 	hud._event_feed_vbox = VBoxContainer.new()
 	hud._event_feed_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hud._event_feed_vbox.add_theme_constant_override("separation", 3)
+	hud._event_feed_vbox.add_theme_constant_override("separation", 2)
 	scroll.add_child(hud._event_feed_vbox)
 
 	hud.set_meta("_event_feed_title_lbl", title_lbl)
@@ -150,15 +162,17 @@ static func refresh_event_feed(hud: Control) -> void:
 		return
 
 	var lang: String = hud._lang
-	var title_lbl := hud.get_meta("_event_feed_title_lbl") as Label
-	title_lbl.text = EvoUiStyle.tr_text(lang, "📜 Crónica en Vivo", "📜 Live Chronicle")
-
-	var filter_btns: Dictionary = hud.get_meta("_event_feed_filter_btns")
-	for f_id in EVENT_FEED_FILTER_IDS:
-		var btn := filter_btns[f_id] as Button
-		btn.text = _filter_short_label(lang, f_id)
-		btn.tooltip_text = _filter_tooltip_label(lang, f_id)
-		EvoUiStyle.apply_button_active(btn, hud._event_feed_filter == f_id)
+	var header_key := "%s:%s" % [lang, hud._event_feed_filter]
+	if str(hud.get_meta("_last_event_feed_hdr", "")) != header_key:
+		hud.set_meta("_last_event_feed_hdr", header_key)
+		var title_lbl := hud.get_meta("_event_feed_title_lbl") as Label
+		title_lbl.text = EvoUiStyle.tr_text(lang, "📜 Crónica", "📜 Chronicle")
+		var filter_btns: Dictionary = hud.get_meta("_event_feed_filter_btns")
+		for f_id in EVENT_FEED_FILTER_IDS:
+			var btn := filter_btns[f_id] as Button
+			btn.text = _filter_short_label(lang, f_id)
+			btn.tooltip_text = _filter_tooltip_label(lang, f_id)
+			EvoUiStyle.apply_button_active(btn, hud._event_feed_filter == f_id)
 
 	if hud._world_state == null:
 		for child in hud._event_feed_vbox.get_children():
@@ -187,45 +201,66 @@ static func refresh_event_feed(hud: Control) -> void:
 		child.queue_free()
 
 	var allowed_types: Array = EVENT_FEED_FILTER_MAP[active_filter] if EVENT_FEED_FILTER_MAP.has(active_filter) else []
+	var filtered_entries: Array[EvoTypes.ChronicleEntry] = []
+	for i in range(state.chronicle.size() - 1, -1, -1):
+		var candidate: EvoTypes.ChronicleEntry = state.chronicle[i]
+		if active_filter == "all" or candidate.event_type in allowed_types:
+			filtered_entries.append(candidate)
 
 	var shown := 0
-	for i in range(state.chronicle.size() - 1, -1, -1):
-		var entry: EvoTypes.ChronicleEntry = state.chronicle[i]
-		if active_filter != "all" and not (entry.event_type in allowed_types):
-			continue
-		var ev_color := EvoUiStyle.get_event_type_color(entry.event_type)
-		var is_current := (entry.generation == state.generation)
+	var idx := 0
+	while idx < filtered_entries.size() and shown < 30:
+		var lead: EvoTypes.ChronicleEntry = filtered_entries[idx]
+		var group_count := 1
+		var tooltip_blocks: Array[String] = [
+			"📍 (%s) · %s\n%s" % [lead.hex_id, lead.title, lead.causal_explanation]
+		]
+		if lead.event_type in GROUPABLE_ENV_TYPES:
+			while idx + group_count < filtered_entries.size():
+				var nxt: EvoTypes.ChronicleEntry = filtered_entries[idx + group_count]
+				if nxt.generation != lead.generation or nxt.event_type != lead.event_type:
+					break
+				tooltip_blocks.append("📍 (%s) · %s\n%s" % [nxt.hex_id, nxt.title, nxt.causal_explanation])
+				group_count += 1
+
+		var is_current := (lead.generation == state.generation)
+		var style_key := "%s:%d" % [lead.event_type, 1 if is_current else 0]
+		if not _row_style_cache.has(style_key):
+			var ev_color := EvoUiStyle.get_event_type_color(lead.event_type)
+			var bg_col := Color("#fff8db", 0.94) if is_current else Color("#fbf2de", 0.90)
+			var border_col := ev_color.lightened(0.12) if is_current else ev_color
+			var n_style := EvoUiStyle.make_parchment_card(bg_col, border_col, 3)
+			n_style.border_width_left = 3
+			var h_style := EvoUiStyle.make_parchment_card(Color("#fef08a", 0.96), border_col, 3)
+			h_style.border_width_left = 3
+			var ink := ev_color.darkened(0.42) if ev_color.get_luminance() > 0.48 else ev_color.darkened(0.24)
+			_row_style_cache[style_key] = {"normal": n_style, "hover": h_style, "ink": ink}
+		var st: Dictionary = _row_style_cache[style_key]
+		var icon := _event_semantic_icon(lead.event_type)
+		var clean_title := _clean_toast_title(lead.title)
+		var count_suffix := " (×%d)" % group_count if group_count > 1 else ""
 
 		var row_btn := Button.new()
 		row_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		row_btn.clip_text = true
 		row_btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		row_btn.custom_minimum_size = Vector2(0, 24)
+		row_btn.custom_minimum_size = Vector2(0, 21)
 		row_btn.add_theme_font_size_override("font_size", 10)
-		row_btn.text = "G%d · (%s) · %s" % [
-			entry.generation,
-			entry.hex_id,
-			_clean_toast_title(entry.title)
-		]
-		row_btn.tooltip_text = "%s\n%s" % [entry.title, entry.causal_explanation]
+		row_btn.text = "G%d %s %s%s" % [lead.generation, icon, clean_title, count_suffix]
+		row_btn.tooltip_text = "\n\n".join(tooltip_blocks)
 
-		var bg_col := Color("#fff8db") if is_current else Color("#fbf2de")
-		var border_col := ev_color.lightened(0.15) if is_current else ev_color
-		var normal_style := EvoUiStyle.make_parchment_card(bg_col, border_col, 4)
-		normal_style.border_width_left = 4
-		var hover_style := EvoUiStyle.make_parchment_card(Color("#fef08a"), border_col, 4)
-		hover_style.border_width_left = 4
-		row_btn.add_theme_stylebox_override("normal", normal_style)
-		row_btn.add_theme_stylebox_override("hover", hover_style)
-		row_btn.add_theme_stylebox_override("pressed", hover_style)
-		row_btn.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK if is_current else EvoUiStyle.COLOR_INK)
-		row_btn.pressed.connect(hud._on_modal_jump_to_hex.bind(entry.hex_id, entry.deme_id))
+		row_btn.add_theme_stylebox_override("normal", st["normal"] as StyleBoxFlat)
+		row_btn.add_theme_stylebox_override("hover", st["hover"] as StyleBoxFlat)
+		row_btn.add_theme_stylebox_override("pressed", st["hover"] as StyleBoxFlat)
+		row_btn.add_theme_color_override("font_color", st["ink"] as Color)
+		row_btn.add_theme_color_override("font_hover_color", EvoUiStyle.COLOR_WOOD_DARK)
+		row_btn.add_theme_color_override("font_pressed_color", EvoUiStyle.COLOR_WOOD_DARK)
+		row_btn.pressed.connect(hud._on_modal_jump_to_hex.bind(lead.hex_id, lead.deme_id))
 		hud._event_feed_vbox.add_child(row_btn)
 
+		idx += group_count
 		shown += 1
-		if shown >= 30:
-			break
 
 	if shown == 0:
 		var empty_lbl := Label.new()
@@ -233,6 +268,23 @@ static func refresh_event_feed(hud: Control) -> void:
 		empty_lbl.add_theme_font_size_override("font_size", 10)
 		empty_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 		hud._event_feed_vbox.add_child(empty_lbl)
+
+
+static func _event_semantic_icon(event_type: String) -> String:
+	match event_type:
+		"war", "war_repelled", "raid", "raid_repelled", "siege", "betrayal", "pillage", "vendetta", "conflict":
+			return "⚔"
+		"pact", "tribute", "symbiosis", "diplomacy":
+			return "🤝"
+		"walled_union", "union", "merge", "absorption", "fortify", "defense", "colonize", "cultural_innovation", "single_survivor", "ecological_equilibrium", "milestone":
+			return "🏛"
+		"tragedy_of_commons", "economy", "harvest":
+			return "🌾"
+		"extinction", "total_extinction", "epidemic", "epidemic_spread", "plague", "famine", "cultural_loss":
+			return "☠"
+		"allopatric_speciation", "speciation", "baldwin_trait", "baldwin", "epidemic_recovered":
+			return "🧬"
+	return "📜"
 
 
 static func _filter_short_label(lang: String, filter_id: String) -> String:
@@ -338,4 +390,7 @@ static func _clean_toast_title(raw_title: String) -> String:
 		if cleaned.begins_with(prefix):
 			cleaned = cleaned.substr(prefix.length()).strip_edges()
 			break
+	if _coord_strip_regex == null:
+		_coord_strip_regex = RegEx.create_from_string("(?i)(?:\\s+(?:en|at|in))?\\s*\\(-?\\d+,\\s*-?\\d+\\)")
+	cleaned = _coord_strip_regex.sub(cleaned, "", true).strip_edges()
 	return cleaned

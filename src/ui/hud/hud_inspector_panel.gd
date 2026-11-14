@@ -8,40 +8,40 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 	hud._inspector_frame.anchor_right = 1.0
 	hud._inspector_frame.anchor_top = 0.0
 	hud._inspector_frame.anchor_bottom = 0.0
-	hud._inspector_frame.offset_left = -356
-	hud._inspector_frame.offset_right = -10
-	hud._inspector_frame.offset_top = 132
-	hud._inspector_frame.offset_bottom = 865
-	hud._inspector_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(7))
+	hud._inspector_frame.offset_left = -292
+	hud._inspector_frame.offset_right = -8
+	hud._inspector_frame.offset_top = 94
+	hud._inspector_frame.offset_bottom = 696
+	hud._inspector_frame.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_frame_box(4))
 	hud.add_child(hud._inspector_frame)
 
 	var outer_vbox := VBoxContainer.new()
-	outer_vbox.add_theme_constant_override("separation", 5)
+	outer_vbox.add_theme_constant_override("separation", 3)
 	hud._inspector_frame.add_child(outer_vbox)
 
 	# Wooden Scroll Roller Header (Always visible even when minimized)
 	var header_box := PanelContainer.new()
-	header_box.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_header_box(8, 5))
+	header_box.add_theme_stylebox_override("panel", EvoUiStyle.make_wood_header_box(5, 3))
 	outer_vbox.add_child(header_box)
 
 	var header_vbox := VBoxContainer.new()
-	header_vbox.add_theme_constant_override("separation", 4)
+	header_vbox.add_theme_constant_override("separation", 3)
 	header_box.add_child(header_vbox)
 
-	# Row 1: Compact Village Selector Row (Swatch + ◀ + OptionButton + ▶ + Minimize)
+	# Row 1: Compact Village Selector Row (Swatch + ◀ + OptionButton + ▶ + Fold ▾/▸)
 	var village_sel_row := HBoxContainer.new()
-	village_sel_row.add_theme_constant_override("separation", 4)
+	village_sel_row.add_theme_constant_override("separation", 3)
 	header_vbox.add_child(village_sel_row)
 
 	hud._inspector_header_swatch = ColorRect.new()
-	hud._inspector_header_swatch.custom_minimum_size = Vector2(12, 20)
+	hud._inspector_header_swatch.custom_minimum_size = Vector2(10, 18)
 	hud._inspector_header_swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	hud._inspector_header_swatch.color = Color("#E07A5F")
 	village_sel_row.add_child(hud._inspector_header_swatch)
 
 	hud._village_prev_btn = Button.new()
 	hud._village_prev_btn.text = "◀"
-	hud._village_prev_btn.custom_minimum_size = Vector2(24, 24)
+	hud._village_prev_btn.custom_minimum_size = Vector2(20, 20)
 	hud._village_prev_btn.add_theme_font_size_override("font_size", 10)
 	hud._village_prev_btn.pressed.connect(hud._on_village_cycle_pressed.bind(-1))
 	village_sel_row.add_child(hud._village_prev_btn)
@@ -51,7 +51,7 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 	hud._village_selector_opt.fit_to_longest_item = false
 	hud._village_selector_opt.clip_text = true
 	hud._village_selector_opt.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	hud._village_selector_opt.add_theme_font_size_override("font_size", 11)
+	hud._village_selector_opt.add_theme_font_size_override("font_size", 10)
 	hud._village_selector_opt.item_selected.connect(hud._on_village_selector_item_selected)
 	village_sel_row.add_child(hud._village_selector_opt)
 
@@ -59,20 +59,22 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 
 	hud._village_next_btn = Button.new()
 	hud._village_next_btn.text = "▶"
-	hud._village_next_btn.custom_minimum_size = Vector2(24, 24)
+	hud._village_next_btn.custom_minimum_size = Vector2(20, 20)
 	hud._village_next_btn.add_theme_font_size_override("font_size", 10)
 	hud._village_next_btn.pressed.connect(hud._on_village_cycle_pressed.bind(1))
 	village_sel_row.add_child(hud._village_next_btn)
 
 	hud._inspector_minimize_btn = Button.new()
 	hud._inspector_minimize_btn.text = "▾"
-	hud._inspector_minimize_btn.custom_minimum_size = Vector2(24, 24)
+	hud._inspector_minimize_btn.custom_minimum_size = Vector2(20, 20)
+	hud._inspector_minimize_btn.add_theme_font_size_override("font_size", 10)
+	hud._inspector_minimize_btn.tooltip_text = "▾ / ▸"
 	hud._inspector_minimize_btn.pressed.connect(hud._on_toggle_inspector_minimize)
 	village_sel_row.add_child(hud._inspector_minimize_btn)
 
 	# Row 2: System 1 Decision Model Badge + Lineage Highlight Button
 	var h_top := HBoxContainer.new()
-	h_top.add_theme_constant_override("separation", 5)
+	h_top.add_theme_constant_override("separation", 4)
 	header_vbox.add_child(h_top)
 
 	var model_badge_panel := PanelContainer.new()
@@ -84,7 +86,7 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 	hud._inspector_model_badge_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud._inspector_model_badge_lbl.clip_text = true
 	hud._inspector_model_badge_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	hud._inspector_model_badge_lbl.add_theme_font_size_override("font_size", 11)
+	hud._inspector_model_badge_lbl.add_theme_font_size_override("font_size", 10)
 	hud._inspector_model_badge_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_CREAM_TEXT)
 	model_badge_panel.add_child(hud._inspector_model_badge_lbl)
 
@@ -103,42 +105,42 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 	hud.deme_strategy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hud.deme_strategy_label.clip_text = true
 	hud.deme_strategy_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	hud.deme_strategy_label.add_theme_font_size_override("font_size", 11)
+	hud.deme_strategy_label.add_theme_font_size_override("font_size", 10)
 	hud.deme_strategy_label.add_theme_color_override("font_color", Color("#10B981"))
 	hud._strategy_badge_panel.add_child(hud.deme_strategy_label)
 
 	# Collapsible Scroll Body (3 Tabs + Cream Parchment Content)
 	hud._inspector_body_vbox = VBoxContainer.new()
 	hud._inspector_body_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	hud._inspector_body_vbox.add_theme_constant_override("separation", 5)
+	hud._inspector_body_vbox.add_theme_constant_override("separation", 3)
 	outer_vbox.add_child(hud._inspector_body_vbox)
 
 	var tabs_row := HBoxContainer.new()
-	tabs_row.add_theme_constant_override("separation", 4)
+	tabs_row.add_theme_constant_override("separation", 3)
 	hud._inspector_body_vbox.add_child(tabs_row)
 
 	hud._tab_deme_btn = Button.new()
 	hud._tab_deme_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hud._tab_deme_btn.add_theme_font_size_override("font_size", 11)
+	hud._tab_deme_btn.add_theme_font_size_override("font_size", 10)
 	hud._tab_deme_btn.pressed.connect(hud._on_inspector_tab_pressed.bind("deme"))
 	tabs_row.add_child(hud._tab_deme_btn)
 
 	hud._tab_traits_btn = Button.new()
 	hud._tab_traits_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hud._tab_traits_btn.add_theme_font_size_override("font_size", 11)
+	hud._tab_traits_btn.add_theme_font_size_override("font_size", 10)
 	hud._tab_traits_btn.pressed.connect(hud._on_inspector_tab_pressed.bind("traits"))
 	tabs_row.add_child(hud._tab_traits_btn)
 
 	hud._tab_habitat_btn = Button.new()
 	hud._tab_habitat_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hud._tab_habitat_btn.add_theme_font_size_override("font_size", 11)
+	hud._tab_habitat_btn.add_theme_font_size_override("font_size", 10)
 	hud._tab_habitat_btn.pressed.connect(hud._on_inspector_tab_pressed.bind("habitat"))
 	tabs_row.add_child(hud._tab_habitat_btn)
 
 	var parchment_body := PanelContainer.new()
 	parchment_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parchment_body.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	parchment_body.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(8, false))
+	parchment_body.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_panel(5, false))
 	hud._inspector_body_vbox.add_child(parchment_body)
 
 	hud._inspector_scroll = ScrollContainer.new()
@@ -149,24 +151,24 @@ static func build_right_scroll_inspector(hud: Control) -> void:
 
 	var sheets_holder := VBoxContainer.new()
 	sheets_holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sheets_holder.add_theme_constant_override("separation", 6)
+	sheets_holder.add_theme_constant_override("separation", 4)
 	hud._inspector_scroll.add_child(sheets_holder)
 
 	hud._deme_sheet_vbox = VBoxContainer.new()
 	hud._deme_sheet_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hud._deme_sheet_vbox.add_theme_constant_override("separation", 6)
+	hud._deme_sheet_vbox.add_theme_constant_override("separation", 4)
 	sheets_holder.add_child(hud._deme_sheet_vbox)
 
 	hud._traits_sheet_vbox = VBoxContainer.new()
 	hud._traits_sheet_vbox.visible = false
 	hud._traits_sheet_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hud._traits_sheet_vbox.add_theme_constant_override("separation", 6)
+	hud._traits_sheet_vbox.add_theme_constant_override("separation", 4)
 	sheets_holder.add_child(hud._traits_sheet_vbox)
 
 	hud._hex_sheet_vbox = VBoxContainer.new()
 	hud._hex_sheet_vbox.visible = false
 	hud._hex_sheet_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hud._hex_sheet_vbox.add_theme_constant_override("separation", 6)
+	hud._hex_sheet_vbox.add_theme_constant_override("separation", 4)
 	sheets_holder.add_child(hud._hex_sheet_vbox)
 
 
@@ -290,11 +292,11 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 
 	# TAB 1: 🧠 ALDEA Y DECISIONES
 	var meters_card := PanelContainer.new()
-	meters_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 6))
+	meters_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 4))
 	hud._deme_sheet_vbox.add_child(meters_card)
 
 	var m_vbox := VBoxContainer.new()
-	m_vbox.add_theme_constant_override("separation", 4)
+	m_vbox.add_theme_constant_override("separation", 2)
 	meters_card.add_child(m_vbox)
 
 	EvoHudInspectorFormatters.add_sheet_kv(m_vbox, EvoUiStyle.tr_text(hud._lang, "🛡️ Linaje:", "🛡️ Lineage:"), lin_name)
@@ -381,7 +383,7 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	# Action Policy Section (Top 3 action options, chosen action marked with ★)
 	var dec_title := Label.new()
 	dec_title.text = EvoUiStyle.tr_text(hud._lang, "🧠 Acción Elegida:", "🧠 Chosen Action:")
-	dec_title.add_theme_font_size_override("font_size", 12)
+	dec_title.add_theme_font_size_override("font_size", 11)
 	dec_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	hud._deme_sheet_vbox.add_child(dec_title)
 
@@ -424,16 +426,16 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 
 	# Village Relations & Roads Summary
 	var rel_card := PanelContainer.new()
-	rel_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#f4e2b8"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 6))
+	rel_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#f4e2b8"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 4))
 	hud._deme_sheet_vbox.add_child(rel_card)
 
 	var rel_vbox := VBoxContainer.new()
-	rel_vbox.add_theme_constant_override("separation", 3)
+	rel_vbox.add_theme_constant_override("separation", 2)
 	rel_card.add_child(rel_vbox)
 
 	var rel_title := Label.new()
 	rel_title.text = EvoUiStyle.tr_text(hud._lang, "🛣️ Relaciones y Caminos:", "🛣️ Relations & Paths:")
-	rel_title.add_theme_font_size_override("font_size", 11)
+	rel_title.add_theme_font_size_override("font_size", 10)
 	rel_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
 	rel_vbox.add_child(rel_title)
 
@@ -445,7 +447,7 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		r_btn.text = str(item["text"])
 		r_btn.clip_text = true
 		r_btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		r_btn.add_theme_font_size_override("font_size", 11)
+		r_btn.add_theme_font_size_override("font_size", 10)
 		var txt_col := EvoUiStyle.COLOR_RED_DANGER if bool(item["danger"]) else EvoUiStyle.COLOR_INK
 		r_btn.add_theme_color_override("font_color", txt_col)
 		r_btn.add_theme_color_override("font_hover_color", EvoUiStyle.COLOR_WOOD_DARK)
@@ -457,7 +459,7 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 
 	# Outcome, Forecast & Memory Card
 	var just_card := PanelContainer.new()
-	just_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 6))
+	just_card.add_theme_stylebox_override("panel", EvoUiStyle.make_parchment_card(Color("#fbf2de"), EvoUiStyle.COLOR_PARCHMENT_BORDER, 4))
 	hud._deme_sheet_vbox.add_child(just_card)
 
 	var just_lbl := Label.new()

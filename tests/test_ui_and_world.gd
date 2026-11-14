@@ -8,6 +8,7 @@ static func run(r) -> void:
 	_test_bugfix_regressions(r)
 	_test_turn_events_and_world_stats(r)
 	_test_ux_clarity_stats_lens_and_fx(r)
+	_test_phases_1_2_3_improvements(r)
 
 
 static func _collect_label_texts(node: Node, out: Array[String]) -> void:
@@ -683,3 +684,68 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 		if ccell.owner_deme_id == d_a.id and ccell.land_use == "crops" and ccell.deme_ids.is_empty():
 			crops_kept += 1
 	r._assert(budded_safe and crops_kept == 4, "City settles new camp on open neighbor (-1,1) while keeping all 4 crops intact")
+
+
+static func _test_phases_1_2_3_improvements(r) -> void:
+	print("-- Testing Phases 1, 2 & 3 Event Types, Repelled Raids, Shader/Lens & Follow Camera --")
+	for ev_id in ["offer_pact", "offer_union", "demand_tribute", "aid", "trade", "raid_repelled"]:
+		r._assert(ev_id in EvoTypes.EVENT_TYPES, "EvoTypes.EVENT_TYPES includes '%s'" % ev_id)
+	var verb_es := EvoI18n.event_verb("raid_repelled", "es")
+	var verb_en := EvoI18n.event_verb("raid_repelled", "en")
+	r._assert(verb_es != "" and verb_es != "raid_repelled" and verb_en != "" and verb_en != "raid_repelled", "EvoI18n.event_verb('raid_repelled') returns non-empty localized ES/EN text")
+
+	var repel_state := EvoPresets.create_preset_world("preset-rift-savanna", "es", "strat-war", "strat-cooperation")
+	for cid in repel_state.cells.keys():
+		var c: EvoTypes.HexCell = repel_state.cells[cid]
+		c.deme_ids.clear()
+		c.owner_deme_id = ""
+		c.land_use = "wild"
+	var attacker: EvoTypes.Deme = repel_state.demes["deme-rift-west"]
+	var defender: EvoTypes.Deme = repel_state.demes["deme-rift-east"]
+	attacker.hex_id = "0,0"
+	attacker.urban_hex_ids = ["0,0"]
+	attacker.population = 45
+	attacker.defense_tier = 0
+	defender.hex_id = "1,0"
+	defender.urban_hex_ids = ["1,0"]
+	defender.population = 260
+	defender.defense_tier = 3
+	defender.defense_posture = "mobilized_garrison"
+	(repel_state.cells["0,0"] as EvoTypes.HexCell).biome = "savanna"
+	(repel_state.cells["0,0"] as EvoTypes.HexCell).altitude = 0.45
+	(repel_state.cells["0,0"] as EvoTypes.HexCell).deme_ids.assign([attacker.id])
+	(repel_state.cells["1,0"] as EvoTypes.HexCell).biome = "savanna"
+	(repel_state.cells["1,0"] as EvoTypes.HexCell).altitude = 0.45
+	(repel_state.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([defender.id])
+	attacker.chosen_action = EvoActionMenu.option("raid", defender.id)
+	defender.chosen_action = EvoActionMenu.option("forage")
+	EvoBiophysPhase.run_biophysical_phase(repel_state, "es")
+	var has_repel_flow := repel_state.active_flows.any(func(fl: EvoTypes.HexEdgeFlow) -> bool: return fl.flow_type == "raid_repelled")
+	var has_raid_flow := repel_state.active_flows.any(func(fl: EvoTypes.HexEdgeFlow) -> bool: return fl.flow_type == "raid")
+	var has_repel_event := repel_state.turn_events.any(func(ev: Dictionary) -> bool: return str(ev["type"]) == "raid_repelled")
+	var has_raid_event := repel_state.turn_events.any(func(ev: Dictionary) -> bool: return str(ev["type"]) == "raid")
+	r._assert(has_repel_flow and not has_raid_flow and has_repel_event and not has_raid_event, "Defeated raid emits 'raid_repelled' flow and event instead of 'raid'")
+
+	var hex_shader := load("res://src/world/shaders/terrain_hex.gdshader")
+	r._assert(hex_shader is Shader, "res://src/world/shaders/terrain_hex.gdshader loads validly as Shader")
+
+	var packed: PackedScene = load("res://scenes/main.tscn")
+	var main: EvoMainController = packed.instantiate() as EvoMainController
+	main.quit_on_close_enabled = false
+	r.root.add_child(main)
+	if main.camera == null:
+		main._ready()
+	main.hud._set_startup_blocked(false)
+
+	main.hud._on_lens_pressed("diplomacy")
+	main.world_renderer._process(0.016)
+	r._assert(main.world_renderer.active_lens == "diplomacy" and main.world_renderer._anim_layer.modulate.a >= 0.85, "Diplomacy lens keeps world_renderer._anim_layer.modulate.a >= 0.85")
+
+	r._assert(main.hud._follow_events_btn != null and main.hud._follow_events_btn.toggle_mode, "main.hud._follow_events_btn exists as toggle button")
+	r._assert(not main.follow_events_enabled, "main.follow_events_enabled defaults to false")
+	main.hud._follow_events_btn.button_pressed = true
+	r._assert(main.follow_events_enabled and EvoMainController.STEP_INTERVALS == [4.0, 2.0, 0.6], "Enabling _follow_events_btn sets main.follow_events_enabled without altering STEP_INTERVALS")
+	main.hud._follow_events_btn.button_pressed = false
+	r._assert(not main.follow_events_enabled and EvoMainController.STEP_INTERVALS == [4.0, 2.0, 0.6], "Disabling _follow_events_btn clears main.follow_events_enabled without altering STEP_INTERVALS")
+
+	main.free()

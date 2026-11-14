@@ -1,7 +1,7 @@
 class_name EvoPixelArtGen
 extends EvoPixelCanvas
 
-const ASSET_SCHEMA_VERSION: String = "v4_readability"
+const ASSET_SCHEMA_VERSION: String = "v5_diorama_craft"
 
 static var _texture_cache: Dictionary = {}
 static var _villager_colored_cache: Dictionary = {}
@@ -42,10 +42,23 @@ const TERRAIN_SPRITES: Array[String] = [
 	"acacia_tree",
 	"bush_cluster",
 	"marsh_reeds",
-	"pine_tree"
+	"pine_tree",
+	"cactus_arid",
+	"rock_boulder"
 ]
 
 const VILLAGE_SPRITES: Array[String] = [
+	"tent",
+	"hut",
+	"house",
+	"longhouse",
+	"market",
+	"tower",
+	"temple",
+	"hall",
+	"citadel",
+	"dock",
+	"palisade",
 	"tier1_tent",
 	"tier1_campfire",
 	"tier1_campfire_2",
@@ -74,8 +87,11 @@ const VILLAGE_SPRITES: Array[String] = [
 	"windmill",
 	"cathedral",
 	"crop_field",
+	"crops_wheat",
 	"pasture_pen",
+	"pasture_meadow",
 	"covered_wagon",
+	"trader_cart",
 	"ruins_stone",
 	"prop_unity_monument",
 	"prop_defense_palisade",
@@ -109,7 +125,12 @@ const VILLAGE_SPRITES: Array[String] = [
 	"effect_battle_sparks",
 	"villager_idle",
 	"villager_walk1",
-	"villager_walk2"
+	"villager_walk2",
+	"villager_walk_1",
+	"villager_walk_2",
+	"villager_work",
+	"traveler",
+	"raider"
 ]
 
 const UI_SPRITES: Array[String] = [
@@ -159,25 +180,38 @@ const ALIAS_MAP: Dictionary = {
 	"acacia_tree": "tree_savanna_2",
 	"pine_tree": "tree_tundra",
 	"bush_cluster": "bush_arid",
+	"cactus_arid": "bush_arid",
+	"rock_boulder": "mossy_rock",
 	"marsh_reeds": "coastal_reeds",
 	"mountain_peak": "rock_mountain",
-	"tier1_tent": "hut_thatch",
+	"tier1_tent": "tent",
+	"hut": "hut_thatch",
 	"tier1_campfire": "campfire",
 	"tier2_cottage": "house_clay",
 	"tier2_barn": "granary",
-	"tier3_townhall": "temple_totem",
+	"tier3_townhall": "hall",
+	"temple": "temple_totem",
 	"tier3_house": "house_stone",
+	"house": "house_stone",
+	"act_exchange": "market",
 	"tier4_citadel": "citadel_keep",
+	"citadel": "citadel_keep",
 	"tier4_windmill": "windmill",
 	"tier4_tower": "watchtower",
+	"tower": "watchtower",
 	"tier5_metropolis": "cathedral",
+	"palisade": "palisade_wall",
 	"prop_defense_palisade": "palisade_wall",
 	"prop_defense_wall": "stone_wall",
 	"prop_defense_fortress": "watchtower",
 	"prop_siege_engine": "siege_totem",
 	"settler_wagon": "covered_wagon",
-	"caravan_cart": "covered_wagon",
-	"ruins": "ruins_stone"
+	"caravan_cart": "trader_cart",
+	"crops_wheat": "crop_field",
+	"pasture_meadow": "pasture_pen",
+	"ruins": "ruins_stone",
+	"villager_walk_1": "villager_walk1",
+	"villager_walk_2": "villager_walk2"
 }
 
 
@@ -242,15 +276,11 @@ static func get_texture(sprite_name: String) -> ImageTexture:
 static func get_villager_texture(pose: String, tunic_color: Color) -> ImageTexture:
 	if not _initialized:
 		ensure_all_assets()
-	var key := "%s_%s" % [pose, tunic_color.to_html(false)]
+	var canon_pose := _resolve_alias(pose)
+	var key := "%s_%s" % [canon_pose, tunic_color.to_html(false)]
 	if _villager_colored_cache.has(key):
 		return _villager_colored_cache[key]
-	var step := 0
-	if pose == "villager_walk1":
-		step = 1
-	elif pose == "villager_walk2":
-		step = 2
-	var img := EvoVillageUiSprites.draw_villager(step, tunic_color)
+	var img := EvoVillageUiSprites.draw_villager_unit(canon_pose, tunic_color)
 	img.generate_mipmaps()
 	var tex := ImageTexture.create_from_image(img)
 	_villager_colored_cache[key] = tex
@@ -260,7 +290,7 @@ static func get_villager_texture(pose: String, tunic_color: Color) -> ImageTextu
 static func _min_expected_width(sprite_name: String) -> int:
 	if sprite_name.begins_with("hex_tile_"):
 		return 256
-	if sprite_name.begins_with("villager_"):
+	if sprite_name.begins_with("villager_") or sprite_name in ["traveler", "raider"]:
 		return 48
 	if sprite_name in UI_SPRITES or sprite_name.begins_with("icon_"):
 		return 64

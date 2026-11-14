@@ -121,14 +121,19 @@ static func _raid(
 			"broken_gen": state.generation
 		})
 
-	var event_type := "betrayal" if surprise else "raid"
-	EvoSettlementPhase.push_flow(state, attacker, defender, event_type, 1.0 if surprise else clampf(loot / 32.0, 0.5, 1.0))
-	EvoTypes.push_event(state, event_type, attacker.hex_id, target_hex, attacker.id, defender.id, loot, a_loss + d_loss)
-	if not won and not surprise:
-		return
-	var params := {"raider": attacker.name, "betrayer": attacker.name, "victim": defender.name, "loot": str(int(loot)), "hex": target_hex}
-	EvoSettlementPhase.chronicle(state, "chronicle-%s-%d-%s-%s" % [event_type, state.generation, attacker.id, defender.id], event_type, lang,
-		"chronicle_" + event_type, params, target_hex, attacker)
+	if won:
+		var event_type := "betrayal" if surprise else "raid"
+		EvoSettlementPhase.push_flow(state, attacker, defender, event_type, 1.0 if surprise else clampf(loot / 32.0, 0.5, 1.0))
+		EvoTypes.push_event(state, event_type, attacker.hex_id, target_hex, attacker.id, defender.id, loot, a_loss + d_loss)
+		var params := {"raider": attacker.name, "betrayer": attacker.name, "victim": defender.name, "loot": str(int(loot)), "hex": target_hex}
+		EvoSettlementPhase.chronicle(state, "chronicle-%s-%d-%s-%s" % [event_type, state.generation, attacker.id, defender.id], event_type, lang,
+			"chronicle_" + event_type, params, target_hex, attacker)
+	else:
+		EvoSettlementPhase.push_flow(state, attacker, defender, "raid_repelled", 0.75)
+		EvoTypes.push_event(state, "raid_repelled", attacker.hex_id, defender.hex_id, attacker.id, defender.id, 0.0, a_loss + d_loss)
+		var repel_params := {"raider": attacker.name, "defender": defender.name, "casualties": str(a_loss + d_loss), "hex": defender.hex_id}
+		EvoSettlementPhase.chronicle(state, "chronicle-raid-repel-%d-%s-%s" % [state.generation, defender.id, attacker.id], "raid_repelled", lang,
+			"chronicle_raid_repelled", repel_params, defender.hex_id, defender)
 
 
 static func _pillage_field(
