@@ -36,32 +36,59 @@ static func _test_thermodynamics(r) -> void:
 static func _test_catalog_and_presets(r) -> void:
 	print("-- Testing Catalog & Scientific Presets --")
 	var rift := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
-	r._assert(rift.cells.size() == 169, "Rift Savanna radius 7 has 169 cells")
-	r._assert(rift.demes.size() == 2, "Rift Savanna starts with 2 demes")
+	r._assert(rift.map_radius == 5 and rift.cells.size() == 91, "Rift Savanna radius 5 has 91 cells")
+	r._assert(
+		rift.demes.size() == 2
+		and rift.demes.has("deme-rift-west")
+		and rift.demes.has("deme-rift-east"),
+		"Rift Savanna starts with 2 autonomous founding clans (1 Slot A, 1 Slot B)"
+	)
 	r._assert(rift.traits_catalog.size() == 11, "Base catalog has 11 traits (6 bio + 5 cul)")
-	r._assert(rift.decisions_catalog.size() == 16, "Base catalog has 16 decisions")
+	r._assert(rift.decisions_catalog.size() == 17 and rift.decisions_catalog.has("none"), "Base catalog has 17 decisions including 'none'")
 
 	var darwin := EvoCatalog.create_preset_world("preset-darwin-archipelago", "en")
-	r._assert(darwin.cells.size() == 169, "Darwin Archipelago radius 7 has 169 cells")
-	r._assert(darwin.demes.size() == 2 and darwin.demes.has("deme-darwin-founder") and darwin.demes.has("deme-darwin-rival"), "Darwin Archipelago starts with 2 rival founder demes (1v1)")
+	r._assert(darwin.map_radius == 5 and darwin.cells.size() == 91, "Darwin Archipelago radius 5 has 91 cells")
+	r._assert(
+		darwin.demes.size() == 2
+		and darwin.demes.has("deme-darwin-founder")
+		and darwin.demes.has("deme-darwin-rival"),
+		"Darwin Archipelago starts with 2 autonomous founding clans (1 Slot A, 1 Slot B)"
+	)
 	r._assert(darwin.glacial_sea_level_cycle, "Darwin Archipelago has glacial sea level cycle enabled")
 
 	var island := EvoCatalog.create_preset_world("preset-finite-island", "es")
-	r._assert(island.cells.size() == 169, "Finite Island radius 7 has 169 cells")
-	r._assert(island.demes.size() == 2 and island.demes.has("deme-island-1") and island.demes.has("deme-island-2"), "Finite Island starts with 2 rival clans (1v1)")
+	r._assert(island.map_radius == 5 and island.cells.size() == 91, "Finite Island radius 5 has 91 cells")
+	r._assert(
+		island.demes.size() == 2
+		and island.demes.has("deme-island-1")
+		and island.demes.has("deme-island-2"),
+		"Finite Island starts with 2 autonomous founding clans (1 Slot A, 1 Slot B)"
+	)
 
-	for preset_pair in [
-		[rift, "deme-rift-west", "deme-rift-east"],
-		[darwin, "deme-darwin-founder", "deme-darwin-rival"],
-		[island, "deme-island-1", "deme-island-2"]
+	for preset_spec in [
+		[rift, ["deme-rift-west"], ["deme-rift-east"]],
+		[darwin, ["deme-darwin-founder"], ["deme-darwin-rival"]],
+		[island, ["deme-island-1"], ["deme-island-2"]]
 	]:
-		var pw: EvoTypes.WorldState = preset_pair[0]
-		var da: EvoTypes.Deme = pw.demes[preset_pair[1]]
-		var db: EvoTypes.Deme = pw.demes[preset_pair[2]]
+		var pw: EvoTypes.WorldState = preset_spec[0]
+		var slot_a_ids: Array = preset_spec[1]
+		var slot_b_ids: Array = preset_spec[2]
 		r._assert(pw.next_deme_seq == 1, "Preset %s initializes next_deme_seq == 1" % pw.preset_id)
-		r._assert(da.faction_slot == "A" and db.faction_slot == "B", "Preset %s initializes founder faction_slot A and B" % pw.preset_id)
-		r._assert(da.urban_hex_ids == [da.hex_id] and db.urban_hex_ids == [db.hex_id], "Preset %s initializes urban_hex_ids == [hex_id]" % pw.preset_id)
-		r._assert(not da.is_multi_hex() and da.defense_posture == "open_harvest", "Preset %s initializes single-hex open_harvest posture" % pw.preset_id)
+		r._assert(pw.lineage_tree.size() == 2, "Preset %s initializes 2 distinct founding lineages" % pw.preset_id)
+		var lin_set: Dictionary = {}
+		for did in slot_a_ids:
+			var da: EvoTypes.Deme = pw.demes[did]
+			lin_set[da.lineage_id] = true
+			r._assert(da.faction_slot == "A", "Preset %s deme %s assigned to faction_slot A" % [pw.preset_id, did])
+			r._assert(da.urban_hex_ids == [da.hex_id] and not da.is_multi_hex(), "Preset %s deme %s starts single-hex" % [pw.preset_id, did])
+			r._assert(da.defense_posture == "open_harvest" and da.domestic_action == "forage" and str(da.chosen_action["key"]) == "none", "Preset %s deme %s defaults to open_harvest, forage, and none" % [pw.preset_id, did])
+		for did in slot_b_ids:
+			var db: EvoTypes.Deme = pw.demes[did]
+			lin_set[db.lineage_id] = true
+			r._assert(db.faction_slot == "B", "Preset %s deme %s assigned to faction_slot B" % [pw.preset_id, did])
+			r._assert(db.urban_hex_ids == [db.hex_id] and not db.is_multi_hex(), "Preset %s deme %s starts single-hex" % [pw.preset_id, did])
+			r._assert(db.defense_posture == "open_harvest" and db.domestic_action == "forage" and str(db.chosen_action["key"]) == "none", "Preset %s deme %s defaults to open_harvest, forage, and none" % [pw.preset_id, did])
+		r._assert(lin_set.size() == 2, "Preset %s assigns 2 distinct lineage_ids across founders" % pw.preset_id)
 
 	var perim_single := EvoTypes.urban_perimeter_hex_ids(island.demes["deme-island-1"], island)
 	var test_city := EvoTypes.Deme.new()
@@ -124,8 +151,10 @@ static func _test_strategy_duel_and_forge(r) -> void:
 	west.population = 175
 	west.energy_reserves = 220.0
 	var settle_hex := EvoActionMenu.settle_targets(west, duel_world)[0].id
+	west.domestic_action = "forage"
 	west.chosen_action = EvoActionMenu.option("settle", settle_hex)
-	east.chosen_action = EvoActionMenu.option("forage")
+	east.domestic_action = "forage"
+	east.chosen_action = EvoActionMenu.option("none")
 	EvoBiophysPhase.run_biophysical_phase(duel_world, "en")
 	var budded_daughter: EvoTypes.Deme = null
 	for did in duel_world.demes.keys():
@@ -139,13 +168,14 @@ static func _test_strategy_duel_and_forge(r) -> void:
 	spec_world.generation = 12
 	var darwin_founder: EvoTypes.Deme = spec_world.demes["deme-darwin-founder"]
 	(spec_world.cells[darwin_founder.hex_id] as EvoTypes.HexCell).deme_ids.erase(darwin_founder.id)
-	darwin_founder.hex_id = "0,-2"
-	darwin_founder.urban_hex_ids = ["0,-2"]
-	(spec_world.cells["0,-2"] as EvoTypes.HexCell).deme_ids.append(darwin_founder.id)
+	darwin_founder.hex_id = "0,-4"
+	darwin_founder.urban_hex_ids = ["0,-4"]
+	(spec_world.cells["0,-4"] as EvoTypes.HexCell).deme_ids.append(darwin_founder.id)
 	darwin_founder.isolation_turns = 10
 	var spec_entries := EvoMilestonePhase.run_milestone_phase(spec_world, "en")
 	r._assert(not spec_entries.is_empty() and darwin_founder.strategy_id == "strat-expansion", "Allopatric speciation preserves deme strategy_id")
 	r._assert((spec_world.lineage_tree[darwin_founder.lineage_id] as EvoTypes.LineageNode).strategy_id == "strat-expansion", "Allopatric speciation child lineage preserves strategy_id")
+	r._assert(spec_world.lineage_tree.size() == 3, "Darwin allopatric speciation expands lineage_tree from 2 initial lineages to 3 nodes")
 
 	# 4. JSON persistence of custom user strategies and traits via EvoUserSettings
 	var tmp_dir := "/tmp/evolution_test_catalog_%d" % Time.get_ticks_usec()
@@ -266,12 +296,18 @@ static func _test_serialization(r) -> void:
 			break
 	w_deme.urban_hex_ids.append(adj_hex)
 	(state.cells[adj_hex] as EvoTypes.HexCell).deme_ids.assign([w_deme.id])
+	w_deme.domestic_action = "fortify"
+	w_deme.domestic_probabilities = {"forage": 0.20, "intensify": 0.10, "fortify": 0.70}
+	w_deme.domestic_forecasts = {"forage": "Forage", "intensify": "Intensify", "fortify": "Build palisade"}
+	w_deme.chosen_action = EvoActionMenu.option("trade", "deme-rift-east")
 	w_deme.defense_posture = "patrol_fields"
 	w_deme.posture_probabilities = {"open_harvest": 0.15, "patrol_fields": 0.65, "mobilized_garrison": 0.20}
 	w_deme.posture_forecasts = {"open_harvest": "100% harvest", "patrol_fields": "90% harvest", "mobilized_garrison": "78% harvest"}
 	var ruin_cell: EvoTypes.HexCell = state.cells["0,0"]
 	ruin_cell.ruin_turns = 2
 	ruin_cell.has_ruins = true
+	var deme_dict := w_deme.to_dict()
+	r._assert(str(deme_dict["domesticAction"]) == "fortify" and deme_dict.has("domesticProbabilities") and deme_dict.has("domesticForecasts"), "Deme.to_dict serializes domesticAction, domesticProbabilities, and domesticForecasts")
 	var json_str := JSON.stringify(state.to_dict())
 	var parsed: Variant = JSON.parse_string(json_str)
 	r._assert(typeof(parsed) == TYPE_DICTIONARY, "Serialized state parses back as Dictionary")
@@ -286,6 +322,8 @@ static func _test_serialization(r) -> void:
 	var rw_deme: EvoTypes.Deme = restored.demes["deme-rift-west"]
 	r._assert(rw_deme.faction_slot == "A" and rw_deme.is_multi_hex() and rw_deme.urban_hex_ids == [w_deme.hex_id, adj_hex], "Restored multi-hex Deme preserves faction_slot and urban_hex_ids")
 	r._assert((restored.cells[w_deme.hex_id] as EvoTypes.HexCell).deme_ids == ["deme-rift-west"] and (restored.cells[adj_hex] as EvoTypes.HexCell).deme_ids == ["deme-rift-west"], "WorldState.from_dict syncs cell.deme_ids across all multi-hex city districts")
+	r._assert(rw_deme.domestic_action == "fortify" and is_equal_approx(float(rw_deme.domestic_probabilities["fortify"]), 0.70) and rw_deme.domestic_forecasts.size() == 3, "Restored Deme preserves domestic_action, domestic_probabilities and domestic_forecasts")
+	r._assert(str(rw_deme.chosen_action["key"]) == "trade:deme-rift-east", "Restored Deme preserves chosen_action")
 	r._assert(rw_deme.defense_posture == "patrol_fields" and is_equal_approx(float(rw_deme.posture_probabilities["patrol_fields"]), 0.65) and rw_deme.posture_forecasts.size() == 3, "Restored Deme preserves defense_posture, posture_probabilities and posture_forecasts")
 	var r_ruin_cell: EvoTypes.HexCell = restored.cells["0,0"]
 	r._assert(r_ruin_cell.ruin_turns == 2 and r_ruin_cell.has_ruins, "Restored HexCell preserves ruin_turns > 0 and has_ruins")

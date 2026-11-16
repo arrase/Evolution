@@ -33,6 +33,18 @@ static func _place_deme(state: EvoTypes.WorldState, deme: EvoTypes.Deme, hex_id:
 	cell.deme_ids.assign([deme.id])
 
 
+static func _isolate_demes(state: EvoTypes.WorldState, keep_ids: Array[String]) -> void:
+	for did in state.demes.keys():
+		if not keep_ids.has(did):
+			var d: EvoTypes.Deme = state.demes[did]
+			for hid in d.urban_hex_ids:
+				if state.cells.has(hid):
+					(state.cells[hid] as EvoTypes.HexCell).deme_ids.erase(did)
+			EvoRuralHinterland._release_all_deme_rural_hexes(state, did)
+			EvoTypes.erase_deme_relations(state, did)
+			state.demes.erase(did)
+
+
 static func _test_payoffs_and_canonical_scenarios(r) -> void:
 	print("-- Testing EvoPayoffs Monotonicity & Canonical Scenario Forecasts --")
 	var state := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
@@ -150,10 +162,11 @@ static func _test_rk_and_biophysical_trait_divergence(r) -> void:
 	var g_k := EvoPayoffs.growth_rate(d_k, state)
 	r._assert(g_r > g_k, "Below 0.6K, bio-r-strategy logistic growth_rate exceeds bio-k-strategy (%.4f > %.4f)" % [g_r, g_k])
 
-	# Ecological impact scales habitat wear vs recovery during harvest_all
+	# Ecological impact scales habitat wear vs recovery during harvest
 	var state_eco := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
 	var d_war: EvoTypes.Deme = state_eco.demes["deme-rift-west"]
 	var d_coop: EvoTypes.Deme = state_eco.demes["deme-rift-east"]
+	_isolate_demes(state_eco, [d_war.id, d_coop.id])
 	_place_deme(state_eco, d_war, "-2,0")
 	_place_deme(state_eco, d_coop, "2,0")
 	var c_war: EvoTypes.HexCell = state_eco.cells["-2,0"]
@@ -162,10 +175,46 @@ static func _test_rk_and_biophysical_trait_divergence(r) -> void:
 	c_war.carrying_capacity = 240.0
 	c_coop.carrying_capacity_max = 300.0
 	c_coop.carrying_capacity = 240.0
-	d_war.chosen_action = EvoActionMenu.option("raid", d_coop.id)
-	d_coop.chosen_action = EvoActionMenu.option("forage")
+	d_war.domestic_action = "fortify"
+	d_war.chosen_action = EvoActionMenu.option("none")
+	d_coop.domestic_action = "forage"
+	d_coop.chosen_action = EvoActionMenu.option("none")
 	EvoEconomyPhase.harvest(state_eco, "en")
 	r._assert(c_war.carrying_capacity < 240.0 and c_coop.carrying_capacity > 240.0, "Negative ecological_impact depletes K on non-forage turns while cul-communal-conservation restores K")
+
+	# Surplus spoilage: 0% below/at 1.6 * food_need, 12% ONLY on excess above 1.6 * food_need
+	var sp_cell: EvoTypes.HexCell = state_eco.cells["2,0"]
+	d_coop.population = 100
+	d_coop.salubrity = 1.0
+	d_coop.defense_tier = 0
+	sp_cell.carrying_capacity = 400.0
+	sp_cell.carrying_capacity_max = 400.0
+	_isolate_demes(state_eco, [d_coop.id])
+	var sp_need := EvoPayoffs.food_need(d_coop, sp_cell, state_eco)
+	var sp_safe := sp_need * EvoPayoffs.SPOILAGE_BUFFER_TURNS
+	var exp_births_safe := mini(
+		int(roundf(float(d_coop.population) * EvoPayoffs.growth_rate(d_coop, state_eco))),
+		int(floor(maxf(0.0, (sp_need + sp_safe) - sp_need - 0.35 * sp_need) / EvoPayoffs.BIRTH_COST))
+	)
+	d_coop.energy_reserves = sp_need + sp_safe
+	EvoEconomyPhase.metabolize(state_eco, {d_coop.id: 0.0}, "en")
+	var expected_no_spoil := snappedf(sp_safe - float(exp_births_safe) * EvoPayoffs.BIRTH_COST, 0.01)
+	r._assert(is_equal_approx(d_coop.energy_reserves, expected_no_spoil), "Metabolize applies 0%% spoilage when post-need reserves <= 1.6 * food_need (%.2f == %.2f)" % [d_coop.energy_reserves, expected_no_spoil])
+
+	d_coop.population = 100
+	d_coop.salubrity = 1.0
+	var sp_need2 := EvoPayoffs.food_need(d_coop, sp_cell, state_eco)
+	var sp_safe2 := sp_need2 * EvoPayoffs.SPOILAGE_BUFFER_TURNS
+	var start_surplus := sp_need2 + sp_safe2 + 60.0
+	var exp_births_hi := mini(
+		int(roundf(float(d_coop.population) * EvoPayoffs.growth_rate(d_coop, state_eco))),
+		int(floor(maxf(0.0, start_surplus - sp_need2 - 0.35 * sp_need2) / EvoPayoffs.BIRTH_COST))
+	)
+	d_coop.energy_reserves = start_surplus
+	EvoEconomyPhase.metabolize(state_eco, {d_coop.id: 0.0}, "en")
+	var pre_spoil := start_surplus - sp_need2 - float(exp_births_hi) * EvoPayoffs.BIRTH_COST
+	var expected_with_spoil := snappedf(pre_spoil - (pre_spoil - sp_safe2) * EvoPayoffs.SPOILAGE_RATE, 0.01)
+	r._assert(pre_spoil > sp_safe2 and is_equal_approx(d_coop.energy_reserves, expected_with_spoil), "Metabolize applies 12%% spoilage ONLY on reserves above 1.6 * food_need (%.2f == %.2f)" % [d_coop.energy_reserves, expected_with_spoil])
 
 	# cul-interdeme-barter boosts trade_gain (+25% one partner, +45% mutual merchants)
 	var state_tr := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-expansion")
@@ -261,9 +310,11 @@ static func _test_tragedy_of_the_commons(r) -> void:
 	var tragedy_occurred := false
 	var tragedy_hex_id := ""
 	for _g in range(14):
+		EvoOllamaClient.clear_cache()
 		for did in island.demes.keys():
 			var d: EvoTypes.Deme = island.demes[did]
-			d.chosen_action = EvoActionMenu.option("intensify")
+			d.domestic_action = "intensify"
+			d.chosen_action = EvoActionMenu.option("none")
 		EvoTurnEngine.advance_generation(island, "es")
 		for entry in island.chronicle:
 			if entry.event_type == "tragedy_of_commons":
@@ -287,7 +338,8 @@ static func _test_fortify_innovate_baldwin_and_speciation(r) -> void:
 	d_f.energy_reserves = 300.0
 	c_f.current_resources = 500.0
 	for target_tier in [1, 2, 3]:
-		d_f.chosen_action = EvoActionMenu.option("fortify")
+		d_f.domestic_action = "fortify"
+		d_f.chosen_action = EvoActionMenu.option("none")
 		EvoEconomyPhase.invest(state_f, "en")
 		r._assert(d_f.defense_tier == target_tier, "Fortify action upgrades defense_tier to %d" % target_tier)
 	var fortify_logs := 0
@@ -296,14 +348,18 @@ static func _test_fortify_innovate_baldwin_and_speciation(r) -> void:
 			fortify_logs += 1
 	r._assert(fortify_logs >= 2, "Upgrading to Tier 2 and Tier 3 logs 'fortify' ChronicleEntries")
 
-	# 2. Innovate action & Cultural Innovation milestone (caps at MAX_EMERGENT_CULTURAL == 3)
+	# 2. Paid Innovate action & Cultural Innovation milestone (caps at MAX_EMERGENT_CULTURAL == 3)
 	var state_c := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
 	var east_c: EvoTypes.Deme = state_c.demes["deme-rift-east"]
 	east_c.cultural_trait_ids.clear()
+	east_c.energy_reserves = 10.0
+	r._assert(not EvoPayoffs.can_innovate(east_c, state_c), "EvoPayoffs.can_innovate requires >= INNOVATE_COST_RESERVES (%.1f)" % EvoPayoffs.INNOVATE_COST_RESERVES)
 	east_c.energy_reserves = 120.0
-	east_c.chosen_action = EvoActionMenu.option("innovate")
+	r._assert(EvoPayoffs.can_innovate(east_c, state_c), "EvoPayoffs.can_innovate returns true with cultural capacity and >= %.1f reserves" % EvoPayoffs.INNOVATE_COST_RESERVES)
+	east_c.domestic_action = "innovate"
+	east_c.chosen_action = EvoActionMenu.option("none")
 	EvoEconomyPhase.invest(state_c, "es")
-	r._assert(east_c.innovation_counter > 0.0, "Innovate action advances innovation_counter (%.2f)" % east_c.innovation_counter)
+	r._assert(east_c.innovation_counter > 0.0 and is_equal_approx(east_c.energy_reserves, 120.0 - EvoPayoffs.INNOVATE_COST_RESERVES), "Innovate advances innovation_counter (%.2f) and deducts %.1f food reserves" % [east_c.innovation_counter, EvoPayoffs.INNOVATE_COST_RESERVES])
 
 	for expected_count in [1, 2, 3]:
 		east_c.innovation_counter = 1.20
@@ -320,7 +376,8 @@ static func _test_fortify_innovate_baldwin_and_speciation(r) -> void:
 	var state_b := EvoCatalog.create_preset_world("preset-rift-savanna", "es")
 	var east_b: EvoTypes.Deme = state_b.demes["deme-rift-east"]
 	east_b.baldwin_counters["intensify"] = 8
-	east_b.chosen_action = EvoActionMenu.option("intensify")
+	east_b.domestic_action = "intensify"
+	east_b.chosen_action = EvoActionMenu.option("none")
 	var entries_b := EvoMilestonePhase.run_milestone_phase(state_b, "es")
 	r._assert(entries_b.size() == 1 and entries_b[0].event_type == "baldwin_trait", "Baldwin assimilation triggers at counter >= 8")
 	r._assert(int(east_b.baldwin_counters["intensify"]) == 0, "Baldwin counter resets to 0 after assimilation")
@@ -330,27 +387,42 @@ static func _test_fortify_innovate_baldwin_and_speciation(r) -> void:
 	state_s.generation = 12
 	var founder: EvoTypes.Deme = state_s.demes["deme-darwin-founder"]
 	(state_s.cells[founder.hex_id] as EvoTypes.HexCell).deme_ids.erase(founder.id)
-	founder.hex_id = "0,-2"
-	founder.urban_hex_ids = ["0,-2"]
-	(state_s.cells["0,-2"] as EvoTypes.HexCell).deme_ids.append(founder.id)
+	founder.hex_id = "0,-4"
+	founder.urban_hex_ids = ["0,-4"]
+	(state_s.cells["0,-4"] as EvoTypes.HexCell).deme_ids.append(founder.id)
 	founder.isolation_turns = 10
 	var old_lineage := founder.lineage_id
 	var old_color := founder.color
 	var entries_s := EvoMilestonePhase.run_milestone_phase(state_s, "es")
 	r._assert(entries_s.size() == 1 and entries_s[0].event_type == "allopatric_speciation", "Allopatric speciation triggers at isolation >= 10")
 	r._assert(founder.lineage_id != old_lineage and founder.color != old_color, "Speciated deme receives new lineage ID and distinct color")
-	r._assert(state_s.lineage_tree.size() == 3, "Lineage tree now has 3 nodes")
+	r._assert(state_s.lineage_tree.size() == 3, "Lineage tree expands from 2 initial lineages to 3 nodes")
 
 
 static func _test_diplomacy_trade_aid_pacts_and_tribute(r) -> void:
-	print("-- Testing Diplomacy: Reciprocal Trade, Aid, Pacts & Tribute Coercion --")
+	print("-- Testing Diplomacy: Reciprocal & Unreciprocated Trade, Aid, 2-Turn Pacts & Tribute Coercion --")
 	var state := EvoPresets.create_preset_world("preset-finite-island", "en", "strat-cooperation", "strat-trade")
 	var d1: EvoTypes.Deme = state.demes["deme-island-1"]
 	var d2: EvoTypes.Deme = state.demes["deme-island-2"]
+	_isolate_demes(state, [d1.id, d2.id])
 	_place_deme(state, d1, "0,0")
 	_place_deme(state, d2, "1,0")
 
-	# 1. Reciprocal Trade + Horizontal Cultural Diffusion
+	# 1a. Unreciprocated Trade grants passive recipient passive_trade_tariff(gain) food
+	d1.domestic_action = "forage"
+	d2.domestic_action = "forage"
+	d1.chosen_action = EvoActionMenu.option("trade", d2.id)
+	d2.chosen_action = EvoActionMenu.option("none")
+	var d1_alone_expected := EvoPayoffs.unreciprocated_trade_gain(d1, d2, state)
+	var d2_tariff_expected := EvoPayoffs.passive_trade_tariff(d1_alone_expected)
+	var d2_base_income := EvoPayoffs.expected_income(d2, state, "forage")
+	var income_map := EvoEconomyPhase.harvest(state, "en")
+	r._assert(
+		is_equal_approx(float(income_map[d2.id]), d2_base_income + d2_tariff_expected) and d2_tariff_expected > 0.0,
+		"Unreciprocated trade grants passive recipient passive_trade_tariff (%.1f) food" % d2_tariff_expected
+	)
+
+	# 1b. Reciprocal Trade + Horizontal Cultural Diffusion
 	d1.cultural_trait_ids.assign(["cul-fire-processing"])
 	d2.cultural_trait_ids.clear()
 	d1.chosen_action = EvoActionMenu.option("trade", d2.id)
@@ -364,34 +436,46 @@ static func _test_diplomacy_trade_aid_pacts_and_tribute(r) -> void:
 	d2.energy_reserves = 20.0
 	var rep_before := d1.reputation
 	d1.chosen_action = EvoActionMenu.option("aid", d2.id)
-	d2.chosen_action = EvoActionMenu.option("forage")
+	d2.chosen_action = EvoActionMenu.option("none")
 	EvoDiplomacyPhase.resolve(state, "en")
 	r._assert(d2.energy_reserves > 20.0 and d1.reputation > rep_before, "Aid transfers food reserves to neighbor and raises sender reputation")
 
-	# 3. Mutual offer_pact forms active alliance
+	# 3. 2-turn offer_pact proposal (allowed even during active feuds, never seals unilaterally, clears feud_turns when sealed)
+	var rel: EvoTypes.Relation = EvoTypes.get_relation(state, d1.id, d2.id)
+	rel.pact_turns = 0
+	rel.feud_turns = 3
+	EvoRelations.clear_proposal(rel)
+	var feud_menu := EvoActionMenu.build(d1, state)
+	r._assert(feud_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "offer_pact" and str(o["target"]) == d2.id), "offer_pact remains available during active feuds")
 	d1.chosen_action = EvoActionMenu.option("offer_pact", d2.id)
-	d2.chosen_action = EvoActionMenu.option("offer_pact", d1.id)
+	d2.chosen_action = EvoActionMenu.option("none")
 	EvoDiplomacyPhase.resolve(state, "en")
-	r._assert(EvoTypes.is_pact_active(state, d1.id, d2.id), "Mutual offer_pact forms active alliance")
+	r._assert(not EvoTypes.is_pact_active(state, d1.id, d2.id) and rel.proposal_from == d1.id and rel.proposal_kind == "pact", "Single-sided offer_pact posts 2-turn proposal without sealing unilaterally")
+	state.generation += 1
+	var d2_resp_menu := EvoActionMenu.build(d2, state)
+	r._assert(d2_resp_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "accept_pact" and str(o["target"]) == d1.id), "Open pact proposal unlocks accept_pact response on next turn")
+	d1.chosen_action = EvoActionMenu.option("none")
+	d2.chosen_action = EvoActionMenu.option("accept_pact", d1.id)
+	EvoDiplomacyPhase.resolve(state, "en")
+	r._assert(EvoTypes.is_pact_active(state, d1.id, d2.id) and rel.feud_turns == 0, "accept_pact seals alliance and clears active feud_turns")
 	var has_pact_chronicle := state.chronicle.any(func(e: EvoTypes.ChronicleEntry) -> bool: return e.event_type == "pact")
 	r._assert(has_pact_chronicle, "Pact formation logs 'pact' ChronicleEntry")
 	r._assert(EvoPayoffs.pact_multiplier(d1, state) > 1.0, "Active pact provides harvest multiplier bonus")
 
 	# 4. Demand Tribute -> Pay Tribute vs Refusal
-	var rel: EvoTypes.Relation = EvoTypes.get_relation(state, d1.id, d2.id)
 	rel.pact_turns = 0
 	d1.population = 130
 	d2.population = 55
 	d1.energy_reserves = 40.0
 	d2.energy_reserves = 100.0
 	d1.chosen_action = EvoActionMenu.option("demand_tribute", d2.id)
-	d2.chosen_action = EvoActionMenu.option("forage")
+	d2.chosen_action = EvoActionMenu.option("none")
 	EvoDiplomacyPhase.resolve(state, "en")
 	r._assert(rel.proposal_kind == "tribute" and rel.proposal_from == d1.id, "demand_tribute posts tribute proposal for next turn")
 
 	state.generation += 1
 	var d1_res_before := d1.energy_reserves
-	d1.chosen_action = EvoActionMenu.option("forage")
+	d1.chosen_action = EvoActionMenu.option("none")
 	d2.chosen_action = EvoActionMenu.option("pay_tribute", d1.id)
 	EvoDiplomacyPhase.resolve(state, "en")
 	r._assert(d1.energy_reserves > d1_res_before and rel.truce_turns == EvoPayoffs.TRUCE_AFTER_TRIBUTE, "pay_tribute transfers food and grants truce")
@@ -401,22 +485,23 @@ static func _test_diplomacy_trade_aid_pacts_and_tribute(r) -> void:
 	# Demand tribute again and refuse -> punitive raid & feud_turns > 0
 	rel.truce_turns = 0
 	d1.chosen_action = EvoActionMenu.option("demand_tribute", d2.id)
-	d2.chosen_action = EvoActionMenu.option("forage")
+	d2.chosen_action = EvoActionMenu.option("none")
 	EvoDiplomacyPhase.resolve(state, "en")
 	state.generation += 1
-	d1.chosen_action = EvoActionMenu.option("forage")
-	d2.chosen_action = EvoActionMenu.option("forage")
+	d1.chosen_action = EvoActionMenu.option("none")
+	d2.chosen_action = EvoActionMenu.option("none")
 	EvoDiplomacyPhase.resolve(state, "en")
 	EvoConflictPhase.resolve(state, "en")
 	r._assert(EvoTypes.is_vendetta_active(state, d1.id, d2.id), "Ignoring a tribute demand triggers punitive raid and active feud/vendetta")
 
 
 static func _test_conflict_raids_betrayal_conquest_and_kin_feuds(r) -> void:
-	print("-- Testing Conflict: Raids, Distance-2 Border Raids, Kin Feuds, Betrayal & Monotonic Warband IDs --")
+	print("-- Testing Conflict: Raids, Distance-2/3 Borders, Daughter Camp Emancipation, Betrayal & Monotonic Warband IDs --")
 	# 1. Adjacent Raid + Scorched Rural Hinterland Pillaging
 	var state_r := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
 	var r_att: EvoTypes.Deme = state_r.demes["deme-rift-west"]
 	var r_def: EvoTypes.Deme = state_r.demes["deme-rift-east"]
+	_isolate_demes(state_r, [r_att.id, r_def.id])
 	_place_deme(state_r, r_att, "0,0")
 	_place_deme(state_r, r_def, "1,0")
 	var farm_cell: EvoTypes.HexCell = state_r.cells["1,-1"]
@@ -433,24 +518,25 @@ static func _test_conflict_raids_betrayal_conquest_and_kin_feuds(r) -> void:
 	r_def.defense_posture = "open_harvest"
 	r_def.energy_reserves = 150.0
 	r_att.chosen_action = EvoActionMenu.option("raid", r_def.id)
-	r_def.chosen_action = EvoActionMenu.option("forage")
+	r_def.chosen_action = EvoActionMenu.option("none")
 	EvoConflictPhase.resolve(state_r, "en")
 	r._assert(r_att.energy_reserves > 25.0 and r_def.energy_reserves < 150.0, "Adjacent raid loots food reserves from defender")
 	r._assert(farm_cell.has_ruins and farm_cell.ruin_turns == 3 and farm_cell.land_use == "wild" and farm_cell.owner_deme_id == "", "Raid on open_harvest defender burns field into 3-turn ruins")
 	r._assert(EvoTypes.is_vendetta_active(state_r, r_att.id, r_def.id), "Raid activates bilateral feud/vendetta")
 
-	# 2. Distance-2 Cross-Border Crop Raid: pillages border field without looting urban granary
+	# 2. Distance-2 Reach vs Distance-3 Territorial Border Raid:
+	# Distance-2 unclaimed wilderness grants NO contact; claiming intervening field ("1,0") reaches urban conquer + granary loot;
+	# Distance-3 touching fields allow border raid & tribute without urban conquer
 	var state_d2 := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
 	var d2_att: EvoTypes.Deme = state_d2.demes["deme-rift-west"]
 	var d2_def: EvoTypes.Deme = state_d2.demes["deme-rift-east"]
+	_isolate_demes(state_d2, [d2_att.id, d2_def.id])
 	_place_deme(state_d2, d2_att, "0,0")
 	_place_deme(state_d2, d2_def, "2,0")
-	var border_crop: EvoTypes.HexCell = state_d2.cells["1,0"]
-	border_crop.biome = "savanna"
-	border_crop.altitude = 0.45
-	border_crop.current_resources = 220.0
-	border_crop.owner_deme_id = d2_def.id
-	border_crop.land_use = "crops"
+	var d2_mid: EvoTypes.HexCell = state_d2.cells["1,0"]
+	d2_mid.biome = "savanna"
+	d2_mid.altitude = 0.45
+	d2_mid.current_resources = 200.0
 	d2_att.population = 240
 	d2_att.energy_reserves = 40.0
 	d2_def.population = 50
@@ -458,64 +544,113 @@ static func _test_conflict_raids_betrayal_conquest_and_kin_feuds(r) -> void:
 	d2_def.defense_posture = "open_harvest"
 	d2_def.energy_reserves = 160.0
 
-	var d2_menu := EvoActionMenu.build(d2_att, state_d2)
-	var has_d2_raid := d2_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "raid" and str(o["target"]) == d2_def.id)
-	var has_d2_trib := d2_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "demand_tribute" and str(o["target"]) == d2_def.id)
-	var has_d2_conq := d2_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "conquer" and str(o["target"]) == d2_def.id)
-	r._assert(has_d2_raid and has_d2_trib and not has_d2_conq, "Distance-2 crop contact unlocks cross-border raid and demand_tribute without urban conquer")
+	r._assert(
+		not EvoActionMenu.has_social_contact(d2_att, d2_def, state_d2)
+		and not EvoActionMenu.can_reach_for_conquest(d2_att, d2_def, state_d2),
+		"Distance-2 demes separated by unclaimed wilderness (1,0) have no social or conquest contact"
+	)
+	d2_mid.owner_deme_id = d2_att.id
+	d2_mid.land_use = "crops"
 
-	var d2_odds := EvoPayoffs.raid_odds(d2_att, d2_def, state_d2, false)
-	r._assert(bool(d2_odds["border_only"]) and is_equal_approx(float(d2_odds["granary_loot"]), 0.0) and float(d2_odds["field_loot"]) > 0.0, "Distance-2 border raid sets border_only == true and granary_loot == 0")
+	var dist2_menu := EvoActionMenu.build(d2_att, state_d2)
+	var dist2_odds := EvoPayoffs.raid_odds(d2_att, d2_def, state_d2, false)
+	r._assert(
+		EvoActionMenu.can_reach_for_conquest(d2_att, d2_def, state_d2)
+		and dist2_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "conquer" and str(o["target"]) == d2_def.id)
+		and not bool(dist2_odds["border_only"]) and float(dist2_odds["granary_loot"]) > 0.0,
+		"Distance-2 border contact via claimed field reaches urban conquer and full raid with granary loot"
+	)
+
+	_place_deme(state_d2, d2_def, "3,0")
+	var att_border: EvoTypes.HexCell = state_d2.cells["1,0"]
+	att_border.biome = "savanna"
+	att_border.altitude = 0.45
+	att_border.current_resources = 200.0
+	att_border.owner_deme_id = d2_att.id
+	att_border.land_use = "crops"
+	var border_crop: EvoTypes.HexCell = state_d2.cells["2,0"]
+	border_crop.biome = "savanna"
+	border_crop.altitude = 0.45
+	border_crop.current_resources = 220.0
+	border_crop.owner_deme_id = d2_def.id
+	border_crop.land_use = "crops"
+
+	var d3_menu := EvoActionMenu.build(d2_att, state_d2)
+	var has_d3_raid := d3_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "raid" and str(o["target"]) == d2_def.id)
+	var has_d3_trib := d3_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "demand_tribute" and str(o["target"]) == d2_def.id)
+	var has_d3_conq := d3_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "conquer" and str(o["target"]) == d2_def.id)
+	var has_d3_unite := d3_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "unite" and str(o["target"]) == d2_def.id)
+	r._assert(has_d3_raid and has_d3_trib and not has_d3_conq and not has_d3_unite, "Distance-3 territorial crop contact unlocks cross-border raid and demand_tribute without urban conquer or unite")
+
+	var d3_odds := EvoPayoffs.raid_odds(d2_att, d2_def, state_d2, false)
+	r._assert(bool(d3_odds["border_only"]) and is_equal_approx(float(d3_odds["granary_loot"]), 0.0) and float(d3_odds["field_loot"]) > 0.0, "Distance-3 border raid sets border_only == true and granary_loot == 0")
 
 	state_d2.rng.seed = 42
 	d2_att.chosen_action = EvoActionMenu.option("raid", d2_def.id)
-	d2_def.chosen_action = EvoActionMenu.option("forage")
+	d2_def.chosen_action = EvoActionMenu.option("none")
 	EvoConflictPhase.resolve(state_d2, "en")
-	r._assert(is_equal_approx(d2_def.energy_reserves, 160.0) and d2_att.energy_reserves > 40.0 and border_crop.ruin_turns == 3, "Distance-2 border raid plunders & scorches border field while leaving urban granary untouched")
+	r._assert(is_equal_approx(d2_def.energy_reserves, 160.0) and d2_att.energy_reserves > 40.0 and border_crop.ruin_turns == 3, "Distance-3 border raid plunders & scorches border field while leaving urban granary untouched")
 
-	# 3. Kin Blood-Feud Retaliation: peaceful kin protected, feuding kin targetable for raid & conquer
+	# 3. Daughter Camp Protection & Emancipation (no eternal lineage immunity)
 	var state_kin := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-war")
 	var kin_a: EvoTypes.Deme = state_kin.demes["deme-rift-west"]
-	var kin_b: EvoTypes.Deme = state_kin.demes["deme-rift-east"]
-	kin_b.lineage_id = kin_a.lineage_id
+	_isolate_demes(state_kin, [kin_a.id])
 	_place_deme(state_kin, kin_a, "0,0")
-	_place_deme(state_kin, kin_b, "1,0")
+	var camp_hex: EvoTypes.HexCell = state_kin.cells["1,0"]
+	camp_hex.biome = "savanna"
+	camp_hex.altitude = 0.45
+	camp_hex.current_resources = 240.0
 	kin_a.population = 200
 	kin_a.energy_reserves = 150.0
-	kin_b.population = 45
-	kin_b.energy_reserves = 100.0
+	var kin_b := EvoSettlementPhase.found_camp(kin_a, camp_hex, state_kin)
 	var kin_rel := EvoTypes.get_relation(state_kin, kin_a.id, kin_b.id)
-	kin_rel.feud_turns = 0
-	var peaceful_kin_menu := EvoActionMenu.build(kin_a, state_kin)
-	r._assert(not peaceful_kin_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) in ["raid", "conquer"] and str(o["target"]) == kin_b.id), "Peaceful kin (feud_turns == 0) are protected from raid and conquer in ActionMenu")
-	kin_a.chosen_action = EvoActionMenu.option("raid", kin_b.id)
-	kin_b.chosen_action = EvoActionMenu.option("forage")
-	EvoConflictPhase.resolve(state_kin, "en")
-	r._assert(is_equal_approx(kin_b.energy_reserves, 100.0) and kin_a.last_outcome.contains("peaceful kin"), "EvoConflictPhase blocks raid against peaceful kin")
+	r._assert(
+		kin_b.lineage_id == kin_a.lineage_id
+		and is_equal_approx(kin_rel.trust, 0.55)
+		and kin_rel.pact_turns == 1
+		and kin_rel.truce_turns == 3,
+		"EvoSettlementPhase.found_camp gives newborn daughter camp trust=0.55, pact_turns=1, truce_turns=3"
+	)
 
-	# Betrayal ignites feud -> kin can now raid and conquer feuding kin
-	kin_rel.pact_turns = 3
-	kin_b.chosen_action = EvoActionMenu.option("betray", kin_a.id)
-	kin_a.chosen_action = EvoActionMenu.option("forage")
-	kin_b.population = 120
+	var protected_menu := EvoActionMenu.build(kin_a, state_kin)
+	r._assert(not protected_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) in ["raid", "conquer"] and str(o["target"]) == kin_b.id), "Newborn daughter camp is protected from raid and conquer during initial pact/truce")
+	var res_before_blocked := kin_b.energy_reserves
+	kin_a.chosen_action = EvoActionMenu.option("raid", kin_b.id)
+	kin_b.chosen_action = EvoActionMenu.option("none")
 	EvoConflictPhase.resolve(state_kin, "en")
-	r._assert(kin_rel.feud_turns > 0, "Kin betrayal ignites blood feud (feud_turns > 0)")
-	var feud_kin_menu := EvoActionMenu.build(kin_a, state_kin)
-	var can_retaliate_raid := feud_kin_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "raid" and str(o["target"]) == kin_b.id)
-	var can_retaliate_conq := feud_kin_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "conquer" and str(o["target"]) == kin_b.id)
-	r._assert(can_retaliate_raid and can_retaliate_conq, "Active blood feud (feud_turns > 0) unlocks raid and conquer against kin")
+	r._assert(is_equal_approx(kin_b.energy_reserves, res_before_blocked) and kin_a.last_outcome.contains("called off"), "EvoConflictPhase blocks offensive raid while daughter camp truce/pact is active")
+
+	# Once truce & pact expire, daughter camp emancipates and can be raided/conquered like any clan
+	kin_rel.pact_turns = 0
+	kin_rel.truce_turns = 0
+	var emancipated_menu := EvoActionMenu.build(kin_a, state_kin)
+	var can_raid_kin := emancipated_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "raid" and str(o["target"]) == kin_b.id)
+	var can_conq_kin := emancipated_menu.any(func(o: Dictionary) -> bool: return str(o["type"]) == "conquer" and str(o["target"]) == kin_b.id)
+	r._assert(can_raid_kin and can_conq_kin, "Emancipated daughter camp unlocks raid and conquer once initial pact and truce expire")
 	kin_b.population = 35
+	kin_b.energy_reserves = 100.0
 	state_kin.rng.seed = 7
 	kin_a.chosen_action = EvoActionMenu.option("raid", kin_b.id)
-	kin_b.chosen_action = EvoActionMenu.option("forage")
-	var res_before_retaliation := kin_a.energy_reserves
+	kin_b.chosen_action = EvoActionMenu.option("none")
+	var res_before_raid := kin_a.energy_reserves
 	EvoConflictPhase.resolve(state_kin, "en")
-	r._assert(kin_a.energy_reserves > res_before_retaliation, "Kin settlement successfully raids feuding kin during blood feud")
+	r._assert(kin_a.energy_reserves > res_before_raid and kin_rel.feud_turns > 0, "Emancipated kin settlement executes raid and ignites feud_turns > 0")
+
+	# Betrayal against an allied kin settlement ignites blood feud
+	kin_rel.feud_turns = 0
+	kin_rel.truce_turns = 0
+	kin_rel.pact_turns = 3
+	kin_b.population = 120
+	kin_b.chosen_action = EvoActionMenu.option("betray", kin_a.id)
+	kin_a.chosen_action = EvoActionMenu.option("none")
+	EvoConflictPhase.resolve(state_kin, "en")
+	r._assert(kin_rel.feud_turns > 0 and not EvoTypes.is_pact_active(state_kin, kin_a.id, kin_b.id), "Kin betrayal shatters pact and ignites blood feud (feud_turns > 0)")
 
 	# 4. Opportunistic Betrayal + Third-Party Ally Alert
 	var state_b := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-trade")
 	var b_att: EvoTypes.Deme = state_b.demes["deme-rift-west"]
 	var b_vic: EvoTypes.Deme = state_b.demes["deme-rift-east"]
+	_isolate_demes(state_b, [b_att.id, b_vic.id])
 	_place_deme(state_b, b_att, "0,0")
 	_place_deme(state_b, b_vic, "1,0")
 	var b_ally := b_vic.duplicate_deme()
@@ -532,8 +667,8 @@ static func _test_conflict_raids_betrayal_conquest_and_kin_feuds(r) -> void:
 	b_vic.population = 40
 	b_vic.energy_reserves = 160.0
 	b_att.chosen_action = EvoActionMenu.option("betray", b_vic.id)
-	b_vic.chosen_action = EvoActionMenu.option("forage")
-	b_ally.chosen_action = EvoActionMenu.option("forage")
+	b_vic.chosen_action = EvoActionMenu.option("none")
+	b_ally.chosen_action = EvoActionMenu.option("none")
 	EvoConflictPhase.resolve(state_b, "en")
 	r._assert(not EvoTypes.is_pact_active(state_b, b_att.id, b_vic.id) and EvoTypes.is_vendetta_active(state_b, b_att.id, b_vic.id), "Betrayal shatters pact and sets deep feud")
 	r._assert(b_att.energy_reserves > 20.0 and b_vic.energy_reserves < 160.0, "Betrayal plunders surprise loot from victim")
@@ -544,6 +679,7 @@ static func _test_conflict_raids_betrayal_conquest_and_kin_feuds(r) -> void:
 	var state_w := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
 	var w_att1: EvoTypes.Deme = state_w.demes["deme-rift-west"]
 	var w_def1: EvoTypes.Deme = state_w.demes["deme-rift-east"]
+	_isolate_demes(state_w, [w_att1.id, w_def1.id])
 	_place_deme(state_w, w_att1, "0,0")
 	_place_deme(state_w, w_def1, "1,0")
 	var w_att2 := w_att1.duplicate_deme()
@@ -569,8 +705,8 @@ static func _test_conflict_raids_betrayal_conquest_and_kin_feuds(r) -> void:
 	w_def2.energy_reserves = 80.0
 	w_att1.chosen_action = EvoActionMenu.option("conquer", w_def1.id)
 	w_att2.chosen_action = EvoActionMenu.option("conquer", w_def2.id)
-	w_def1.chosen_action = EvoActionMenu.option("forage")
-	w_def2.chosen_action = EvoActionMenu.option("forage")
+	w_def1.chosen_action = EvoActionMenu.option("none")
+	w_def2.chosen_action = EvoActionMenu.option("none")
 	EvoConflictPhase.resolve(state_w, "en")
 
 	var wb1_id := (state_w.cells["1,0"] as EvoTypes.HexCell).deme_ids[0]
@@ -587,6 +723,7 @@ static func _test_multi_hex_fusion_corridors_and_partial_conquest(r) -> void:
 	var state_u1 := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-trade")
 	var u1_a: EvoTypes.Deme = state_u1.demes["deme-rift-west"]
 	var u1_b: EvoTypes.Deme = state_u1.demes["deme-rift-east"]
+	_isolate_demes(state_u1, [u1_a.id, u1_b.id])
 	_place_deme(state_u1, u1_a, "0,0")
 	_place_deme(state_u1, u1_b, "1,0")
 	u1_a.population = 190
@@ -606,6 +743,7 @@ static func _test_multi_hex_fusion_corridors_and_partial_conquest(r) -> void:
 	var state_u2 := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-trade")
 	var u2_a: EvoTypes.Deme = state_u2.demes["deme-rift-west"]
 	var u2_b: EvoTypes.Deme = state_u2.demes["deme-rift-east"]
+	_isolate_demes(state_u2, [u2_a.id, u2_b.id])
 	_place_deme(state_u2, u2_a, "0,0")
 	_place_deme(state_u2, u2_b, "1,0")
 	var third_partner := u2_a.duplicate_deme()
@@ -631,12 +769,12 @@ static func _test_multi_hex_fusion_corridors_and_partial_conquest(r) -> void:
 
 	# Turn 1: u2_a proposes unite; Turn 2: u2_b chooses accept_union
 	u2_a.chosen_action = EvoActionMenu.option("unite", u2_b.id)
-	u2_b.chosen_action = EvoActionMenu.option("forage")
-	third_partner.chosen_action = EvoActionMenu.option("forage")
-	fourth_partner.chosen_action = EvoActionMenu.option("forage")
+	u2_b.chosen_action = EvoActionMenu.option("none")
+	third_partner.chosen_action = EvoActionMenu.option("none")
+	fourth_partner.chosen_action = EvoActionMenu.option("none")
 	EvoDiplomacyPhase.resolve(state_u2, "en")
 	state_u2.generation += 1
-	u2_a.chosen_action = EvoActionMenu.option("forage")
+	u2_a.chosen_action = EvoActionMenu.option("none")
 	u2_b.chosen_action = EvoActionMenu.option("accept_union", u2_a.id)
 	EvoDiplomacyPhase.resolve(state_u2, "en")
 
@@ -670,6 +808,7 @@ static func _test_multi_hex_fusion_corridors_and_partial_conquest(r) -> void:
 	var state_pc := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-war", "strat-cooperation")
 	var pc_att: EvoTypes.Deme = state_pc.demes["deme-rift-west"]
 	var pc_def: EvoTypes.Deme = state_pc.demes["deme-rift-east"]
+	_isolate_demes(state_pc, [pc_att.id, pc_def.id])
 	_place_deme(state_pc, pc_att, "2,0")
 	_place_deme(state_pc, pc_def, "0,0")
 	pc_def.urban_hex_ids = ["0,0", "1,0"]
@@ -693,7 +832,7 @@ static func _test_multi_hex_fusion_corridors_and_partial_conquest(r) -> void:
 	pc_def.defense_tier = 1
 	state_pc.rng.seed = 3
 	pc_att.chosen_action = EvoActionMenu.option("conquer", pc_def.id)
-	pc_def.chosen_action = EvoActionMenu.option("forage")
+	pc_def.chosen_action = EvoActionMenu.option("none")
 	EvoConflictPhase.resolve(state_pc, "en")
 	EvoRuralHinterland.enforce_rural_hinterland_quotas(state_pc)
 
@@ -704,10 +843,11 @@ static func _test_multi_hex_fusion_corridors_and_partial_conquest(r) -> void:
 	r._assert((state_pc.cells["2,-1"] as EvoTypes.HexCell).owner_deme_id == warband_id, "Field adjacent only to conquered district transfers to conquering warband")
 	r._assert((state_pc.cells["-2,0"] as EvoTypes.HexCell).owner_deme_id == "" and (state_pc.cells["-2,0"] as EvoTypes.HexCell).land_use == "wild", "Isolated field outside remaining perimeter is freed to wild")
 
-	# 5. 2-3 Hop Corridor settle_targets: surrounded by own crops, finds wild candidates 2-3 hops away without cannibalizing own crops
+	# 5. 2-3 Hop Corridor settle_targets: surrounded by own crops at pop < 155 finds wild candidates 2-3 hops away without cannibalizing own crops
 	var state_cor := EvoPresets.create_preset_world("preset-rift-savanna", "en", "strat-cooperation", "strat-expansion")
 	var d_coop_cor: EvoTypes.Deme = state_cor.demes["deme-rift-west"]
 	var d_exp_cor: EvoTypes.Deme = state_cor.demes["deme-rift-east"]
+	_isolate_demes(state_cor, [d_coop_cor.id, d_exp_cor.id])
 	_place_deme(state_cor, d_coop_cor, "0,0")
 	_place_deme(state_cor, d_exp_cor, "0,5")
 	for cid in state_cor.cells.keys():
@@ -724,16 +864,17 @@ static func _test_multi_hex_fusion_corridors_and_partial_conquest(r) -> void:
 		ring1.owner_deme_id = d_coop_cor.id
 		ring1.land_use = "crops"
 
-	d_coop_cor.population = 180
+	d_coop_cor.population = 148
 	d_coop_cor.energy_reserves = 140.0
 	var coop_targets := EvoActionMenu.settle_targets(d_coop_cor, state_cor)
 	var coop_all_wild_2hop := not coop_targets.is_empty() and coop_targets.all(func(c: EvoTypes.HexCell) -> bool:
 		return c.owner_deme_id == "" and c.land_use == "wild" and HexMath.hex_distance(0, 0, c.q, c.r) == 2
 	)
-	r._assert(coop_all_wild_2hop, "Settlement surrounded by own crops finds 2-hop wild settle candidates without targeting own crops")
+	r._assert(coop_all_wild_2hop, "Settlement surrounded by own crops at pop < 155 finds 2-hop wild settle candidates without targeting own crops")
 
 	# Block ring 2 around (0,0) as owned crops too -> high-mobility strat-expansion reaches 3-hop wild frontier
 	EvoCatalog.apply_strategy_to_deme(state_cor, d_coop_cor, "strat-expansion")
+	d_coop_cor.population = 120
 	for cid in state_cor.cells.keys():
 		var cc: EvoTypes.HexCell = state_cor.cells[cid]
 		if HexMath.hex_distance(0, 0, cc.q, cc.r) in [1, 2]:
@@ -745,14 +886,16 @@ static func _test_multi_hex_fusion_corridors_and_partial_conquest(r) -> void:
 	)
 	r._assert(EvoActionMenu.max_settle_hops(d_coop_cor, state_cor) == 3 and exp_all_wild_3hop, "High-mobility strat-expansion reaches 3-hop wild corridor targets without cannibalizing own crops")
 
-	# Block ring 3 as well: below pop 260 returns empty; at pop >= 260 allows overflow onto own peripheral parcel
+	# Block ring 3 as well: below pop 155 returns empty; at pop >= 155 / >= 260 allows overflow onto own peripheral parcel
 	for cid in state_cor.cells.keys():
 		var cc: EvoTypes.HexCell = state_cor.cells[cid]
 		if HexMath.hex_distance(0, 0, cc.q, cc.r) == 3:
 			cc.owner_deme_id = d_coop_cor.id
 			cc.land_use = "crops"
-	d_coop_cor.population = 200
-	r._assert(EvoActionMenu.settle_targets(d_coop_cor, state_cor).is_empty(), "When zero wild candidates exist and pop < 260, settle_targets never cannibalizes own crops")
+	d_coop_cor.population = 120
+	r._assert(EvoActionMenu.settle_targets(d_coop_cor, state_cor).is_empty(), "When zero wild candidates exist and pop < 155, settle_targets never cannibalizes own crops")
+	d_coop_cor.population = 160
+	r._assert(not EvoActionMenu.settle_targets(d_coop_cor, state_cor).is_empty(), "When pop >= 155, settling onto own field is unlocked")
 	d_coop_cor.population = 270
 	r._assert(not EvoActionMenu.settle_targets(d_coop_cor, state_cor).is_empty(), "When zero wild candidates exist and pop >= 260, overflow colony is allowed")
 

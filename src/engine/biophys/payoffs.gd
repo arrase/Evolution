@@ -5,7 +5,7 @@ extends RefCounted
 ## model and the turn resolution both call these functions, so what a settlement is
 ## told it will get is exactly what the engine computes.
 
-const WALL_DEFENSE: Array[float] = [0.0, 0.5, 1.0, 1.6]
+const WALL_DEFENSE: Array[float] = [0.0, 0.35, 0.75, 1.25]
 const WALL_LOOT_SHIELD: Array[float] = [0.0, 0.25, 0.5, 0.75]
 const WALL_UPKEEP: Array[float] = [0.0, 1.5, 3.0, 5.0]
 const FORTIFY_COST_RESERVES: Array[float] = [20.0, 40.0, 65.0]
@@ -18,35 +18,38 @@ const POSTURE_HARVEST_MULT: Dictionary = {
 	"mobilized_garrison": 0.78
 }
 const POSTURE_RURAL_MOBILIZATION: Dictionary = {
-	"open_harvest": 0.25,
-	"patrol_fields": 0.55,
-	"mobilized_garrison": 0.80
+	"open_harvest": 0.22,
+	"patrol_fields": 0.42,
+	"mobilized_garrison": 0.65
 }
 const POSTURE_CROP_SHIELD: Dictionary = {
 	"open_harvest": 0.0,
-	"patrol_fields": 0.65,
-	"mobilized_garrison": 0.85
+	"patrol_fields": 0.50,
+	"mobilized_garrison": 0.80
 }
 const URBAN_FORAGE_MULT: Array[float] = [1.0, 1.0, 0.90, 0.65, 0.40]
 
-const COMBAT_EXPONENT := 2.5
-const RAID_TROOP_SHARE := 0.45
+const COMBAT_EXPONENT := 1.60
+const RAID_TROOP_SHARE := 0.50
 const CONQUEST_TROOP_SHARE := 0.55
 const RAID_MOBILIZATION := 0.35
-const CONQUEST_MOBILIZATION := 0.65
-const SURPRISE_MOBILIZATION := 0.22
+const CONQUEST_MOBILIZATION := 0.58
+const SURPRISE_MOBILIZATION := 0.20
 const ALLY_SUPPORT_SHARE := 0.22
 
-const FORAGE_BONUS := 0.20
-const INTENSIFY_BONUS := 0.55
+const FORAGE_BONUS := 0.05
+const INTENSIFY_BONUS := 0.45
 const INTENSIFY_K_LOSS := 0.07
-const PACT_HARVEST_BONUS := 0.12
-const TRADE_SHARE := 0.18
+const PACT_HARVEST_BONUS := 0.04
+const TRADE_SHARE := 0.28
 const BIRTH_COST := 2.0
 const BASE_GROWTH_RATE := 0.115
 const SETTLE_MIN_POP := 105
 const MIN_VIABLE_POP := 10
 const INNOVATION_STEP := 0.22
+const INNOVATE_COST_RESERVES := 16.0
+const SPOILAGE_BUFFER_TURNS := 1.6
+const SPOILAGE_RATE := 0.12
 
 const FEUD_AFTER_RAID := 4
 const FEUD_AFTER_WAR := 6
@@ -132,19 +135,29 @@ static func pact_multiplier(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> 
 	return 1.0 + PACT_HARVEST_BONUS * float(mini(pacts, 3))
 
 
+static func hop_efficiency(dist: int) -> float:
+	return 1.0 if dist <= 1 else (0.88 if dist == 2 else 0.78)
+
+
+static func passive_trade_tariff(gain: float) -> float:
+	return roundf(gain * 0.25)
+
+
 static func trade_gain(a: EvoTypes.Deme, b: EvoTypes.Deme, state: EvoTypes.WorldState) -> float:
 	var ca: EvoTypes.HexCell = state.cells[a.hex_id]
 	var cb: EvoTypes.HexCell = state.cells[b.hex_id]
-	var complementarity := 1.0 + (0.4 if ca.biome != cb.biome else 0.0) + (0.2 if a.cultural_trait_ids != b.cultural_trait_ids else 0.0)
+	var complementarity := 1.0 + (0.35 if ca.biome != cb.biome else 0.0) + (0.20 if a.cultural_trait_ids != b.cultural_trait_ids else 0.0) + (0.20 if absf(a.energy_reserves - b.energy_reserves) >= 45.0 else 0.0)
 	var a_barter := a.cultural_trait_ids.has("cul-interdeme-barter")
 	var b_barter := b.cultural_trait_ids.has("cul-interdeme-barter")
 	var barter_mult := 1.45 if (a_barter and b_barter) else (1.25 if (a_barter or b_barter) else 1.0)
+	var pact_trade_mult := 1.30 if EvoTypes.is_pact_active(state, a.id, b.id) else 1.0
+	var dist_mult := hop_efficiency(min_urban_distance(a, b, state))
 	var volume := minf(expected_income(a, state, "none"), expected_income(b, state, "none"))
-	return TRADE_SHARE * volume * complementarity * barter_mult
+	return TRADE_SHARE * volume * complementarity * barter_mult * pact_trade_mult * dist_mult
 
 
 static func unreciprocated_trade_gain(a: EvoTypes.Deme, b: EvoTypes.Deme, state: EvoTypes.WorldState) -> float:
-	return (0.75 if EvoTypes.is_pact_active(state, a.id, b.id) else 0.55) * trade_gain(a, b, state)
+	return (0.80 if EvoTypes.is_pact_active(state, a.id, b.id) else 0.65) * trade_gain(a, b, state)
 
 
 static func aid_amount(deme: EvoTypes.Deme) -> float:
@@ -228,6 +241,14 @@ static func can_fortify(deme: EvoTypes.Deme, cell: EvoTypes.HexCell) -> bool:
 	)
 
 
+static func can_innovate(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> bool:
+	return (
+		EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog)
+		and EvoMilestonePhase.count_emergent_cultural_traits(deme, state) < EvoActionMenu.MAX_EMERGENT_CULTURAL
+		and deme.energy_reserves >= INNOVATE_COST_RESERVES
+	)
+
+
 static func innovation_step(deme: EvoTypes.Deme, _state: EvoTypes.WorldState) -> float:
 	if deme.biological_trait_ids.has("bio-encephalization"):
 		return minf(0.55, 0.37 + 0.04 * float(deme.cultural_trait_ids.size()))
@@ -288,12 +309,8 @@ static func _ally_support_on_hex(
 		if seen.has(oid) or not state.demes.has(oid):
 			continue
 		seen[oid] = true
-		var other: EvoTypes.Deme = state.demes[oid]
-		var pk := EvoTypes.make_pair_key(attacker.id, oid)
-		var rel: EvoTypes.Relation = state.relations[pk] if state.relations.has(pk) else null
-		var allied := rel != null and rel.pact_turns > 0
-		var peaceful_kin := other.lineage_id == attacker.lineage_id and (rel == null or rel.feud_turns == 0)
-		if allied or peaceful_kin:
+		if EvoTypes.is_pact_active(state, attacker.id, oid):
+			var other: EvoTypes.Deme = state.demes[oid]
 			bonus += ALLY_SUPPORT_SHARE * float(other.population) * cohesion_multiplier(other, state)
 	return bonus
 
@@ -324,9 +341,10 @@ static func defense_power(
 	mobilized_share: float,
 	with_allies: bool,
 	state: EvoTypes.WorldState,
-	use_walls: bool = true
+	use_walls: bool = true,
+	wall_scale: float = 1.0
 ) -> float:
-	var wall_bonus := WALL_DEFENSE[defender.defense_tier] if use_walls else 0.0
+	var wall_bonus := WALL_DEFENSE[defender.defense_tier] * wall_scale if use_walls else 0.0
 	var power := float(defender.population) * mobilized_share * cohesion_multiplier(defender, state) * (1.0 + wall_bonus)
 	if not with_allies:
 		return power
@@ -352,8 +370,9 @@ static func win_probability(attack: float, defense: float) -> float:
 static func raid_odds(attacker: EvoTypes.Deme, defender: EvoTypes.Deme, state: EvoTypes.WorldState, surprise: bool) -> Dictionary:
 	var troops := int(roundf(float(attacker.population) * RAID_TROOP_SHARE))
 	var target_field := closest_defender_field(attacker, defender, state)
+	var dist := min_urban_distance(attacker, defender, state)
 	var castle_blocks_city := not surprise and defender.defense_tier >= 3
-	var border_only := not surprise and (min_urban_distance(attacker, defender, state) > 1 or castle_blocks_city)
+	var border_only := dist > 2 or (not surprise and castle_blocks_city)
 	if castle_blocks_city and target_field == null:
 		return {
 			"p_win": 0.0,
@@ -367,16 +386,16 @@ static func raid_odds(attacker: EvoTypes.Deme, defender: EvoTypes.Deme, state: E
 			"attacker_loss_lose": int(roundf(float(troops) * 0.30)),
 			"defender_loss_lose": 1
 		}
-	var attack := float(troops) * attack_multiplier(attacker, state) + (0.0 if surprise else flanking_support(attacker, defender, target_field, state))
+	var attack := float(troops) * attack_multiplier(attacker, state) * hop_efficiency(dist) + (0.0 if surprise else flanking_support(attacker, defender, target_field, state))
 	var mobilized := SURPRISE_MOBILIZATION if surprise else float(POSTURE_RURAL_MOBILIZATION[defender.defense_posture])
-	var defense := defense_power(defender, attacker.id, mobilized, not surprise, state, not border_only)
+	var defense := defense_power(defender, attacker.id, mobilized, not surprise, state, not border_only, 0.0 if border_only else 0.5)
 	var field_loot := field_plunder_amount(target_field, defender, surprise)
 	var granary_loot := 0.0
 	if not border_only:
 		var loot_share := 0.75 if surprise else 0.45
 		var shield := 0.25 * WALL_LOOT_SHIELD[defender.defense_tier] if surprise else WALL_LOOT_SHIELD[defender.defense_tier]
 		var cap_mult := 3.0 if surprise else 2.2
-		granary_loot = roundf(minf(defender.energy_reserves * loot_share, float(troops) * cap_mult) * (1.0 - shield))
+		granary_loot = roundf(minf(defender.energy_reserves * loot_share, float(troops) * cap_mult) * (1.0 - shield)) * (0.75 if dist == 2 and not surprise else 1.0)
 	var total_loot := granary_loot + field_loot
 	return {
 		"p_win": win_probability(attack, defense),
@@ -394,7 +413,8 @@ static func raid_odds(attacker: EvoTypes.Deme, defender: EvoTypes.Deme, state: E
 
 static func conquest_odds(attacker: EvoTypes.Deme, defender: EvoTypes.Deme, state: EvoTypes.WorldState) -> Dictionary:
 	var troops := int(roundf(float(attacker.population) * CONQUEST_TROOP_SHARE))
-	var attack := float(troops) * attack_multiplier(attacker, state) + flanking_support(attacker, defender, null, state)
+	var dist := min_urban_distance(attacker, defender, state)
+	var attack := float(troops) * attack_multiplier(attacker, state) * hop_efficiency(dist) + flanking_support(attacker, defender, null, state)
 	var defense := defense_power(defender, attacker.id, CONQUEST_MOBILIZATION, true, state, true)
 	return {
 		"p_win": win_probability(attack, defense),

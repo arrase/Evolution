@@ -10,6 +10,11 @@ const POSTURE_NAMES: Dictionary = {
 	"patrol_fields": "patrolling fields",
 	"mobilized_garrison": "mobilized garrison"
 }
+const POSTURE_TITLES: Dictionary = {
+	"open_harvest": "Open harvest",
+	"patrol_fields": "Patrol fields",
+	"mobilized_garrison": "Mobilized garrison"
+}
 
 
 static func _pct(p: float) -> String:
@@ -33,41 +38,13 @@ static func _describe_posture_formatted(
 	raid_threats: int,
 	feud_threats: int
 ) -> String:
+	var h_pct := _pct(float(EvoPayoffs.POSTURE_HARVEST_MULT[posture]))
 	var mob := _pct(float(EvoPayoffs.POSTURE_RURAL_MOBILIZATION[posture]))
 	var shield := _pct(float(EvoPayoffs.POSTURE_CROP_SHIELD[posture]))
-	if raid_threats == 0:
-		match posture:
-			"open_harvest":
-				return "Open harvest (100%% harvest: ~%s food, %s if foraging; need %s): %s militia mobilized — 0 raiders in range, so full 100%% harvest across your %d fields is completely safe." % [
-					_food(base_inc), _food(forage_inc), _food(need), mob, fields_n
-				]
-			"patrol_fields":
-				return "Patrol fields (90%% harvest: ~%s food, %s if foraging; need %s): %s militia mobilized, %s crop shield — sacrifices 10%% food yield unnecessarily because 0 raiders are in range." % [
-					_food(base_inc), _food(forage_inc), _food(need), mob, shield
-				]
-			"mobilized_garrison":
-				return "Mobilized garrison (78%% harvest: ~%s food, %s if foraging; need %s): %s militia mobilized, %s crop shield — sacrifices 22%% food yield unnecessarily because 0 raiders are in range." % [
-					_food(base_inc), _food(forage_inc), _food(need), mob, shield
-				]
 	var feud_note := ", %d active feud(s)" % feud_threats if feud_threats > 0 else ""
-	match posture:
-		"open_harvest":
-			if fields_n > 0:
-				return "Open harvest (100%% harvest: ~%s food, %s if foraging; need %s): %s militia mobilized, 0%% crop shield — HIGH RISK: %d potential raider(s) in range%s can plunder you and burn your %d fields for 3 turns!" % [
-					_food(base_inc), _food(forage_inc), _food(need), mob, raid_threats, feud_note, fields_n
-				]
-			return "Open harvest (100%% harvest: ~%s food, %s if foraging; need %s): %s militia mobilized — %d potential raider(s) in range%s (0 cultivated fields owned, light urban defense if raided)." % [
-				_food(base_inc), _food(forage_inc), _food(need), mob, raid_threats, feud_note
-			]
-		"patrol_fields":
-			return "Patrol fields (90%% harvest: ~%s food, %s if foraging; need %s): %s militia mobilized, %s crop shield — active border patrols against %d potential raider(s) in range%s intercept raids and protect %d fields from burning." % [
-				_food(base_inc), _food(forage_inc), _food(need), mob, shield, raid_threats, feud_note, fields_n
-			]
-		"mobilized_garrison":
-			return "Mobilized garrison (78%% harvest: ~%s food, %s if foraging; need %s): %s militia mobilized, %s crop shield — heavy war defense against %d potential raider(s) in range%s shields your settlement and %d fields during feuds or outnumbered threats." % [
-				_food(base_inc), _food(forage_inc), _food(need), mob, shield, raid_threats, feud_note, fields_n
-			]
-	return posture
+	return "%s (%s harvest: ~%s food, %s if foraging; need %s): %s militia mobilized, %s crop shield across %d field(s); %d unallied neighbor(s) in range%s." % [
+		str(POSTURE_TITLES[posture]), h_pct, _food(base_inc), _food(forage_inc), _food(need), mob, shield, fields_n, raid_threats, feud_note
+	]
 
 
 static func describe_posture(deme: EvoTypes.Deme, posture: String, state: EvoTypes.WorldState) -> String:
@@ -109,6 +86,76 @@ static func describe_postures_with_threats(deme: EvoTypes.Deme, state: EvoTypes.
 
 static func describe_postures(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Dictionary:
 	return describe_postures_with_threats(deme, state, EvoActionMenu.raid_threat_counts(deme, state))
+
+
+static func _describe_domestic_with_totals(
+	deme: EvoTypes.Deme,
+	dom_key: String,
+	state: EvoTypes.WorldState,
+	cell: EvoTypes.HexCell,
+	need: float,
+	base_income: float,
+	forage_income: float,
+	intensify_income: float
+) -> String:
+	match dom_key:
+		"forage":
+			var income := forage_income if forage_income >= 0.0 else EvoPayoffs.expected_income(deme, state, "forage")
+			return "Forage carefully: harvest %s food this turn (need %s), land stays healthy." % [_food(income), _food(need)]
+		"intensify":
+			var income := intensify_income if intensify_income >= 0.0 else EvoPayoffs.expected_income(deme, state, "intensify")
+			var extra := income - base_income
+			var k_pct := int(roundf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max) * 100.0))
+			return "Overexploit the land: harvest %s food (+%s extra now, need %s), but land capacity drops 7%% permanently (now %d%% of max)." % [_food(income), _food(extra), _food(need), k_pct]
+		"fortify":
+			var tier := deme.defense_tier
+			if tier >= 3:
+				return "Already at maximum fortification."
+			var cost_res := EvoPayoffs.fortify_cost_reserves(deme)
+			var tier_promo := "promotes settlement to Tier II (+1 cultivated field), " if (tier == 0 and deme.get_village_tier() == 1) else ""
+			return "Build %s (harvest %s food, spend %s food): %sdefenders fight +%s stronger, raiders steal %s less, upkeep %s food/turn." % [
+				WALL_NAMES[tier + 1],
+				_food(base_income),
+				_food(cost_res),
+				tier_promo,
+				_pct(EvoPayoffs.WALL_DEFENSE[tier + 1] - EvoPayoffs.WALL_DEFENSE[tier]),
+				_pct(EvoPayoffs.WALL_LOOT_SHIELD[tier + 1]),
+				_food(EvoPayoffs.WALL_UPKEEP[tier + 1])
+			]
+		"innovate":
+			var step := EvoPayoffs.innovation_step(deme, state)
+			return "Experiment with new techniques (harvest %s food, spend %s food): innovation %.2f -> %.2f of 1.0; at 1.0 you unlock a permanent cultural tradition." % [
+				_food(base_income), _food(EvoPayoffs.INNOVATE_COST_RESERVES), deme.innovation_counter, minf(1.0, deme.innovation_counter + step)
+			]
+	return dom_key
+
+
+static func describe_domestic_menu(deme: EvoTypes.Deme, dom_keys: Array[String], state: EvoTypes.WorldState) -> Dictionary:
+	var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
+	var need := EvoPayoffs.food_need(deme, cell, state)
+	var rural := EvoRuralHinterland.rural_yield_estimate(deme, state)
+	var pact_mult := EvoPayoffs.pact_multiplier(deme, state)
+	var base_income := (EvoPayoffs.urban_harvest(deme, state, "none") + rural) * pact_mult
+	var forage_income := (EvoPayoffs.urban_harvest(deme, state, "forage") + rural) * pact_mult
+	var intensify_income := (EvoPayoffs.urban_harvest(deme, state, "intensify") + rural) * pact_mult
+	var criteria: Dictionary = {}
+	for k in dom_keys:
+		criteria[k] = _describe_domestic_with_totals(deme, k, state, cell, need, base_income, forage_income, intensify_income)
+	return criteria
+
+
+static func describe_domestic(deme: EvoTypes.Deme, dom_key: String, state: EvoTypes.WorldState) -> String:
+	var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
+	return _describe_domestic_with_totals(
+		deme,
+		dom_key,
+		state,
+		cell,
+		EvoPayoffs.food_need(deme, cell, state),
+		EvoPayoffs.expected_income(deme, state, "none"),
+		EvoPayoffs.expected_income(deme, state, "forage"),
+		EvoPayoffs.expected_income(deme, state, "intensify")
+	)
 
 
 static func describe_menu(
@@ -174,32 +221,10 @@ static func _describe_with_totals(
 	var target := str(opt["target"])
 	var other: EvoTypes.Deme = state.demes[target] if state.demes.has(target) else null
 	match action_type:
-		"forage":
-			var income := forage_income if forage_income >= 0.0 else EvoPayoffs.expected_income(deme, state, "forage")
-			return "Forage carefully: harvest %s food this turn (need %s), land stays healthy." % [_food(income), _food(need)]
-		"intensify":
-			var income := intensify_income if intensify_income >= 0.0 else EvoPayoffs.expected_income(deme, state, "intensify")
-			var extra := income - base_income
-			var k_pct := int(roundf(cell.carrying_capacity / maxf(1.0, cell.carrying_capacity_max) * 100.0))
-			return "Overexploit the land: harvest %s food (+%s extra now, need %s), but land capacity drops 7%% permanently (now %d%% of max)." % [_food(income), _food(extra), _food(need), k_pct]
-		"fortify":
-			var tier := deme.defense_tier
-			var cost_res := EvoPayoffs.fortify_cost_reserves(deme)
-			var tier_promo := "promotes settlement to Tier II (+1 cultivated field), " if (tier == 0 and deme.get_village_tier() == 1) else ""
-			return "Build %s (harvest %s food, spend %s food): %sdefenders fight +%s stronger, raiders steal %s less, upkeep %s food/turn." % [
-				WALL_NAMES[tier + 1],
-				_food(base_income),
-				_food(cost_res),
-				tier_promo,
-				_pct(EvoPayoffs.WALL_DEFENSE[tier + 1] - EvoPayoffs.WALL_DEFENSE[tier]),
-				_pct(EvoPayoffs.WALL_LOOT_SHIELD[tier + 1]),
-				_food(EvoPayoffs.WALL_UPKEEP[tier + 1])
-			]
-		"innovate":
-			var step := EvoPayoffs.innovation_step(deme, state)
-			return "Experiment with new techniques (harvest %s food): innovation %.2f -> %.2f of 1.0; at 1.0 you unlock a permanent cultural tradition." % [
-				_food(base_income), deme.innovation_counter, minf(1.0, deme.innovation_counter + step)
-			]
+		"none":
+			return "Keep to yourselves (harvest %s food): tend home territory with zero foreign commitments, trade, or campaign risks." % _food(base_income)
+		"forage", "intensify", "fortify", "innovate":
+			return _describe_domestic_with_totals(deme, action_type, state, cell, need, base_income, forage_income, intensify_income)
 		"settle":
 			var hex: EvoTypes.HexCell = state.cells[target]
 			var hops := int(hops_map[target]) if hops_map.has(target) else EvoActionMenu.settle_hop_distance(deme, target, state)
@@ -213,20 +238,23 @@ static func _describe_with_totals(
 			]
 		"trade":
 			var gain := EvoPayoffs.trade_gain(deme, other, state)
-			var alone := (0.75 if EvoTypes.is_pact_active(state, deme.id, other.id) else 0.55) * gain
-			return "Trade with %s: harvest %s food + %s trade bonus = %s food (%s if mutual trade), trust +0.12, and diffuse cultural knowledge." % [
-				other.name, _food(base_income), _food(alone), _food(base_income + alone), _food(base_income + gain)
+			var alone := EvoPayoffs.unreciprocated_trade_gain(deme, other, state)
+			var tariff := EvoPayoffs.passive_trade_tariff(alone)
+			return "Trade with %s: harvest %s food + %s unilateral trade (%s if mutual trade) = %s to %s food; %s also gains %s passive tariff if unilateral, trust +0.12, and cultural diffusion." % [
+				other.name, _food(base_income), _food(alone), _food(gain), _food(base_income + alone), _food(base_income + gain), other.name, _food(tariff)
 			]
 		"aid":
 			var amt := EvoPayoffs.aid_amount(deme)
 			return "Give %s surplus food to %s (you harvest %s food): trust +0.25, reputation improves, and seals any open alliance offer." % [_food(amt), other.name, _food(base_income)]
 		"offer_pact":
-			var instant := other.lineage_id == deme.lineage_id or (state.relations.has(EvoTypes.make_pair_key(deme.id, other.id)) and (state.relations[EvoTypes.make_pair_key(deme.id, other.id)] as EvoTypes.Relation).trust >= 0.30)
-			return "Form an alliance with %s (harvest %s food): %s, both gain +%s food harvest every turn and mutual defense against attackers." % [
-				other.name, _food(base_income), "seals immediately" if instant else "if they accept", _pct(EvoPayoffs.PACT_HARVEST_BONUS)
+			var pk := EvoTypes.make_pair_key(deme.id, other.id)
+			var rel: EvoTypes.Relation = state.relations[pk] if state.relations.has(pk) else null
+			var treaty_note := "peace treaty ending feud if they accept (2-turn offer)" if (rel != null and rel.feud_turns > 0) else "if they accept (2-turn offer)"
+			return "Form an alliance with %s (harvest %s food): %s, both gain +30%% trade yield & mutual defense plus +%s harvest coordination." % [
+				other.name, _food(base_income), treaty_note, _pct(EvoPayoffs.PACT_HARVEST_BONUS)
 			]
 		"accept_pact":
-			return "Accept %s's alliance (harvest %s food): seals alliance immediately, both gain +%s food harvest every turn and mutual defense." % [
+			return "Accept %s's alliance (harvest %s food): seals alliance immediately, both gain +30%% trade yield & mutual defense plus +%s harvest coordination." % [
 				other.name, _food(base_income), _pct(EvoPayoffs.PACT_HARVEST_BONUS)
 			]
 		"demand_tribute":

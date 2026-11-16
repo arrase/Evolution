@@ -255,6 +255,7 @@ func _update_ocean_shader_season() -> void:
 
 func refresh_village_decisions() -> void:
 	var any_arch_changed := false
+	var any_overlay_changed := false
 	for village in _villages:
 		var deme: EvoTypes.Deme = village["deme"]
 		var new_arch := _get_deme_dominant_archetype(deme)
@@ -264,9 +265,15 @@ func refresh_village_decisions() -> void:
 		if village["posture"] != deme.defense_posture:
 			village["posture"] = deme.defense_posture
 			any_arch_changed = true
+		var action_key := str(deme.chosen_action["key"])
+		if village.get("action_key", "") != action_key or village.get("domestic_action", "") != deme.domestic_action:
+			village["action_key"] = action_key
+			village["domestic_action"] = deme.domestic_action
+			any_overlay_changed = true
 	if any_arch_changed:
 		_static_props = EvoPropFloraRenderer.collect_static_props(self)
 		_network_layer.queue_redraw()
+	if any_arch_changed or any_overlay_changed:
 		_overlay_dirty = true
 		_overlay_layer.queue_redraw()
 

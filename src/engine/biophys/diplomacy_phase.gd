@@ -22,14 +22,12 @@ static func adjacent_target(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> 
 	return other if EvoPayoffs.min_urban_distance(deme, other, state) == 1 else null
 
 
-static func tribute_or_raid_target(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> EvoTypes.Deme:
+static func social_target(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> EvoTypes.Deme:
 	var target_id := str(deme.chosen_action["target"])
 	if not state.demes.has(target_id):
 		return null
 	var other: EvoTypes.Deme = state.demes[target_id]
-	if EvoPayoffs.min_urban_distance(deme, other, state) == 1 or has_border_crop_contact(deme, other, state):
-		return other
-	return null
+	return other if EvoActionMenu.has_social_contact(deme, other, state) else null
 
 
 static func resolve(state: EvoTypes.WorldState, lang: String, income_by_deme: Dictionary = {}) -> void:
@@ -40,7 +38,7 @@ static func resolve(state: EvoTypes.WorldState, lang: String, income_by_deme: Di
 		var action_type := str(deme.chosen_action["type"])
 		if action_type not in ["aid", "offer_pact", "accept_pact", "demand_tribute", "pay_tribute", "unite", "accept_union"]:
 			continue
-		var other := tribute_or_raid_target(deme, state) if action_type in ["demand_tribute", "pay_tribute"] else adjacent_target(deme, state)
+		var other := adjacent_target(deme, state) if action_type in ["unite", "accept_union"] else social_target(deme, state)
 		if other == null:
 			deme.last_outcome = "Your %s could not happen: the target is no longer in contact." % action_type.replace("_", " ")
 			continue
@@ -89,7 +87,7 @@ static func _offer(
 	income_by_deme: Dictionary
 ) -> void:
 	var rel := EvoTypes.get_relation(state, deme.id, other.id)
-	if rel.feud_turns > 0:
+	if kind == "union" and rel.feud_turns > 0:
 		deme.last_outcome = "%s refuses to talk while the feud lasts." % other.name
 		return
 	if rel.proposal_from != "" and rel.proposal_kind == "tribute":
@@ -101,9 +99,6 @@ static func _offer(
 		return
 	if mutual and kind == "union":
 		_accept_union(deme, other, state, lang, income_by_deme)
-		return
-	if kind == "pact" and (other.lineage_id == deme.lineage_id or rel.trust >= 0.30):
-		_form_pact(deme, other, state, lang)
 		return
 	var label := "an alliance" if kind == "pact" else "a union"
 	EvoRelations.record(state, deme, other, 0.10, "%s proposed %s to %s" % [deme.name, kind, other.name])
@@ -119,6 +114,7 @@ static func _offer(
 static func _form_pact(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: EvoTypes.WorldState, lang: String) -> void:
 	var rel := EvoRelations.record(state, deme, other, 0.2, "%s and %s sealed an alliance" % [deme.name, other.name])
 	rel.pact_turns = maxi(1, rel.pact_turns)
+	rel.feud_turns = 0
 	EvoRelations.clear_proposal(rel)
 	deme.last_outcome = "You are now allied with %s." % other.name
 	EvoRelations.remember(deme, state, "You sealed an alliance with %s%s." % [other.name, EvoRelations.posture_tag(deme)])
@@ -182,5 +178,5 @@ static func _emit_pact_flows(state: EvoTypes.WorldState) -> void:
 			continue
 		var a: EvoTypes.Deme = state.demes[ids[0]]
 		var b: EvoTypes.Deme = state.demes[ids[1]]
-		if EvoPayoffs.min_urban_distance(a, b, state) == 1:
+		if EvoPayoffs.min_urban_distance(a, b, state) <= 2:
 			EvoSettlementPhase.push_flow(state, a, b, "pact", 0.8)

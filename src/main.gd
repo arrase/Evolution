@@ -2,8 +2,6 @@ class_name EvoMainController
 extends Node2D
 
 const STEP_INTERVALS: Array[float] = [4.0, 2.0, 0.6]
-const SLOT_A_DEME_IDS: Array[String] = ["deme-rift-west", "deme-darwin-founder", "deme-island-1"]
-const SLOT_B_DEME_IDS: Array[String] = ["deme-rift-east", "deme-darwin-rival", "deme-island-2"]
 
 var world_state: EvoTypes.WorldState
 var camera: EvoCameraController
@@ -240,12 +238,11 @@ func _on_matchup_changed(strategy_a_id: String, strategy_b_id: String) -> void:
 func _reapply_starting_strategies() -> void:
 	if world_state == null:
 		return
-	for did in SLOT_A_DEME_IDS:
-		if world_state.demes.has(did):
-			EvoCatalog.apply_strategy_to_deme(world_state, world_state.demes[did], world_state.strategy_a_id)
-	for did in SLOT_B_DEME_IDS:
-		if world_state.demes.has(did):
-			EvoCatalog.apply_strategy_to_deme(world_state, world_state.demes[did], world_state.strategy_b_id)
+	for d: EvoTypes.Deme in world_state.demes.values():
+		if d.faction_slot == "A":
+			EvoCatalog.apply_strategy_to_deme(world_state, d, world_state.strategy_a_id)
+		elif d.faction_slot == "B":
+			EvoCatalog.apply_strategy_to_deme(world_state, d, world_state.strategy_b_id)
 	EvoDecisionModel.evaluate_all_demes(world_state, lang)
 
 
@@ -255,17 +252,13 @@ func _on_strategy_saved(strategy_id: String) -> void:
 	EvoUserSettings.save_user_catalog(world_state)
 	EvoOllamaClient.clear_cache()
 	if world_state.generation == 0 and (strategy_id == world_state.strategy_a_id or strategy_id == world_state.strategy_b_id):
-		if strategy_id == world_state.strategy_a_id:
-			for did in SLOT_A_DEME_IDS:
-				if world_state.demes.has(did):
-					EvoCatalog.apply_strategy_to_deme(world_state, world_state.demes[did], strategy_id)
-		if strategy_id == world_state.strategy_b_id:
-			for did in SLOT_B_DEME_IDS:
-				if world_state.demes.has(did):
-					EvoCatalog.apply_strategy_to_deme(world_state, world_state.demes[did], strategy_id)
-		for did in world_state.demes.keys():
-			var d: EvoTypes.Deme = world_state.demes[did]
-			if d.strategy_id == strategy_id:
+		for d: EvoTypes.Deme in world_state.demes.values():
+			var matches_slot := (
+				(strategy_id == world_state.strategy_a_id and d.faction_slot == "A")
+				or (strategy_id == world_state.strategy_b_id and d.faction_slot == "B")
+				or d.strategy_id == strategy_id
+			)
+			if matches_slot:
 				EvoCatalog.apply_strategy_to_deme(world_state, d, strategy_id)
 		EvoDecisionModel.evaluate_all_demes(world_state, lang)
 	elif world_state.strategies_catalog.has(strategy_id):

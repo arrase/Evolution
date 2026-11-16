@@ -58,6 +58,17 @@ static func step_cell_seasonal_climate(
 	cell.has_ruins = cell.ruin_turns > 0
 
 
+static func _seasonal_gamma(biome: String, is_wet: bool) -> float:
+	match biome:
+		"tropical_forest", "coastal_shallows":
+			return 1.12 if is_wet else 0.92
+		"savanna", "arid_steppe", "tundra":
+			return 1.30 if is_wet else 0.52
+		"high_mountain":
+			return 1.10 if is_wet else 0.60
+	return 1.20 if is_wet else 0.75
+
+
 static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "es") -> void:
 	_prune_stale_relations(state)
 
@@ -65,7 +76,7 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 	var next_generation := state.generation + 1
 	state.generation = next_generation
 	state.season = "dry_cold" if state.season == "wet_warm" else "wet_warm"
-	var gamma_season: float = 1.20 if state.season == "wet_warm" else 0.75
+	var is_wet := state.season == "wet_warm"
 
 	var prev_exchange_conns: Array[Dictionary] = []
 	var conn_idx_by_pair: Dictionary = {}
@@ -137,7 +148,8 @@ static func run_environmental_phase(state: EvoTypes.WorldState, lang: String = "
 		if biome_changed_hexes.has(cell.id):
 			continue
 
-		step_cell_seasonal_climate(cell, delta_temp, delta_hum, gamma_season, collapsed_prev_gen_hexes.has(cell.id))
+		var cell_gamma := _seasonal_gamma(cell.biome, is_wet)
+		step_cell_seasonal_climate(cell, delta_temp, delta_hum, cell_gamma, collapsed_prev_gen_hexes.has(cell.id))
 
 	state.selective_pressure_points += state.selective_pressure_regen_per_turn
 

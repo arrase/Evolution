@@ -82,7 +82,7 @@ static func _horizons_line(
 	deme: EvoTypes.Deme,
 	cell: EvoTypes.HexCell,
 	state: EvoTypes.WorldState,
-	neighbors: Array[EvoTypes.Deme]
+	contacts: Array[EvoTypes.Deme]
 ) -> String:
 	var items: Array[String] = []
 	if deme.defense_tier < 3:
@@ -108,15 +108,15 @@ static func _horizons_line(
 	else:
 		items.append("settle unlocks at %d pop & %d food" % [s_pop, int(s_food)])
 
-	for other in neighbors:
+	for other in contacts:
 		var pk := EvoTypes.make_pair_key(deme.id, other.id)
 		if state.relations.has(pk):
 			var rel: EvoTypes.Relation = state.relations[pk]
-			if rel.pact_turns in [1, 2]:
+			if rel.pact_turns in [1, 2] and EvoPayoffs.min_urban_distance(deme, other, state) == 1:
 				items.append("union with %s in %d turn(s)" % [other.name, 3 - rel.pact_turns])
 
 	if EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog) and EvoMilestonePhase.count_emergent_cultural_traits(deme, state) < EvoActionMenu.MAX_EMERGENT_CULTURAL:
-		items.append("innovation %.2f/1.0 (+%.2f/turn)" % [deme.innovation_counter, EvoPayoffs.innovation_step(deme, state)])
+		items.append("innovation %.2f/1.0 (+%.2f/turn, %d food)" % [deme.innovation_counter, EvoPayoffs.innovation_step(deme, state), int(EvoPayoffs.INNOVATE_COST_RESERVES)])
 
 	if state.glacial_sea_level_cycle:
 		var turns_left := 8 - (state.generation % 8)
@@ -156,57 +156,80 @@ static func _relation_text(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: Evo
 static func _perimeter_lines(
 	deme: EvoTypes.Deme,
 	state: EvoTypes.WorldState,
-	rivals: Array[EvoTypes.Deme],
-	raiders: Array[EvoTypes.Deme]
+	contacts: Array[EvoTypes.Deme]
 ) -> Array[String]:
 	var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
 	var mobility := EvoPayoffs.vector(deme, state).spatial_mobility
 	var lines: Array[String] = []
-	var seen_demes: Dictionary = {deme.id: true}
 
 	for nid in EvoTypes.urban_perimeter_hex_ids(deme, state):
 		var ncell: EvoTypes.HexCell = state.cells[nid]
-		if not EvoActionMenu.is_passable_for(ncell, mobility):
+		if not EvoActionMenu.is_passable_for(ncell, mobility) or not ncell.deme_ids.is_empty():
 			continue
 		var dir := _compass_dir(cell, ncell)
-		if ncell.deme_ids.is_empty():
-			var status_txt := "wild"
-			if ncell.ruin_turns > 0:
-				status_txt = "scorched ruins (%d turns to recover)" % ncell.ruin_turns
-			elif ncell.owner_deme_id == deme.id:
-				status_txt = "your %s" % ncell.land_use
-			elif ncell.owner_deme_id != "" and state.demes.has(ncell.owner_deme_id):
-				status_txt = "%s of %s" % [ncell.land_use, (state.demes[ncell.owner_deme_id] as EvoTypes.Deme).name]
-			lines.append("- %s (%s): %s, %s, land %d." % [dir, ncell.id, status_txt, ncell.biome.replace("_", " "), int(ncell.current_resources)])
-			continue
+		var status_txt := "wild"
+		if ncell.ruin_turns > 0:
+			status_txt = "scorched ruins (%d turns to recover)" % ncell.ruin_turns
+		elif ncell.owner_deme_id == deme.id:
+			status_txt = "your %s" % ncell.land_use
+		elif ncell.owner_deme_id != "" and state.demes.has(ncell.owner_deme_id):
+			status_txt = "%s of %s" % [ncell.land_use, (state.demes[ncell.owner_deme_id] as EvoTypes.Deme).name]
+		lines.append("- %s (%s): %s, %s, land %d." % [dir, ncell.id, status_txt, ncell.biome.replace("_", " "), int(ncell.current_resources)])
 
-		var oid := ncell.deme_ids[0]
-		if seen_demes.has(oid) or not state.demes.has(oid):
-			continue
-		seen_demes[oid] = true
-		var other: EvoTypes.Deme = state.demes[oid]
+	for other: EvoTypes.Deme in contacts.slice(0, EvoActionMenu.MAX_NEIGHBORS + 2):
+		var ocell: EvoTypes.HexCell = state.cells[other.hex_id]
+		var dir := _compass_dir(cell, ocell)
+		var dist := EvoPayoffs.min_urban_distance(deme, other, state)
+		var dist_txt := "adjacent" if dist <= 1 else "%d hexes" % dist
 		var size_tag := "Tier %s %d-hex city" % [other.get_village_roman(), other.urban_hex_ids.size()] if other.urban_hex_ids.size() > 1 else "Tier %s" % other.get_village_roman()
-		lines.append("- %s (%s) %s [%s culture, %s]: %d people, food %d, %s, posture %s; %s; reputation %s." % [
-			dir, ncell.id, other.name, culture_name(other, state), size_tag, other.population, int(other.energy_reserves),
+		lines.append("- %s (%s, %s) %s [%s culture, %s]: %d people, food %d, %s, posture %s; %s; reputation %s." % [
+			dir, other.hex_id, dist_txt, other.name, culture_name(other, state), size_tag, other.population, int(other.energy_reserves),
 			EvoOutcomeForecast.WALL_NAMES[other.defense_tier], str(EvoOutcomeForecast.POSTURE_NAMES[other.defense_posture]),
 			_relation_text(deme, other, state), EvoRelations.reputation_word(other.reputation)
 		])
-
-	for rival in rivals:
-		var rcell: EvoTypes.HexCell = state.cells[rival.hex_id]
-		lines.append("- Border-crop rival %s (%s, %s, [%s culture]): %d people, food %d, %s, posture %s; their crops touch your border (%s); reputation %s." % [
-			rival.name, _compass_dir(cell, rcell), rival.hex_id, culture_name(rival, state), rival.population, int(rival.energy_reserves),
-			EvoOutcomeForecast.WALL_NAMES[rival.defense_tier], str(EvoOutcomeForecast.POSTURE_NAMES[rival.defense_posture]),
-			_relation_text(deme, rival, state), EvoRelations.reputation_word(rival.reputation)
-		])
-	for raider in raiders:
-		var fcell: EvoTypes.HexCell = state.cells[raider.hex_id]
-		lines.append("- Field-border threat %s (%s, %s, [%s culture]): %d people, food %d, %s, posture %s; their settlement borders your cultivated fields (%s); reputation %s." % [
-			raider.name, _compass_dir(cell, fcell), raider.hex_id, culture_name(raider, state), raider.population, int(raider.energy_reserves),
-			EvoOutcomeForecast.WALL_NAMES[raider.defense_tier], str(EvoOutcomeForecast.POSTURE_NAMES[raider.defense_posture]),
-			_relation_text(deme, raider, state), EvoRelations.reputation_word(raider.reputation)
-		])
 	return lines
+
+
+static func _regional_radar_line(
+	deme: EvoTypes.Deme,
+	cell: EvoTypes.HexCell,
+	state: EvoTypes.WorldState,
+	contacts: Array[EvoTypes.Deme]
+) -> String:
+	var contact_ids: Dictionary = {deme.id: true}
+	for c in contacts:
+		contact_ids[c.id] = true
+	var radar: Array[Dictionary] = []
+	for other: EvoTypes.Deme in state.demes.values():
+		if contact_ids.has(other.id) or other.population <= 0 or not state.cells.has(other.hex_id):
+			continue
+		var ocell: EvoTypes.HexCell = state.cells[other.hex_id]
+		var dist := HexMath.hex_distance(cell.q, cell.r, ocell.q, ocell.r)
+		if dist <= 4:
+			radar.append({"deme": other, "cell": ocell, "dist": dist})
+	if radar.is_empty():
+		return ""
+	radar.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var da := int(a["dist"])
+		var db := int(b["dist"])
+		if da != db:
+			return da < db
+		var pa := (a["deme"] as EvoTypes.Deme).population
+		var pb := (b["deme"] as EvoTypes.Deme).population
+		if pa != pb:
+			return pa > pb
+		return (a["deme"] as EvoTypes.Deme).id < (b["deme"] as EvoTypes.Deme).id
+	)
+	var parts: Array[String] = []
+	for item in radar:
+		var other: EvoTypes.Deme = item["deme"]
+		var ocell: EvoTypes.HexCell = item["cell"]
+		var dist := int(item["dist"])
+		parts.append("%s [%s, Tier %s, %d pop] to %s (%s, %d hexes away)" % [
+			other.name, culture_name(other, state), other.get_village_roman(), other.population,
+			_compass_dir(cell, ocell), other.hex_id, dist
+		])
+	return "Regional radar (3-4 hexes): %s." % "; ".join(parts)
 
 
 static func _corridor_line_from(deme: EvoTypes.Deme, state: EvoTypes.WorldState, hops_map: Dictionary, targets: Array[EvoTypes.HexCell]) -> String:
@@ -264,15 +287,7 @@ static func _pending_lines(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> A
 static func build(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> String:
 	var hops_map := EvoActionMenu.settle_corridor_hops(deme, state)
 	var targets := EvoActionMenu.settle_targets_with_hops(deme, state, hops_map)
-	return build_with_corridors(
-		deme,
-		state,
-		hops_map,
-		targets,
-		EvoActionMenu.neighbor_demes(deme, state),
-		EvoActionMenu.border_field_rivals(deme, state),
-		EvoActionMenu.field_raiders(deme, state)
-	)
+	return build_with_corridors(deme, state, hops_map, targets, EvoActionMenu.sorted_contact_demes(deme, state))
 
 
 static func build_with_corridors(
@@ -280,13 +295,16 @@ static func build_with_corridors(
 	state: EvoTypes.WorldState,
 	hops_map: Dictionary,
 	targets: Array[EvoTypes.HexCell],
-	neighbors: Array[EvoTypes.Deme],
-	rivals: Array[EvoTypes.Deme],
-	raiders: Array[EvoTypes.Deme]
+	contacts: Array[EvoTypes.Deme]
 ) -> String:
 	var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
 	var need := EvoPayoffs.food_need(deme, cell, state)
 	var turns_of_food := deme.energy_reserves / maxf(1.0, need)
+	var safe_buffer := need * EvoPayoffs.SPOILAGE_BUFFER_TURNS
+	var spoil_warn := ""
+	if deme.energy_reserves > safe_buffer:
+		var spoil_loss := int(roundf((deme.energy_reserves - safe_buffer) * EvoPayoffs.SPOILAGE_RATE))
+		spoil_warn = ", surplus spoilage ~%d food/turn above safe buffer" % spoil_loss
 	var k_sum := 0.0
 	var k_max_sum := 0.0
 	for hid in deme.urban_hex_ids:
@@ -307,20 +325,23 @@ static func build_with_corridors(
 	)
 
 	var lines: Array[String] = [
-		"Turn %d, %s season. %s: %d people, food stock %d (%.1f turns of need), last turn %s%d food, urban land at %d%% capacity, %d/%d cultivated fields, %s, posture %s, salubrity %d%%%s." % [
+		"Turn %d, %s season. %s: %d people, food stock %d (%.1f turns of need%s), last turn %s%d food, urban land at %d%% capacity, %d/%d cultivated fields, %s, domestic %s, posture %s, salubrity %d%%%s." % [
 			state.generation, "wet" if state.season == "wet_warm" else "dry", loc_desc, deme.population,
-			int(deme.energy_reserves), turns_of_food, "+" if deme.last_energy_delta >= 0.0 else "",
+			int(deme.energy_reserves), turns_of_food, spoil_warn, "+" if deme.last_energy_delta >= 0.0 else "",
 			int(roundf(deme.last_energy_delta)), land_pct, fields_owned, fields_quota,
-			EvoOutcomeForecast.WALL_NAMES[deme.defense_tier], str(EvoOutcomeForecast.POSTURE_NAMES[deme.defense_posture]),
-			sal_pct, sal_warn
+			EvoOutcomeForecast.WALL_NAMES[deme.defense_tier], deme.domestic_action,
+			str(EvoOutcomeForecast.POSTURE_NAMES[deme.defense_posture]), sal_pct, sal_warn
 		],
 		_traits_line(deme, state),
-		_horizons_line(deme, cell, state, neighbors),
+		_horizons_line(deme, cell, state, contacts),
 		"Your reputation among neighbors: %s. %s" % [EvoRelations.reputation_word(deme.reputation), _lineage_line(deme, state)],
-		"Perimeter & neighbors:"
+		"Neighbors & borders:"
 	]
-	var perim := _perimeter_lines(deme, state, rivals, raiders)
+	var perim := _perimeter_lines(deme, state, contacts)
 	lines.append_array(perim if not perim.is_empty() else ["- isolated (no passable neighbors)"])
+	var radar := _regional_radar_line(deme, cell, state, contacts)
+	if radar != "":
+		lines.append(radar)
 	var corridors := _corridor_line_from(deme, state, hops_map, targets)
 	if corridors != "":
 		lines.append(corridors)

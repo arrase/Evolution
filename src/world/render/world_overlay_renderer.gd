@@ -1136,7 +1136,8 @@ static func draw_village_billboard(r: Node2D, village: Dictionary, pos: Vector2)
 		1.0
 	)
 	var chosen: Dictionary = deme.chosen_action
-	var act_type := str(chosen["type"]) if chosen.has("type") else ""
+	var ext_type := str(chosen["type"]) if chosen.has("type") else "none"
+	var act_type := ext_type if ext_type != "none" else deme.domestic_action
 	var icon_name := _action_icon_name(act_type, str(village["archetype"]))
 	var icon_sz := 13.0 if is_macro else 14.0
 	var icon_pos := Vector2(

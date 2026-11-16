@@ -380,49 +380,19 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 		"%+.2f (%s)" % [d.reputation, EvoRelations.reputation_word(d.reputation)]
 	)
 
-	# Action Policy Section (Top 3 action options, chosen action marked with ★)
-	var dec_title := Label.new()
-	dec_title.text = EvoUiStyle.tr_text(hud._lang, "🧠 Acción Elegida:", "🧠 Chosen Action:")
-	dec_title.add_theme_font_size_override("font_size", 11)
-	dec_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
-	hud._deme_sheet_vbox.add_child(dec_title)
-
 	var chosen_key := str(d.chosen_action["key"])
-	var prob_keys := d.action_probabilities.keys()
-	prob_keys.sort_custom(func(a: Variant, b: Variant) -> bool:
-		var ka := str(a)
-		var kb := str(b)
-		if ka == chosen_key and kb != chosen_key:
-			return true
-		if kb == chosen_key and ka != chosen_key:
-			return false
-		return float(d.action_probabilities[a]) > float(d.action_probabilities[b])
+	_add_policy_bars_section(
+		hud,
+		EvoUiStyle.tr_text(hud._lang, "🏠 Economía Interna:", "🏠 Domestic Focus:"),
+		d.domestic_probabilities,
+		d.domestic_action
 	)
-	for i in range(mini(3, prob_keys.size())):
-		var act_key := str(prob_keys[i])
-		var prob := float(d.action_probabilities[act_key])
-		var parsed := EvoActionMenu.parse_key(act_key)
-		var act_type := str(parsed["type"])
-		var act_target := str(parsed["target"])
-		var act_lbl_str := act_type
-		if hud._world_state.decisions_catalog.has(act_type):
-			act_lbl_str = EvoI18n.decision_name(hud._lang, hud._world_state.decisions_catalog[act_type])
-		if act_target != "":
-			if hud._world_state.demes.has(act_target):
-				act_lbl_str += " → " + EvoHudInspectorFormatters.format_short_deme_label(hud._world_state.demes[act_target])
-			else:
-				act_lbl_str += " → (%s)" % act_target
-		var is_chosen := (act_key == chosen_key)
-		if is_chosen:
-			act_lbl_str = "★ " + act_lbl_str
-
-		EvoHudInspectorFormatters.add_milestone_bar(
-			hud._deme_sheet_vbox,
-			act_lbl_str,
-			"%d%%" % int(round(prob * 100.0)),
-			prob * 100.0,
-			EvoUiStyle.COLOR_GOLD_BEVEL if is_chosen else EvoUiStyle.COLOR_SEPIA
-		)
+	_add_policy_bars_section(
+		hud,
+		EvoUiStyle.tr_text(hud._lang, "🌍 Política Exterior:", "🌍 Foreign Action:"),
+		d.action_probabilities,
+		chosen_key
+	)
 
 	# Village Relations & Roads Summary
 	var rel_card := PanelContainer.new()
@@ -464,7 +434,9 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 
 	var just_lbl := Label.new()
 	var note_parts: Array[String] = []
-	if d.action_forecasts.has(chosen_key):
+	if d.domestic_forecasts.has(d.domestic_action):
+		note_parts.append("🏠 " + str(d.domestic_forecasts[d.domestic_action]))
+	if chosen_key != "none" and d.action_forecasts.has(chosen_key):
 		note_parts.append("🎯 " + str(d.action_forecasts[chosen_key]))
 	if d.last_outcome != "":
 		note_parts.append("📜 " + d.last_outcome)
@@ -477,6 +449,55 @@ static func rebuild_deme_sheet(hud: Control) -> void:
 	just_lbl.add_theme_font_size_override("font_size", 10)
 	just_lbl.add_theme_color_override("font_color", EvoUiStyle.COLOR_SEPIA)
 	just_card.add_child(just_lbl)
+
+
+static func _add_policy_bars_section(
+	hud: Control,
+	title_text: String,
+	probs: Dictionary,
+	selected_key: String
+) -> void:
+	var sec_title := Label.new()
+	sec_title.text = title_text
+	sec_title.add_theme_font_size_override("font_size", 11)
+	sec_title.add_theme_color_override("font_color", EvoUiStyle.COLOR_WOOD_DARK)
+	hud._deme_sheet_vbox.add_child(sec_title)
+
+	var prob_keys := probs.keys()
+	prob_keys.sort_custom(func(a: Variant, b: Variant) -> bool:
+		var ka := str(a)
+		var kb := str(b)
+		if ka == selected_key and kb != selected_key:
+			return true
+		if kb == selected_key and ka != selected_key:
+			return false
+		return float(probs[a]) > float(probs[b])
+	)
+	for i in range(mini(3, prob_keys.size())):
+		var act_key := str(prob_keys[i])
+		var prob := float(probs[act_key])
+		var parsed := EvoActionMenu.parse_key(act_key)
+		var act_type := str(parsed["type"])
+		var act_target := str(parsed["target"])
+		var act_lbl_str := act_type
+		if hud._world_state.decisions_catalog.has(act_type):
+			act_lbl_str = EvoI18n.decision_name(hud._lang, hud._world_state.decisions_catalog[act_type])
+		if act_target != "":
+			if hud._world_state.demes.has(act_target):
+				act_lbl_str += " → " + EvoHudInspectorFormatters.format_short_deme_label(hud._world_state.demes[act_target])
+			else:
+				act_lbl_str += " → (%s)" % act_target
+		var is_chosen := (act_key == selected_key)
+		if is_chosen:
+			act_lbl_str = "★ " + act_lbl_str
+
+		EvoHudInspectorFormatters.add_milestone_bar(
+			hud._deme_sheet_vbox,
+			act_lbl_str,
+			"%d%%" % int(round(prob * 100.0)),
+			prob * 100.0,
+			EvoUiStyle.COLOR_GOLD_BEVEL if is_chosen else EvoUiStyle.COLOR_SEPIA
+		)
 
 
 static func rebuild_hex_sheet(hud: Control) -> void:

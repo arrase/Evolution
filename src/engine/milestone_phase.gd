@@ -122,9 +122,11 @@ static func synthesize_milestone_trait(
 
 	var base_name := ""
 	var raw_vec: EvoTypes.BiophysicalVector
+	var ext_act := str(deme.chosen_action["type"])
+	var active_act := deme.domestic_action if ext_act == "none" else ext_act
 	var baldwin_dec_id := str(deme.get_meta("baldwin_decision_id", "")) if deme.has_meta("baldwin_decision_id") else ""
-	if baldwin_dec_id == "":
-		baldwin_dec_id = str(deme.chosen_action["type"])
+	if baldwin_dec_id == "" or baldwin_dec_id == "none":
+		baldwin_dec_id = active_act
 
 	if category == "cultural":
 		var arch := _select_cultural_archetype(deme, cell, state)
@@ -184,7 +186,7 @@ static func synthesize_milestone_trait(
 		trait_id = "%s-%s-%d" % [base_id, sanitized_deme, id_suffix]
 		id_suffix += 1
 
-	var dom_name := baldwin_dec_id if trigger_type == "baldwin_assimilation" else str(deme.chosen_action["type"])
+	var dom_name := baldwin_dec_id if trigger_type == "baldwin_assimilation" else active_act
 	if state.decisions_catalog.has(dom_name):
 		dom_name = EvoI18n.decision_name(lang, state.decisions_catalog[dom_name])
 
@@ -265,7 +267,8 @@ static func run_milestone_phase(
 		if not state.cells.has(deme.hex_id):
 			continue
 		var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
-		var action_type := str(deme.chosen_action["type"])
+		var ext_type := str(deme.chosen_action["type"])
+		var action_type := deme.domestic_action if ext_type == "none" else ext_type
 
 		var emergent_bio_count: int = 0
 		for tid in deme.biological_trait_ids:
@@ -317,105 +320,109 @@ static func run_milestone_phase(
 		return int(a["priority"]) < int(b["priority"])
 	)
 
-	if not candidates.is_empty():
-		var top: Dictionary = candidates[0]
-		var target_id := str(top["deme_id"])
-		var trigger_type := str(top["trigger_type"])
-		var dec_id := str(top["decision_id"])
+	var awarded_demes: Dictionary = {}
+	for cand in candidates:
+		if awarded_demes.size() >= 3:
+			break
+		var target_id := str(cand["deme_id"])
+		if awarded_demes.has(target_id) or not state.demes.has(target_id):
+			continue
+		awarded_demes[target_id] = true
+		var trigger_type := str(cand["trigger_type"])
+		var dec_id := str(cand["decision_id"])
 
-		if state.demes.has(target_id):
-			var deme: EvoTypes.Deme = state.demes[target_id]
-			deme.set_meta("baldwin_decision_id", dec_id)
-			var new_trait := synthesize_milestone_trait(state, deme, trigger_type, lang)
-			state.traits_catalog[new_trait.id] = new_trait
+		var deme: EvoTypes.Deme = state.demes[target_id]
+		deme.set_meta("baldwin_decision_id", dec_id)
+		var new_trait := synthesize_milestone_trait(state, deme, trigger_type, lang)
+		state.traits_catalog[new_trait.id] = new_trait
 
-			if new_trait.category == "biological":
-				if not deme.biological_trait_ids.has(new_trait.id):
-					deme.biological_trait_ids.append(new_trait.id)
-			else:
-				if not deme.cultural_trait_ids.has(new_trait.id):
-					deme.cultural_trait_ids.append(new_trait.id)
-			EvoRelations.remember(deme, state, "Unlocked %s!" % new_trait.name)
+		if new_trait.category == "biological":
+			if not deme.biological_trait_ids.has(new_trait.id):
+				deme.biological_trait_ids.append(new_trait.id)
+		else:
+			if not deme.cultural_trait_ids.has(new_trait.id):
+				deme.cultural_trait_ids.append(new_trait.id)
+		EvoRelations.remember(deme, state, "Unlocked %s!" % new_trait.name)
 
-			var ancestor_hex_id := deme.hex_id
-			if trigger_type == "baldwin_assimilation":
-				deme.baldwin_counters[dec_id] = 0
-				if state.lineage_tree.has(deme.lineage_id):
-					var lin_b: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id]
-					lin_b.biological_trait_ids = deme.biological_trait_ids.duplicate()
-					lin_b.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
-					if not lin_b.acquired_trait_ids.has(new_trait.id):
-						lin_b.acquired_trait_ids.append(new_trait.id)
-			elif trigger_type == "cultural_innovation":
-				deme.innovation_counter = maxf(0.0, snappedf(deme.innovation_counter - 1.0, 0.0001))
-				if state.lineage_tree.has(deme.lineage_id):
-					var lin_c: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id]
-					lin_c.biological_trait_ids = deme.biological_trait_ids.duplicate()
-					lin_c.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
-					if not lin_c.acquired_trait_ids.has(new_trait.id):
-						lin_c.acquired_trait_ids.append(new_trait.id)
-			elif trigger_type == "allopatric_speciation":
-				var old_lineage_id := deme.lineage_id
-				ancestor_hex_id = (state.lineage_tree[old_lineage_id] as EvoTypes.LineageNode).founder_hex_id if state.lineage_tree.has(old_lineage_id) else deme.hex_id
-				deme.isolation_turns = 0
-				var slug := _slugify(new_trait.name)
-				var san_deme := _slugify(deme.id)
-				var base_lin_id := "lineage-%d-%s" % [state.generation, slug]
-				var new_lin_id := base_lin_id if not state.lineage_tree.has(base_lin_id) else "%s-%s" % [base_lin_id, san_deme]
-				var l_suf := 2
-				while state.lineage_tree.has(new_lin_id):
-					new_lin_id = "%s-%s-%d" % [base_lin_id, san_deme, l_suf]
-					l_suf += 1
+		var ancestor_hex_id := deme.hex_id
+		if trigger_type == "baldwin_assimilation":
+			deme.baldwin_counters[dec_id] = 0
+			if state.lineage_tree.has(deme.lineage_id):
+				var lin_b: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id]
+				lin_b.biological_trait_ids = deme.biological_trait_ids.duplicate()
+				lin_b.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
+				if not lin_b.acquired_trait_ids.has(new_trait.id):
+					lin_b.acquired_trait_ids.append(new_trait.id)
+		elif trigger_type == "cultural_innovation":
+			deme.innovation_counter = maxf(0.0, snappedf(deme.innovation_counter - 1.0, 0.0001))
+			if state.lineage_tree.has(deme.lineage_id):
+				var lin_c: EvoTypes.LineageNode = state.lineage_tree[deme.lineage_id]
+				lin_c.biological_trait_ids = deme.biological_trait_ids.duplicate()
+				lin_c.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
+				if not lin_c.acquired_trait_ids.has(new_trait.id):
+					lin_c.acquired_trait_ids.append(new_trait.id)
+		elif trigger_type == "allopatric_speciation":
+			var old_lineage_id := deme.lineage_id
+			ancestor_hex_id = (state.lineage_tree[old_lineage_id] as EvoTypes.LineageNode).founder_hex_id if state.lineage_tree.has(old_lineage_id) else deme.hex_id
+			deme.isolation_turns = 0
+			var slug := _slugify(new_trait.name)
+			var san_deme := _slugify(deme.id)
+			var base_lin_id := "lineage-%d-%s" % [state.generation, slug]
+			var new_lin_id := base_lin_id if not state.lineage_tree.has(base_lin_id) else "%s-%s" % [base_lin_id, san_deme]
+			var l_suf := 2
+			while state.lineage_tree.has(new_lin_id):
+				new_lin_id = "%s-%s-%d" % [base_lin_id, san_deme, l_suf]
+				l_suf += 1
 
-				var next_color := _select_distinct_color(deme.color, state.lineage_tree)
-				var new_node := EvoTypes.LineageNode.new()
-				new_node.id = new_lin_id
-				new_node.parent_id = old_lineage_id
-				new_node.name = new_trait.name
-				new_node.strategy_id = deme.strategy_id
-				new_node.color = next_color
-				new_node.founded_generation = state.generation
-				new_node.extinct_generation = -1
-				new_node.founder_hex_id = deme.hex_id
-				new_node.divergence_reason = "allopatric_speciation"
-				new_node.biological_trait_ids = deme.biological_trait_ids.duplicate()
-				new_node.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
-				var acq: Array[String] = []
-				for tid in deme.biological_trait_ids:
-					if not acq.has(tid):
-						acq.append(tid)
-				for tid in deme.cultural_trait_ids:
-					if not acq.has(tid):
-						acq.append(tid)
-				new_node.acquired_trait_ids = acq
+			var next_color := _select_distinct_color(deme.color, state.lineage_tree)
+			var new_node := EvoTypes.LineageNode.new()
+			new_node.id = new_lin_id
+			new_node.parent_id = old_lineage_id
+			new_node.name = new_trait.name
+			new_node.strategy_id = deme.strategy_id
+			new_node.color = next_color
+			new_node.founded_generation = state.generation
+			new_node.extinct_generation = -1
+			new_node.founder_hex_id = deme.hex_id
+			new_node.divergence_reason = "allopatric_speciation"
+			new_node.biological_trait_ids = deme.biological_trait_ids.duplicate()
+			new_node.cultural_trait_ids = deme.cultural_trait_ids.duplicate()
+			var acq: Array[String] = []
+			for tid in deme.biological_trait_ids:
+				if not acq.has(tid):
+					acq.append(tid)
+			for tid in deme.cultural_trait_ids:
+				if not acq.has(tid):
+					acq.append(tid)
+			new_node.acquired_trait_ids = acq
 
-				state.lineage_tree[new_lin_id] = new_node
-				deme.lineage_id = new_lin_id
-				deme.color = next_color
+			state.lineage_tree[new_lin_id] = new_node
+			deme.lineage_id = new_lin_id
+			deme.color = next_color
 
-				if state.lineage_tree.has(old_lineage_id):
-					var any_old := false
-					for odid in state.demes.keys():
-						if (state.demes[odid] as EvoTypes.Deme).lineage_id == old_lineage_id:
-							any_old = true
-							break
-					if not any_old:
-						(state.lineage_tree[old_lineage_id] as EvoTypes.LineageNode).extinct_generation = state.generation
+			if state.lineage_tree.has(old_lineage_id):
+				var any_old := false
+				for odid in state.demes.keys():
+					if (state.demes[odid] as EvoTypes.Deme).lineage_id == old_lineage_id:
+						any_old = true
+						break
+				if not any_old:
+					(state.lineage_tree[old_lineage_id] as EvoTypes.LineageNode).extinct_generation = state.generation
 
-			var chronicle_type := "baldwin_trait" if trigger_type == "baldwin_assimilation" else trigger_type
-			EvoTypes.push_event(state, chronicle_type, ancestor_hex_id if chronicle_type == "allopatric_speciation" else deme.hex_id, deme.hex_id, deme.id)
-			var entry := EvoTypes.ChronicleEntry.new()
-			entry.id = "chronicle-%s-%d-%s" % [chronicle_type, state.generation, deme.id]
-			entry.generation = state.generation
-			entry.event_type = chronicle_type
-			entry.title = "%s: %s" % [deme.name, new_trait.name]
-			entry.causal_explanation = new_trait.description
-			entry.hex_id = deme.hex_id
-			entry.deme_id = deme.id
-			entry.lineage_id = deme.lineage_id
-			entry.trait_id = new_trait.id
-			state.chronicle.append(entry)
-			added_entries.append(entry)
+		var chronicle_type := "baldwin_trait" if trigger_type == "baldwin_assimilation" else trigger_type
+		EvoTypes.push_event(state, chronicle_type, ancestor_hex_id if chronicle_type == "allopatric_speciation" else deme.hex_id, deme.hex_id, deme.id)
+		var entry := EvoTypes.ChronicleEntry.new()
+		entry.id = "chronicle-%s-%d-%s" % [chronicle_type, state.generation, deme.id]
+		entry.generation = state.generation
+		entry.event_type = chronicle_type
+		entry.title = "%s: %s" % [deme.name, new_trait.name]
+		entry.causal_explanation = new_trait.description
+		entry.hex_id = deme.hex_id
+		entry.deme_id = deme.id
+		entry.lineage_id = deme.lineage_id
+		entry.trait_id = new_trait.id
+		state.chronicle.append(entry)
+		added_entries.append(entry)
 
 	if state.demes.is_empty():
 		state.quiet_turns = 0

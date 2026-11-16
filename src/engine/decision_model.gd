@@ -22,6 +22,21 @@ static func check_ollama_status(force_refresh: bool = false) -> Dictionary:
 	return EvoOllamaClient.check_ollama_status(force_refresh)
 
 
+static func _deme_eval_snapshot(deme: EvoTypes.Deme) -> Dictionary:
+	return {
+		"chosen_action": deme.chosen_action,
+		"probabilities": deme.action_probabilities,
+		"forecasts": deme.action_forecasts,
+		"domestic_action": deme.domestic_action,
+		"domestic_probabilities": deme.domestic_probabilities,
+		"domestic_forecasts": deme.domestic_forecasts,
+		"defense_posture": deme.defense_posture,
+		"posture_probabilities": deme.posture_probabilities,
+		"posture_forecasts": deme.posture_forecasts,
+		"confidence": deme.last_confidence
+	}
+
+
 static func evaluate_deme(
 	deme: EvoTypes.Deme,
 	state: EvoTypes.WorldState,
@@ -30,30 +45,14 @@ static func evaluate_deme(
 	if deme.decision_model_tag == "":
 		deme.decision_model_tag = resolve_model_for_slot(deme.faction_slot)
 	if not state.cells.has(deme.hex_id):
-		return {
-			"chosen_action": deme.chosen_action,
-			"probabilities": deme.action_probabilities,
-			"forecasts": deme.action_forecasts,
-			"defense_posture": deme.defense_posture,
-			"posture_probabilities": deme.posture_probabilities,
-			"posture_forecasts": deme.posture_forecasts,
-			"confidence": deme.last_confidence
-		}
+		return _deme_eval_snapshot(deme)
 	var job := EvoActionPolicy.prepare_deme_menu(deme, state)
 	var ready := EvoOllamaClient.take_result(deme.id)
 	if not ready.is_empty():
 		EvoActionPolicy.apply_live_result(deme, ready)
 	elif enqueue_job:
 		EvoOllamaClient.enqueue_jobs([job])
-	return {
-		"chosen_action": deme.chosen_action,
-		"probabilities": deme.action_probabilities,
-		"forecasts": deme.action_forecasts,
-		"defense_posture": deme.defense_posture,
-		"posture_probabilities": deme.posture_probabilities,
-		"posture_forecasts": deme.posture_forecasts,
-		"confidence": deme.last_confidence
-	}
+	return _deme_eval_snapshot(deme)
 
 
 static func evaluate_all_demes(
@@ -94,10 +93,11 @@ static func apply_completed_live_results(state: EvoTypes.WorldState, _lang: Stri
 			continue
 		var deme: EvoTypes.Deme = state.demes[deme_id]
 		var prev_key := str(deme.chosen_action["key"])
+		var prev_dom := deme.domestic_action
 		var prev_posture := deme.defense_posture
 		var entry: Dictionary = newly_completed[deme_id]
 		EvoActionPolicy.apply_live_result(deme, entry)
-		if str(deme.chosen_action["key"]) != prev_key or deme.defense_posture != prev_posture:
+		if str(deme.chosen_action["key"]) != prev_key or deme.domestic_action != prev_dom or deme.defense_posture != prev_posture:
 			any_changed = true
 		any_updated = true
 

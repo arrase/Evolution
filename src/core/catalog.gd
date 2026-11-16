@@ -79,6 +79,7 @@ static func create_base_traits_catalog(lang: String = "es") -> Dictionary:
 
 static func create_base_decisions_catalog(lang: String = "es") -> Dictionary:
 	var decisions: Array[EvoTypes.DecisionDef] = [
+		_make_decision("none", "forage", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, lang),
 		_make_decision("forage", "forage", 0.10, 0.35, 0.10, 0.00, 0.05, 0.05, lang),
 		_make_decision("intensify", "overexploit", 0.25, 0.85, -0.65, 0.00, -0.10, 0.10, lang),
 		_make_decision("fortify", "cooperate", 0.20, 0.10, 0.00, -0.20, 0.55, 0.20, lang),

@@ -82,7 +82,12 @@ static func tick(state: EvoTypes.WorldState) -> void:
 			rel.pact_turns += 1
 		rel.feud_turns = maxi(0, rel.feud_turns - 1)
 		rel.truce_turns = maxi(0, rel.truce_turns - 1)
-		if rel.proposal_from != "" and rel.proposal_gen < state.generation:
+		if rel.pact_turns == 0 and rel.feud_turns == 0:
+			rel.trust = snappedf(move_toward(rel.trust, 0.0, 0.03), 0.0001)
+		if rel.proposal_from != "" and (
+			(rel.proposal_kind == "tribute" and rel.proposal_gen < state.generation)
+			or (rel.proposal_kind != "tribute" and rel.proposal_gen + 1 < state.generation)
+		):
 			clear_proposal(rel)
 
 	var friendly_pairs: Dictionary = {}
@@ -112,7 +117,7 @@ static func _refuse_tribute(state: EvoTypes.WorldState, pair_key: String, rel: E
 	rel.last_event = "T%d %s refused to pay tribute to %s" % [state.generation, target.name, demander.name]
 	remember(demander, state, "%s refused your tribute demand." % target.name)
 	remember(target, state, "You refused %s's tribute demand." % demander.name)
-	var in_range := EvoPayoffs.min_urban_distance(demander, target, state) == 1 or EvoDiplomacyPhase.has_border_crop_contact(demander, target, state)
+	var in_range := EvoActionMenu.has_social_contact(demander, target, state)
 	if in_range and target.defense_tier < 3 and demander.population >= 20:
 		EvoConflictPhase._raid(demander, target, rel, state, lang, false, true)
 

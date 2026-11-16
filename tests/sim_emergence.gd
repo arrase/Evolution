@@ -8,11 +8,19 @@ const DEFAULT_MATCHUPS: Array[Dictionary] = [
 ]
 
 
+const SOCIAL_EVENT_TYPES: Array[String] = [
+	"trade", "aid", "pact", "demand_tribute", "tribute",
+	"raid", "raid_repelled", "war", "war_repelled", "betrayal",
+	"walled_union", "absorption"
+]
+
+
 func _new_slot_telemetry(strat_id: String, model_tag: String) -> Dictionary:
 	return {
 		"strategy_id": strat_id,
 		"model_tag": model_tag,
 		"postures": {"open_harvest": 0, "patrol_fields": 0, "mobilized_garrison": 0},
+		"domestics": {"forage": 0, "intensify": 0, "fortify": 0, "innovate": 0},
 		"actions": {}
 	}
 
@@ -58,6 +66,7 @@ func _summarize_slot(state: EvoTypes.WorldState, slot: String, telem: Dictionary
 		"multi_hex_cities": multi_hex_cities,
 		"owned_rural_hexes": rural_hexes,
 		"posture_distribution": telem["postures"],
+		"domestic_distribution": telem["domestics"],
 		"action_distribution": telem["actions"]
 	}
 
@@ -99,11 +108,15 @@ func _init() -> void:
 		quit(1)
 		return
 
+	var global_domestics: Dictionary = {"forage": 0, "intensify": 0, "fortify": 0, "innovate": 0}
 	var global_actions: Dictionary = {}
 	var global_chronicle: Dictionary = {}
 	var global_turn_events: Dictionary = {}
+	var domestics_by_strat: Dictionary = {}
 	var actions_by_strat: Dictionary = {}
 	var postures_by_strat: Dictionary = {}
+	var total_deme_turns := 0
+	var ext_active := 0
 
 	for idx in range(matchups.size()):
 		var m: Dictionary = matchups[idx]
@@ -137,19 +150,29 @@ func _init() -> void:
 				var slot_key := "B" if d.faction_slot == "B" else "A"
 				var st: Dictionary = slot_telem[slot_key]
 				var s_postures: Dictionary = st["postures"]
+				var s_domestics: Dictionary = st["domestics"]
 				var s_actions: Dictionary = st["actions"]
+				var dom_type := d.domestic_action
 				var act_type := str(d.chosen_action["type"])
-				s_postures[d.defense_posture] = int(s_postures[d.defense_posture]) + 1
+				total_deme_turns += 1
+				if act_type != "none":
+					ext_active += 1
+				s_postures[d.defense_posture] = int(s_postures.get(d.defense_posture, 0)) + 1
+				s_domestics[dom_type] = int(s_domestics.get(dom_type, 0)) + 1
 				s_actions[act_type] = int(s_actions.get(act_type, 0)) + 1
+				global_domestics[dom_type] = int(global_domestics.get(dom_type, 0)) + 1
 				global_actions[act_type] = int(global_actions.get(act_type, 0)) + 1
 
 				if not actions_by_strat.has(d.strategy_id):
+					domestics_by_strat[d.strategy_id] = {"forage": 0, "intensify": 0, "fortify": 0, "innovate": 0}
 					actions_by_strat[d.strategy_id] = {}
 					postures_by_strat[d.strategy_id] = {"open_harvest": 0, "patrol_fields": 0, "mobilized_garrison": 0}
+				var strat_doms: Dictionary = domestics_by_strat[d.strategy_id]
+				strat_doms[dom_type] = int(strat_doms.get(dom_type, 0)) + 1
 				var strat_acts: Dictionary = actions_by_strat[d.strategy_id]
 				strat_acts[act_type] = int(strat_acts.get(act_type, 0)) + 1
 				var strat_posts: Dictionary = postures_by_strat[d.strategy_id]
-				strat_posts[d.defense_posture] = int(strat_posts[d.defense_posture]) + 1
+				strat_posts[d.defense_posture] = int(strat_posts.get(d.defense_posture, 0)) + 1
 
 			EvoTurnEngine.advance_generation(state, "en")
 			for ev in state.turn_events:
@@ -198,19 +221,31 @@ func _init() -> void:
 				int(slot_summary["multi_hex_cities"]),
 				int(slot_summary["owned_rural_hexes"])
 			])
-			print("    Postures: %s" % JSON.stringify(slot_summary["posture_distribution"]))
-			print("    Actions:  %s" % JSON.stringify(slot_summary["action_distribution"]))
+			print("    Postures:  %s" % JSON.stringify(slot_summary["posture_distribution"]))
+			print("    Domestics: %s" % JSON.stringify(slot_summary["domestic_distribution"]))
+			print("    Actions:   %s" % JSON.stringify(slot_summary["action_distribution"]))
 		print("  Turn events:    %s" % JSON.stringify(m_turn_events))
 		print("  Chronicle logs: %s" % JSON.stringify(m_chronicle))
 
+	var ext_pct := (100.0 * float(ext_active) / float(total_deme_turns)) if total_deme_turns > 0 else 0.0
+	var social_events: Dictionary = {}
+	for ev_type in SOCIAL_EVENT_TYPES:
+		social_events[ev_type] = int(global_turn_events.get(ev_type, 0))
+
 	print("\n================================================================================")
 	print("=== AGGREGATE EMERGENCE SUMMARY ===")
-	print("Global Actions Chosen: %s" % JSON.stringify(global_actions))
-	print("Global Turn Events:    %s" % JSON.stringify(global_turn_events))
-	print("Global Chronicle Logs: %s" % JSON.stringify(global_chronicle))
+	print("External Active:         %.1f%% (%d / %d deme-turns)" % [ext_pct, ext_active, total_deme_turns])
+	print("Global Domestics Chosen: %s" % JSON.stringify(global_domestics))
+	print("Global Actions Chosen:   %s" % JSON.stringify(global_actions))
+	print("Social Event Counts:     %s" % JSON.stringify(social_events))
+	print("Global Turn Events:      %s" % JSON.stringify(global_turn_events))
+	print("Global Chronicle Logs:   %s" % JSON.stringify(global_chronicle))
 	print("Telemetry by Strategy:")
 	for sid in actions_by_strat.keys():
-		print("  %s -> postures=%s | actions=%s" % [
-			sid, JSON.stringify(postures_by_strat[sid]), JSON.stringify(actions_by_strat[sid])
+		print("  %s -> postures=%s | domestics=%s | actions=%s" % [
+			sid,
+			JSON.stringify(postures_by_strat[sid]),
+			JSON.stringify(domestics_by_strat[sid]),
+			JSON.stringify(actions_by_strat[sid])
 		])
 	quit(0)

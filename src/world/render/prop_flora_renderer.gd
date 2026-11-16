@@ -446,7 +446,8 @@ static func build_geopolitics_by_deme(state: EvoTypes.WorldState) -> Dictionary:
 
 
 static func get_deme_dominant_archetype(r: Node2D, deme: EvoTypes.Deme) -> String:
-	var action_type := str(deme.chosen_action["type"])
+	var ext_type := str(deme.chosen_action["type"])
+	var action_type := ext_type if ext_type != "none" else deme.domestic_action
 	var catalog: Dictionary = r.world_state.decisions_catalog
 	if catalog.has(action_type):
 		var dec: EvoTypes.DecisionDef = catalog[action_type]

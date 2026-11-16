@@ -137,6 +137,10 @@ static func found_camp(deme: EvoTypes.Deme, hex: EvoTypes.HexCell, state: EvoTyp
 	daughter.energy_reserves = food
 	deme.population -= n
 	deme.energy_reserves -= food
+	var rel := EvoTypes.get_relation(state, deme.id, daughter.id)
+	rel.trust = 0.55
+	rel.pact_turns = 1
+	rel.truce_turns = 3
 	EvoRelations.remember(deme, state, "You founded a colony at %s (%d settlers)%s." % [hex.id, n, EvoRelations.posture_tag(deme)])
 	EvoRelations.remember(daughter, state, "Founded by settlers from %s." % deme.name)
 	_push_flow(state, origin_hex, hex.id, "migration", 0.6, deme.id, daughter.id)

@@ -13,21 +13,22 @@ static func resolve(state: EvoTypes.WorldState, lang: String) -> void:
 			var deme: EvoTypes.Deme = state.demes[did]
 			if str(deme.chosen_action["type"]) != action_type:
 				continue
-			var other := (
-				EvoDiplomacyPhase.tribute_or_raid_target(deme, state)
-				if action_type == "raid"
-				else EvoDiplomacyPhase.adjacent_target(deme, state)
-			)
-			if other != null and action_type == "raid" and EvoPayoffs.min_urban_distance(deme, other, state) > 1:
-				if EvoPayoffs.closest_defender_field(deme, other, state) == null:
-					other = null
+			var other: EvoTypes.Deme = null
+			if action_type == "conquer":
+				var target_id := str(deme.chosen_action["target"])
+				if state.demes.has(target_id):
+					var cand: EvoTypes.Deme = state.demes[target_id]
+					if EvoActionMenu.can_reach_for_conquest(deme, cand, state):
+						other = cand
+			else:
+				other = EvoDiplomacyPhase.social_target(deme, state)
+				if other != null and action_type == "raid" and EvoPayoffs.min_urban_distance(deme, other, state) > 2:
+					if EvoPayoffs.closest_defender_field(deme, other, state) == null:
+						other = null
 			if other == null:
 				deme.last_outcome = "Your %s was called off: no valid target." % action_type
 				continue
 			var rel := EvoTypes.get_relation(state, deme.id, other.id)
-			if action_type != "betray" and other.lineage_id == deme.lineage_id and rel.feud_turns == 0:
-				deme.last_outcome = "Your %s was called off: %s is peaceful kin." % [action_type, other.name]
-				continue
 			var allied := rel.pact_turns > 0
 			if (action_type == "betray") != allied or rel.truce_turns > 0:
 				deme.last_outcome = "Your %s against %s was called off." % [action_type, other.name]
@@ -38,14 +39,23 @@ static func resolve(state: EvoTypes.WorldState, lang: String) -> void:
 				_raid(deme, other, rel, state, lang, action_type == "betray", false)
 
 
-static func _warn_allies(attacker: EvoTypes.Deme, victim: EvoTypes.Deme, state: EvoTypes.WorldState) -> void:
+static func _warn_allies(attacker: EvoTypes.Deme, victim: EvoTypes.Deme, state: EvoTypes.WorldState, surprise: bool = false) -> void:
+	var warned: Dictionary = {attacker.id: true, victim.id: true}
 	for pk in state.relations.keys():
 		var ally_id := EvoTypes.pair_partner(str(pk), victim.id)
-		if ally_id == "" or ally_id == attacker.id or not state.demes.has(ally_id) or (state.relations[pk] as EvoTypes.Relation).pact_turns <= 0:
+		if ally_id == "" or warned.has(ally_id) or not state.demes.has(ally_id) or (state.relations[pk] as EvoTypes.Relation).pact_turns <= 0:
 			continue
+		warned[ally_id] = true
 		var ally: EvoTypes.Deme = state.demes[ally_id]
-		EvoRelations.record(state, ally, attacker, -0.2, "%s attacked %s's ally %s" % [attacker.name, ally.name, victim.name])
+		EvoRelations.record(state, ally, attacker, -0.20, "%s attacked %s's ally %s" % [attacker.name, ally.name, victim.name])
 		EvoRelations.remember(ally, state, "%s attacked your ally %s." % [attacker.name, victim.name])
+	if surprise:
+		for neighbor in EvoActionMenu.contact_demes(victim, state):
+			if warned.has(neighbor.id):
+				continue
+			warned[neighbor.id] = true
+			EvoRelations.record(state, neighbor, attacker, -0.25, "%s treacherously betrayed %s" % [attacker.name, victim.name])
+			EvoRelations.remember(neighbor, state, "%s treacherously betrayed %s!" % [attacker.name, victim.name])
 
 
 static func _posture_phrase(posture: String) -> String:
@@ -110,7 +120,7 @@ static func _raid(
 	EvoRelations.start_feud(rel, EvoPayoffs.FEUD_AFTER_BETRAYAL if surprise else EvoPayoffs.FEUD_AFTER_RAID)
 	EvoRelations.record(state, attacker, defender, -1.0 if surprise else -0.5, "%s %s %s" % [attacker.name, verb, defender.name])
 	EvoRelations.adjust_reputation(attacker, -0.5 if surprise else (0.0 if provoked else -0.08))
-	_warn_allies(attacker, defender, state)
+	_warn_allies(attacker, defender, state, surprise)
 	if surprise:
 		state.disused_connections.append({
 			"from_hex_id": attacker.hex_id,

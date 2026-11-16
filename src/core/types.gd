@@ -375,9 +375,12 @@ class Deme extends RefCounted:
 	var isolation_turns: int = 0
 	var decision_model_tag: String = EvoUserSettings.primary_model
 	var last_confidence: float = 0.0
-	var chosen_action: Dictionary = {"key": "forage", "type": "forage", "target": ""}
+	var chosen_action: Dictionary = {"key": "none", "type": "none", "target": ""}
 	var action_probabilities: Dictionary = {} # action key -> probability from the decision model
 	var action_forecasts: Dictionary = {} # action key -> forecast text shown to the decision model
+	var domestic_action: String = "forage"
+	var domestic_probabilities: Dictionary = {}
+	var domestic_forecasts: Dictionary = {}
 	var defense_posture: String = "open_harvest"
 	var posture_probabilities: Dictionary = {}
 	var posture_forecasts: Dictionary = {}
@@ -420,6 +423,9 @@ class Deme extends RefCounted:
 		d.chosen_action = chosen_action.duplicate()
 		d.action_probabilities = action_probabilities.duplicate()
 		d.action_forecasts = action_forecasts.duplicate()
+		d.domestic_action = domestic_action
+		d.domestic_probabilities = domestic_probabilities.duplicate()
+		d.domestic_forecasts = domestic_forecasts.duplicate()
 		d.defense_posture = defense_posture
 		d.posture_probabilities = posture_probabilities.duplicate()
 		d.posture_forecasts = posture_forecasts.duplicate()
@@ -494,6 +500,9 @@ class Deme extends RefCounted:
 			"chosenAction": chosen_action.duplicate(),
 			"actionProbabilities": action_probabilities.duplicate(),
 			"actionForecasts": action_forecasts.duplicate(),
+			"domesticAction": domestic_action,
+			"domesticProbabilities": domestic_probabilities.duplicate(),
+			"domesticForecasts": domestic_forecasts.duplicate(),
 			"defensePosture": defense_posture,
 			"postureProbabilities": posture_probabilities.duplicate(),
 			"postureForecasts": posture_forecasts.duplicate(),
@@ -543,6 +552,9 @@ class Deme extends RefCounted:
 		d.chosen_action = (dict_data["chosenAction"] as Dictionary).duplicate()
 		d.action_probabilities = (dict_data["actionProbabilities"] as Dictionary).duplicate()
 		d.action_forecasts = (dict_data["actionForecasts"] as Dictionary).duplicate()
+		d.domestic_action = str(dict_data["domesticAction"])
+		d.domestic_probabilities = (dict_data["domesticProbabilities"] as Dictionary).duplicate()
+		d.domestic_forecasts = (dict_data["domesticForecasts"] as Dictionary).duplicate()
 		d.defense_posture = str(dict_data["defensePosture"])
 		d.posture_probabilities = (dict_data["postureProbabilities"] as Dictionary).duplicate()
 		d.posture_forecasts = (dict_data["postureForecasts"] as Dictionary).duplicate()
@@ -919,6 +931,8 @@ static func urban_perimeter_hex_ids(deme: Deme, state: WorldState) -> Array[Stri
 static func _is_side_b_deme(state: WorldState, d: Deme) -> bool:
 	if d.faction_slot == "B":
 		return true
+	if d.faction_slot == "A":
+		return false
 	if state.strategy_a_id != state.strategy_b_id:
 		if d.strategy_id == state.strategy_b_id:
 			return true

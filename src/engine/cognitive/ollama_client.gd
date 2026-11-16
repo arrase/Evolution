@@ -406,7 +406,7 @@ static func _can_enqueue_locked() -> bool:
 	)
 
 
-## Each job: {deme_id, preferred_tag, briefing, posture_instructions, posture_criteria, instructions, criteria}.
+## Each job: {deme_id, preferred_tag, briefing, posture_instructions, posture_criteria, domestic_instructions, domestic_criteria, instructions, criteria}.
 static func enqueue_jobs(jobs: Array[Dictionary]) -> void:
 	_mutex.lock()
 	var can_enqueue := _can_enqueue_locked()
@@ -513,6 +513,11 @@ static func build_payload(job: Dictionary, model_tag: String) -> Dictionary:
 				"instructions": str(job["posture_instructions"]),
 				"criteria": job["posture_criteria"]
 			},
+			"domestic": {
+				"type": "choice",
+				"instructions": str(job["domestic_instructions"]),
+				"criteria": job["domestic_criteria"]
+			},
 			"decision": {
 				"type": "choice",
 				"instructions": str(job["instructions"]),
@@ -549,6 +554,7 @@ static func _evaluate_job_batch_with_ollama(
 		active_jobs.append({
 			"deme_id": str(item["deme_id"]),
 			"keys": (item["criteria"] as Dictionary).keys(),
+			"domestic_keys": (item["domestic_criteria"] as Dictionary).keys(),
 			"posture_keys": (item["posture_criteria"] as Dictionary).keys(),
 			"client": client,
 			"body": JSON.stringify(build_payload(item, model_tag)),
@@ -601,18 +607,22 @@ static func _evaluate_job_batch_with_ollama(
 		if typeof(parsed) != TYPE_DICTIONARY or not parsed.has("answers"):
 			continue
 		var answers: Dictionary = parsed["answers"]
-		if not answers.has("decision") or not answers.has("posture"):
+		if not answers.has("posture") or not answers.has("domestic") or not answers.has("decision"):
 			continue
 		var decision_answer: Dictionary = answers["decision"]
+		var domestic_answer: Dictionary = answers["domestic"]
 		var posture_answer: Dictionary = answers["posture"]
 		var probabilities := normalize_probabilities(decision_answer["probabilities"], job["keys"])
+		var domestic_probabilities := normalize_probabilities(domestic_answer["probabilities"], job["domestic_keys"])
 		var posture_probabilities := normalize_probabilities(posture_answer["probabilities"], job["posture_keys"])
-		if probabilities.is_empty() or posture_probabilities.is_empty():
+		if probabilities.is_empty() or domestic_probabilities.is_empty() or posture_probabilities.is_empty():
 			continue
+		var conf_answer: Dictionary = domestic_answer if (job["keys"] as Array).size() <= 1 else decision_answer
 		results_by_deme[job["deme_id"]] = {
 			"probabilities": probabilities,
+			"domestic_probabilities": domestic_probabilities,
 			"posture_probabilities": posture_probabilities,
-			"confidence": clampf(float(decision_answer["confidence"]), 0.0, 1.0)
+			"confidence": clampf(float(conf_answer["confidence"]), 0.0, 1.0)
 		}
 	return results_by_deme
 

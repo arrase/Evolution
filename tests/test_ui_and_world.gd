@@ -136,13 +136,13 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	# Preset switching
 	main.load_preset("preset-darwin-archipelago")
 	r._assert(main.world_state.preset_id == "preset-darwin-archipelago", "Switched to preset-darwin-archipelago")
-	r._assert(main.world_state.cells.size() == 169, "Darwin preset has 169 cells in main")
+	r._assert(main.world_state.cells.size() == 91, "Darwin preset has 91 cells in main")
 	EvoOllamaClient.clear_cache()
 	main.step_generation()
 
 	main.load_preset("preset-finite-island")
 	r._assert(main.world_state.preset_id == "preset-finite-island", "Switched to preset-finite-island")
-	r._assert(main.world_state.cells.size() == 169, "Finite Island preset has 169 cells in main")
+	r._assert(main.world_state.cells.size() == 91, "Finite Island preset has 91 cells in main")
 	EvoOllamaClient.clear_cache()
 	main.step_generation()
 
@@ -225,7 +225,8 @@ static func _test_main_scene_and_ui_integration(r) -> void:
 	EvoEnvPhase.run_environmental_phase(life_state, "es")
 	r._assert(life_state.disused_connections.size() == 1 and int(life_state.disused_connections[0].get("age", -1)) == 0, "Active friendly flow recorded into disused_connections with age 0")
 	ld1.chosen_action = EvoActionMenu.option("raid", ld2.id)
-	ld2.chosen_action = EvoActionMenu.option("forage")
+	ld2.domestic_action = "forage"
+	ld2.chosen_action = EvoActionMenu.option("none")
 	EvoBiophysPhase.run_biophysical_phase(life_state, "es")
 	r._assert(life_state.disused_connections.size() == 1 and int(life_state.disused_connections[0].get("age", 0)) == 1, "Severed friendly flow ages to 1 in biophys_phase")
 	main.hud.set_world_state(life_state)
@@ -498,15 +499,29 @@ static func _test_bugfix_regressions(r) -> void:
 
 	# 9. Seeded Ollama result application on next generation
 	var state_pf := EvoPresets.create_preset_world("preset-rift-savanna", "es")
+	EvoOllamaClient.clear_cache()
 	var pf_west: EvoTypes.Deme = state_pf.demes["deme-rift-west"]
+	pf_west.population = 150
+	var pf_ext_key := "none"
+	for opt in EvoActionMenu.build(pf_west, state_pf):
+		if str(opt["key"]) != "none":
+			pf_ext_key = str(opt["key"])
+			break
+	r._assert(pf_ext_key != "none", "Seeded test deme has a non-'none' external action (%s)" % pf_ext_key)
 	EvoOllamaClient.seed_deme_result(pf_west.id, {
-		"probabilities": {"intensify": 0.99, "forage": 0.01},
+		"probabilities": {pf_ext_key: 0.99, "none": 0.01},
+		"domestic_probabilities": {"intensify": 0.99, "forage": 0.01},
 		"posture_probabilities": {"open_harvest": 0.10, "patrol_fields": 0.80, "mobilized_garrison": 0.10},
-		"dominant_decision_id": "intensify",
 		"confidence": 0.93
 	})
 	EvoDecisionModel.evaluate_all_demes(state_pf, "es", false)
-	r._assert(is_equal_approx(pf_west.last_confidence, 0.93) and pf_west.defense_posture == "patrol_fields" and str(pf_west.chosen_action.get("type", "")) == "intensify", "evaluate_all_demes applies seeded Ollama action & posture cleanly")
+	r._assert(
+		is_equal_approx(pf_west.last_confidence, 0.93)
+		and pf_west.defense_posture == "patrol_fields"
+		and pf_west.domestic_action == "intensify"
+		and str(pf_west.chosen_action.get("key", "")) == pf_ext_key,
+		"evaluate_all_demes applies seeded Ollama external action, domestic_action & posture cleanly"
+	)
 	EvoOllamaClient.clear_cache()
 
 
@@ -516,10 +531,12 @@ static func _test_turn_events_and_world_stats(r) -> void:
 	var total_events_seen := 0
 	var all_events_valid := true
 	for g_i in range(8):
+		EvoOllamaClient.clear_cache()
 		if g_i == 0 and state.demes.has("deme-rift-west"):
 			var dw: EvoTypes.Deme = state.demes["deme-rift-west"]
 			dw.energy_reserves = 200.0
-			dw.chosen_action = EvoActionMenu.option("fortify")
+			dw.domestic_action = "fortify"
+			dw.chosen_action = EvoActionMenu.option("none")
 		EvoTurnEngine.advance_generation(state, "en")
 		total_events_seen += state.turn_events.size()
 		for ev in state.turn_events:
@@ -590,7 +607,8 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 			dw.population = 90
 			dw.defense_tier = 1
 			dw.energy_reserves = 200.0
-			dw.chosen_action = EvoActionMenu.option("fortify")
+			dw.domestic_action = "fortify"
+			dw.chosen_action = EvoActionMenu.option("none")
 		main.step_generation()
 		main.world_renderer._process(0.016)
 		if not main.world_state.turn_events.is_empty() and not main.world_renderer._fx_active.is_empty():
@@ -670,8 +688,10 @@ static func _test_ux_clarity_stats_lens_and_fx(r) -> void:
 	db.energy_reserves = 120.0
 	bugs_state.demes[db.id] = db
 	(bugs_state.cells[db.hex_id] as EvoTypes.HexCell).deme_ids.assign([db.id])
+	d_a.domestic_action = "forage"
 	d_a.chosen_action = EvoActionMenu.option("settle", "-1,1")
-	db.chosen_action = EvoActionMenu.option("forage")
+	db.domestic_action = "forage"
+	db.chosen_action = EvoActionMenu.option("none")
 	EvoBiophysPhase.run_biophysical_phase(bugs_state, "es")
 	var budded_safe := false
 	for did in bugs_state.demes.keys():
@@ -718,7 +738,8 @@ static func _test_phases_1_2_3_improvements(r) -> void:
 	(repel_state.cells["1,0"] as EvoTypes.HexCell).altitude = 0.45
 	(repel_state.cells["1,0"] as EvoTypes.HexCell).deme_ids.assign([defender.id])
 	attacker.chosen_action = EvoActionMenu.option("raid", defender.id)
-	defender.chosen_action = EvoActionMenu.option("forage")
+	defender.domestic_action = "forage"
+	defender.chosen_action = EvoActionMenu.option("none")
 	EvoBiophysPhase.run_biophysical_phase(repel_state, "es")
 	var has_repel_flow := repel_state.active_flows.any(func(fl: EvoTypes.HexEdgeFlow) -> bool: return fl.flow_type == "raid_repelled")
 	var has_raid_flow := repel_state.active_flows.any(func(fl: EvoTypes.HexEdgeFlow) -> bool: return fl.flow_type == "raid")

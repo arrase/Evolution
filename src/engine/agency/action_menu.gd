@@ -3,9 +3,9 @@ extends RefCounted
 
 ## Feasible, targeted actions for a settlement this turn.
 
-const MAX_NEIGHBORS := 4
+const MAX_NEIGHBORS := 5
 const MAX_SETTLE_OPTIONS := 3
-const MAX_OPTIONS := 14
+const MAX_OPTIONS := 18
 const MAX_EMERGENT_CULTURAL := 3
 
 
@@ -50,100 +50,137 @@ static func neighbor_demes(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> A
 	return result
 
 
-static func border_field_rivals(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Array[EvoTypes.Deme]:
-	var mobility := EvoPayoffs.vector(deme, state).spatial_mobility
-	var perim := EvoTypes.urban_perimeter_hex_ids(deme, state)
-	var seen: Dictionary = {deme.id: true}
-	for nid in perim:
-		var pcell: EvoTypes.HexCell = state.cells[nid]
-		if is_passable_for(pcell, mobility):
-			for oid in pcell.deme_ids:
-				seen[oid] = true
-	var result: Array[EvoTypes.Deme] = []
-	for nid in perim:
+static func _reachable_deme_hops(a: EvoTypes.Deme, state: EvoTypes.WorldState, max_hops: int = 2) -> Dictionary:
+	var mobility := EvoPayoffs.vector(a, state).spatial_mobility
+	var visited: Dictionary = {}
+	var dist_by_hex: Dictionary = {}
+	var deme_hops: Dictionary = {}
+	var queue: Array[String] = []
+	for hid in a.urban_hex_ids:
+		visited[hid] = true
+		dist_by_hex[hid] = 0
+		queue.append(hid)
+	var head := 0
+	while head < queue.size():
+		var cur_id := queue[head]
+		head += 1
+		var cur_d := int(dist_by_hex[cur_id])
+		if cur_d >= max_hops:
+			continue
+		var cur_cell: EvoTypes.HexCell = state.cells[cur_id]
+		for nid in HexMath.get_neighbor_ids(cur_cell.q, cur_cell.r, state.cells):
+			if visited.has(nid):
+				continue
+			visited[nid] = true
+			var ncell: EvoTypes.HexCell = state.cells[nid]
+			if not is_passable_for(ncell, mobility):
+				continue
+			for oid in ncell.deme_ids:
+				if oid != a.id and not deme_hops.has(oid):
+					deme_hops[oid] = cur_d + 1
+			if cur_d + 1 < max_hops and (ncell.deme_ids.is_empty() or _is_friendly_deme(a, ncell.deme_ids[0], state)):
+				dist_by_hex[nid] = cur_d + 1
+				queue.append(nid)
+	return deme_hops
+
+
+static func passable_hop_distance(a: EvoTypes.Deme, b: EvoTypes.Deme, state: EvoTypes.WorldState, max_hops: int = 2) -> int:
+	if a.id == b.id:
+		return 0
+	var hops := _reachable_deme_hops(a, state, max_hops)
+	return int(hops[b.id]) if hops.has(b.id) else 999
+
+
+static func has_territorial_contact(a: EvoTypes.Deme, b: EvoTypes.Deme, state: EvoTypes.WorldState) -> bool:
+	if a.id == b.id:
+		return false
+	var a_fields: Array[EvoTypes.HexCell] = []
+	for nid in EvoTypes.urban_perimeter_hex_ids(a, state):
 		var ncell: EvoTypes.HexCell = state.cells[nid]
-		var oid := ncell.owner_deme_id
-		if oid == "" or seen.has(oid) or not state.demes.has(oid):
-			continue
-		var other: EvoTypes.Deme = state.demes[oid]
-		var pk := EvoTypes.make_pair_key(deme.id, other.id)
-		var rel: EvoTypes.Relation = state.relations[pk] if state.relations.has(pk) else null
-		if rel != null and (rel.pact_turns > 0 or rel.truce_turns > 0):
-			continue
-		if other.lineage_id != deme.lineage_id or (rel != null and rel.feud_turns > 0):
-			seen[oid] = true
-			result.append(other)
-	return result
+		if ncell.owner_deme_id == b.id:
+			return true
+		if ncell.owner_deme_id == a.id:
+			a_fields.append(ncell)
+	for nid in EvoTypes.urban_perimeter_hex_ids(b, state):
+		if (state.cells[nid] as EvoTypes.HexCell).owner_deme_id == a.id:
+			return true
+	for fc in a_fields:
+		for fnid in HexMath.get_neighbor_ids(fc.q, fc.r, state.cells):
+			if (state.cells[fnid] as EvoTypes.HexCell).owner_deme_id == b.id:
+				return true
+	return false
 
 
-static func field_raiders(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Array[EvoTypes.Deme]:
-	var mobility := EvoPayoffs.vector(deme, state).spatial_mobility
-	var perim := EvoTypes.urban_perimeter_hex_ids(deme, state)
-	var seen: Dictionary = {deme.id: true}
-	for pid in perim:
-		var pcell: EvoTypes.HexCell = state.cells[pid]
-		if is_passable_for(pcell, mobility):
-			for oid in pcell.deme_ids:
-				seen[oid] = true
+static func has_social_contact(a: EvoTypes.Deme, b: EvoTypes.Deme, state: EvoTypes.WorldState) -> bool:
+	return a.id != b.id and (passable_hop_distance(a, b, state, 1) <= 1 or has_territorial_contact(a, b, state))
+
+
+static func can_reach_for_conquest(a: EvoTypes.Deme, b: EvoTypes.Deme, state: EvoTypes.WorldState) -> bool:
+	return has_social_contact(a, b, state) and passable_hop_distance(a, b, state, 2) <= 2
+
+
+static func contact_demes(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Array[EvoTypes.Deme]:
+	var contact_ids: Dictionary = _reachable_deme_hops(deme, state, 1)
+	for nid in EvoTypes.urban_perimeter_hex_ids(deme, state):
+		var ncell: EvoTypes.HexCell = state.cells[nid]
+		if ncell.owner_deme_id != "" and ncell.owner_deme_id != deme.id:
+			contact_ids[ncell.owner_deme_id] = true
+		if ncell.owner_deme_id == deme.id:
+			for fnid in HexMath.get_neighbor_ids(ncell.q, ncell.r, state.cells):
+				var fcell: EvoTypes.HexCell = state.cells[fnid]
+				if fcell.owner_deme_id != "" and fcell.owner_deme_id != deme.id:
+					contact_ids[fcell.owner_deme_id] = true
+				for oid in fcell.deme_ids:
+					if oid != deme.id:
+						contact_ids[oid] = true
 	var result: Array[EvoTypes.Deme] = []
-	for pid in perim:
-		var field: EvoTypes.HexCell = state.cells[pid]
-		if field.owner_deme_id != deme.id or field.land_use not in ["crops", "pasture"]:
-			continue
-		for nid in HexMath.get_neighbor_ids(field.q, field.r, state.cells):
-			for oid in (state.cells[nid] as EvoTypes.HexCell).deme_ids:
-				if seen.has(oid) or not state.demes.has(oid):
-					continue
-				var other: EvoTypes.Deme = state.demes[oid]
-				var pk := EvoTypes.make_pair_key(deme.id, other.id)
-				var rel: EvoTypes.Relation = state.relations[pk] if state.relations.has(pk) else null
-				if rel != null and (rel.pact_turns > 0 or rel.truce_turns > 0):
-					continue
-				if other.lineage_id != deme.lineage_id or (rel != null and rel.feud_turns > 0):
-					seen[oid] = true
-					result.append(other)
+	for oid: String in contact_ids.keys():
+		if state.demes.has(oid):
+			var other: EvoTypes.Deme = state.demes[oid]
+			if other.population > 0:
+				result.append(other)
 	return result
+
+
+static func sorted_contact_demes(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Array[EvoTypes.Deme]:
+	var contacts := contact_demes(deme, state)
+	contacts.sort_custom(func(a: EvoTypes.Deme, b: EvoTypes.Deme) -> bool:
+		var sa := _salience(deme, a, state)
+		var sb := _salience(deme, b, state)
+		if not is_equal_approx(sa, sb):
+			return sa > sb
+		return a.id < b.id
+	)
+	return contacts
 
 
 static func threat_counts_from(
 	deme: EvoTypes.Deme,
-	neighbors: Array[EvoTypes.Deme],
-	raiders: Array[EvoTypes.Deme],
+	contacts: Array[EvoTypes.Deme],
 	state: EvoTypes.WorldState
 ) -> Vector2i:
 	var seen: Dictionary = {deme.id: true}
 	var total := 0
 	var feuds := 0
-	for other in neighbors:
-		if not seen.has(other.id):
-			seen[other.id] = true
-			var d1 := _threat_delta(deme, other, state)
-			total += d1.x
-			feuds += d1.y
-	for other in raiders:
-		if not seen.has(other.id):
-			seen[other.id] = true
-			var d2 := _threat_delta(deme, other, state)
-			total += d2.x
-			feuds += d2.y
+	for other in contacts:
+		if seen.has(other.id):
+			continue
+		seen[other.id] = true
+		if other.population < 35:
+			continue
+		var pk := EvoTypes.make_pair_key(deme.id, other.id)
+		var rel: EvoTypes.Relation = state.relations[pk] if state.relations.has(pk) else EvoTypes.Relation.new()
+		if rel.pact_turns > 0 or rel.truce_turns > 0:
+			continue
+		if other.lineage_id != deme.lineage_id or rel.trust < 0.15 or rel.feud_turns > 0:
+			total += 1
+			if rel.feud_turns > 0:
+				feuds += 1
 	return Vector2i(total, feuds)
 
 
 static func raid_threat_counts(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Vector2i:
-	return threat_counts_from(deme, neighbor_demes(deme, state), field_raiders(deme, state), state)
-
-
-static func _threat_delta(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: EvoTypes.WorldState) -> Vector2i:
-	if other.population < 35:
-		return Vector2i.ZERO
-	var pk := EvoTypes.make_pair_key(deme.id, other.id)
-	var rel: EvoTypes.Relation = state.relations[pk] if state.relations.has(pk) else null
-	if rel != null and (rel.pact_turns > 0 or rel.truce_turns > 0):
-		return Vector2i.ZERO
-	var has_feud := rel != null and rel.feud_turns > 0
-	if other.lineage_id != deme.lineage_id or has_feud:
-		return Vector2i(1, 1 if has_feud else 0)
-	return Vector2i.ZERO
+	return threat_counts_from(deme, contact_demes(deme, state), state)
 
 
 static func _min_dist_to_urban(cell: EvoTypes.HexCell, deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> int:
@@ -183,6 +220,17 @@ static func _frontier_bridge_bonus_for(cell: EvoTypes.HexCell, deme: EvoTypes.De
 
 static func frontier_bridge_bonus(cell: EvoTypes.HexCell, deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> float:
 	return _frontier_bridge_bonus_for(cell, deme, state, EvoPayoffs.vector(deme, state).spatial_mobility)
+
+
+static func _adjacent_to_allied_city(cell: EvoTypes.HexCell, deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> bool:
+	for nn_id in HexMath.get_neighbor_ids(cell.q, cell.r, state.cells):
+		var nn: EvoTypes.HexCell = state.cells[nn_id]
+		for oid in nn.deme_ids:
+			if oid != deme.id and state.demes.has(oid):
+				var other: EvoTypes.Deme = state.demes[oid]
+				if other.get_village_tier() >= 2 and EvoTypes.is_pact_active(state, deme.id, oid):
+					return true
+	return false
 
 
 static func settle_corridor_hops(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Dictionary:
@@ -230,9 +278,14 @@ static func settle_targets_with_hops(deme: EvoTypes.Deme, state: EvoTypes.WorldS
 		if int(hops[hid]) == 0:
 			continue
 		var c: EvoTypes.HexCell = state.cells[hid]
-		if c.deme_ids.is_empty() and c.owner_deme_id == "" and c.ruin_turns == 0:
+		var is_wild := c.owner_deme_id == ""
+		var is_own_field := c.owner_deme_id == deme.id and deme.population >= 155
+		if c.deme_ids.is_empty() and c.ruin_turns == 0 and (is_wild or is_own_field):
 			result.append(c)
-			scores[hid] = c.current_resources + _frontier_bridge_bonus_for(c, deme, state, mobility)
+			var bonus := _frontier_bridge_bonus_for(c, deme, state, mobility)
+			if is_own_field and _adjacent_to_allied_city(c, deme, state):
+				bonus += 80.0
+			scores[hid] = c.current_resources + bonus
 
 	result.sort_custom(func(a: EvoTypes.HexCell, b: EvoTypes.HexCell) -> bool:
 		var sa := float(scores[a.id])
@@ -261,6 +314,15 @@ static func settle_targets(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> A
 	return settle_targets_with_hops(deme, state, settle_corridor_hops(deme, state))
 
 
+static func build_domestic(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Array[String]:
+	var options: Array[String] = ["forage", "intensify"]
+	if EvoPayoffs.can_fortify(deme, state.cells[deme.hex_id]):
+		options.append("fortify")
+	if EvoPayoffs.can_innovate(deme, state):
+		options.append("innovate")
+	return options
+
+
 static func _salience(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: EvoTypes.WorldState) -> float:
 	var key := EvoTypes.make_pair_key(deme.id, other.id)
 	var score := float(other.population)
@@ -278,55 +340,59 @@ static func _salience(deme: EvoTypes.Deme, other: EvoTypes.Deme, state: EvoTypes
 static func build(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Array[Dictionary]:
 	var hops := settle_corridor_hops(deme, state)
 	var targets := settle_targets_with_hops(deme, state, hops)
-	return build_with_targets(deme, state, targets, neighbor_demes(deme, state), border_field_rivals(deme, state), {})
+	return build_with_targets(deme, state, targets, sorted_contact_demes(deme, state), {})
 
 
 static func build_with_targets(
 	deme: EvoTypes.Deme,
 	state: EvoTypes.WorldState,
 	s_targets: Array[EvoTypes.HexCell],
-	p_neighbors: Array[EvoTypes.Deme],
-	p_rivals: Array[EvoTypes.Deme],
+	p_contacts: Array[EvoTypes.Deme],
 	raid_cache: Dictionary
 ) -> Array[Dictionary]:
-	var cell: EvoTypes.HexCell = state.cells[deme.hex_id]
 	var responses: Array[Dictionary] = []
-	var options: Array[Dictionary] = [option("forage"), option("intensify")]
-	var kin_secondary: Array[Dictionary] = []
-	if EvoPayoffs.can_fortify(deme, cell):
-		options.append(option("fortify"))
-	if EvoCatalog.deme_has_cultural_capacity(deme, state.traits_catalog) and EvoMilestonePhase.count_emergent_cultural_traits(deme, state) < MAX_EMERGENT_CULTURAL:
-		options.append(option("innovate"))
+	var options: Array[Dictionary] = [option("none")]
 	if deme.population >= EvoPayoffs.settle_min_pop(deme) and deme.energy_reserves >= EvoPayoffs.settle_min_reserves(deme):
 		for target: EvoTypes.HexCell in s_targets.slice(0, MAX_SETTLE_OPTIONS):
 			options.append(option("settle", target.id))
 
-	var neighbors := p_neighbors.duplicate()
-	neighbors.sort_custom(func(a: EvoTypes.Deme, b: EvoTypes.Deme) -> bool:
-		return _salience(deme, a, state) > _salience(deme, b, state)
+	var contacts := p_contacts.duplicate()
+	contacts.sort_custom(func(a: EvoTypes.Deme, b: EvoTypes.Deme) -> bool:
+		var sa := _salience(deme, a, state)
+		var sb := _salience(deme, b, state)
+		if not is_equal_approx(sa, sb):
+			return sa > sb
+		return a.id < b.id
 	)
-	var handled_tribute_from: Dictionary = {}
-	var vec := EvoPayoffs.vector(deme, state)
-	var food_req := EvoPayoffs.food_need(deme, cell, state)
 
-	for other: EvoTypes.Deme in neighbors.slice(0, MAX_NEIGHBORS):
+	for other: EvoTypes.Deme in state.demes.values():
+		if other.id == deme.id or other.population <= 0:
+			continue
+		var has_pact := EvoRelations.has_open_proposal(state, other.id, deme.id, "pact")
+		var has_union := EvoRelations.has_open_proposal(state, other.id, deme.id, "union")
+		var has_tribute := EvoRelations.has_open_proposal(state, other.id, deme.id, "tribute")
+		if not (has_pact or has_union or has_tribute):
+			continue
+		if not (has_social_contact(deme, other, state) or has_social_contact(other, deme, state)):
+			continue
+		if has_pact:
+			responses.append(option("accept_pact", other.id))
+		if has_union and EvoPayoffs.min_urban_distance(deme, other, state) == 1:
+			responses.append(option("accept_union", other.id))
+		if has_tribute:
+			responses.append(option("pay_tribute", other.id))
+
+	var per_neighbor_opts: Array = []
+	for other: EvoTypes.Deme in contacts.slice(0, MAX_NEIGHBORS):
 		var key := EvoTypes.make_pair_key(deme.id, other.id)
 		var rel: EvoTypes.Relation = state.relations[key] if state.relations.has(key) else EvoTypes.Relation.new()
-		var kin: bool = other.lineage_id == deme.lineage_id
-		var bucket: Array[Dictionary] = kin_secondary if (kin and rel.feud_turns == 0) else options
-		if EvoRelations.has_open_proposal(state, other.id, deme.id, "pact"):
-			responses.append(option("accept_pact", other.id))
-		if EvoRelations.has_open_proposal(state, other.id, deme.id, "union"):
-			responses.append(option("accept_union", other.id))
-		if EvoRelations.has_open_proposal(state, other.id, deme.id, "tribute"):
-			responses.append(option("pay_tribute", other.id))
-			handled_tribute_from[other.id] = true
+		var n_opts: Array[Dictionary] = []
+		var urban_dist := EvoPayoffs.min_urban_distance(deme, other, state)
 
-		var is_warrior := deme.cultural_trait_ids.has("cul-warrior-expansion")
-		if rel.feud_turns == 0 and (kin or not is_warrior or rel.pact_turns > 0):
-			bucket.append(option("trade", other.id))
-		if rel.feud_turns == 0 and (not is_warrior or kin or rel.pact_turns > 0) and deme.energy_reserves >= 40.0 and other.energy_reserves < float(other.population) * 0.9:
-			bucket.append(option("aid", other.id))
+		if rel.feud_turns == 0:
+			n_opts.append(option("trade", other.id))
+			if deme.energy_reserves >= 35.0 and other.energy_reserves < EvoPayoffs.storage_cap(other) * 0.85:
+				n_opts.append(option("aid", other.id))
 
 		var ta := deme.get_village_tier()
 		var tb := other.get_village_tier()
@@ -335,59 +401,42 @@ static func build_with_targets(
 			(both_cities and deme.urban_hex_ids.size() + other.urban_hex_ids.size() <= EvoTypes.MAX_URBAN_HEXES)
 			or (not both_cities and maxi(ta, tb) >= 2)
 		)
-		if rel.pact_turns >= 3 and rel.proposal_from == "" and can_unite:
-			options.append(option("unite", other.id))
+		if urban_dist == 1 and rel.pact_turns >= 3 and rel.proposal_from == "" and can_unite:
+			n_opts.append(option("unite", other.id))
 
 		if rel.pact_turns > 0:
 			if deme.population >= 35:
-				var cohesive_peaceful := vec.social_cohesion >= 0.55 and not deme.cultural_trait_ids.has("cul-warrior-expansion")
-				var desperate_or_distrustful := deme.energy_reserves < food_req * 1.1 or rel.trust < 0.0
-				var martial_opportunity := deme.cultural_trait_ids.has("cul-warrior-expansion") and rel.pact_turns >= 2 and other.energy_reserves >= 65.0
-				var allow_betray := (not cohesive_peaceful or desperate_or_distrustful) and (not kin or desperate_or_distrustful or martial_opportunity)
-				if allow_betray:
-					options.append(option("betray", other.id))
-			continue
+				n_opts.append(option("betray", other.id))
+		else:
+			if rel.proposal_from == "":
+				n_opts.append(option("offer_pact", other.id))
+			if rel.truce_turns == 0:
+				if deme.population >= 35 and (other.defense_tier < 3 or EvoPayoffs.closest_defender_field(deme, other, state) != null):
+					n_opts.append(option("raid", other.id))
+				var post_conquest_home := deme.population - int(roundf(float(deme.population) * EvoPayoffs.CONQUEST_TROOP_SHARE))
+				if can_reach_for_conquest(deme, other, state) and deme.population >= 65 and post_conquest_home >= 25:
+					n_opts.append(option("conquer", other.id))
+				if rel.proposal_from == "" and other.energy_reserves >= 18.0:
+					var odds_n := EvoPayoffs.raid_odds(deme, other, state, false)
+					raid_cache[other.id] = odds_n
+					if float(odds_n["p_win"]) >= 0.28:
+						n_opts.append(option("demand_tribute", other.id))
 
-		if rel.feud_turns == 0 and rel.pact_turns == 0 and rel.proposal_from == "" and (kin or (rel.trust >= 0.0 and (not is_warrior or rel.trust >= 0.15))):
-			bucket.append(option("offer_pact", other.id))
+		if not n_opts.is_empty():
+			per_neighbor_opts.append(n_opts)
 
-		if rel.truce_turns > 0 or (kin and rel.feud_turns == 0):
-			continue
-		if deme.population >= 35 and (other.defense_tier < 3 or EvoPayoffs.closest_defender_field(deme, other, state) != null):
-			options.append(option("raid", other.id))
-		var post_conquest_home := deme.population - int(roundf(float(deme.population) * EvoPayoffs.CONQUEST_TROOP_SHARE))
-		if deme.population >= 65 and post_conquest_home >= 25:
-			options.append(option("conquer", other.id))
-		if rel.proposal_from == "" and other.energy_reserves >= 20.0:
-			var odds_n := EvoPayoffs.raid_odds(deme, other, state, false)
-			raid_cache[other.id] = odds_n
-			if float(odds_n["p_win"]) >= 0.35:
-				options.append(option("demand_tribute", other.id))
+	var max_per_neighbor := 0
+	for n_list in per_neighbor_opts:
+		max_per_neighbor = maxi(max_per_neighbor, (n_list as Array[Dictionary]).size())
+	for pass_idx in range(max_per_neighbor):
+		for n_list in per_neighbor_opts:
+			var n_opts: Array[Dictionary] = n_list
+			if pass_idx < n_opts.size():
+				options.append(n_opts[pass_idx])
 
-	for partner_id: String in state.demes.keys():
-		if partner_id == deme.id or handled_tribute_from.has(partner_id):
-			continue
-		if EvoRelations.has_open_proposal(state, partner_id, deme.id, "tribute"):
-			var partner: EvoTypes.Deme = state.demes[partner_id]
-			if EvoDiplomacyPhase.has_border_crop_contact(deme, partner, state):
-				responses.append(option("pay_tribute", partner.id))
-				handled_tribute_from[partner.id] = true
-
-	var rivals := p_rivals.duplicate()
-	rivals.sort_custom(func(a: EvoTypes.Deme, b: EvoTypes.Deme) -> bool:
-		return _salience(deme, a, state) > _salience(deme, b, state)
-	)
-	for other: EvoTypes.Deme in rivals.slice(0, 2):
-		var key := EvoTypes.make_pair_key(deme.id, other.id)
-		var rel: EvoTypes.Relation = state.relations[key] if state.relations.has(key) else EvoTypes.Relation.new()
-		if rel.pact_turns > 0 or rel.truce_turns > 0 or (other.lineage_id == deme.lineage_id and rel.feud_turns == 0):
-			continue
-		if deme.population >= 35:
-			options.append(option("raid", other.id))
-		if rel.proposal_from == "" and other.energy_reserves >= 20.0:
-			var odds_r := EvoPayoffs.raid_odds(deme, other, state, false)
-			raid_cache[other.id] = odds_r
-			if float(odds_r["p_win"]) >= 0.35:
-				options.append(option("demand_tribute", other.id))
-
-	return (responses + options + kin_secondary).slice(0, MAX_OPTIONS)
+	var combined: Array[Dictionary] = []
+	combined.append_array(responses)
+	combined.append_array(options)
+	if combined.size() > MAX_OPTIONS:
+		combined.resize(MAX_OPTIONS)
+	return combined

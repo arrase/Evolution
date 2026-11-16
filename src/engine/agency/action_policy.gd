@@ -4,30 +4,30 @@ extends RefCounted
 const TEMPERATURE := 0.45
 
 const TRAIT_DIRECTIVES: Dictionary = {
-	"bio-r-strategy": "Proliferate and disperse early: colonize open frontier hexes and land bridges as soon as population and food allow.",
-	"bio-k-strategy": "Build enduring Tier III-IV fortified cities with strong food buffers and sanitation first, then found well-supplied daughter colonies once population exceeds 160 so your cities never overcrowd into famine and allied Tier II+ cities can unite.",
-	"bio-encephalization": "Leverage high cognition: prioritize innovating early to unlock permanent cultural traditions, diffuse knowledge through trade, and sustain steady surpluses for neural upkeep and expansion.",
-	"bio-social-instinct": "Maintain tight solidarity with kin and sworn allies in shared defense and collective action.",
-	"bio-thermal-tolerance": "Exploit harsh climates and mountain or coastal corridors where rivals falter.",
-	"bio-digestive-spec": "Sustain steady caloric surpluses across diverse biomes through reliable foraging and cultivation.",
-	"cul-communal-conservation": "Protect carrying capacity above 80% (avoid overexploitation unless starving), favor alliances, mutual aid, and multi-hex walled city unions over destructive raids.",
-	"cul-interdeme-barter": "Prioritize profitable trade networks, pacts, commercial reputation, and multi-hex walled city unions with trusted partners so partners reciprocate.",
-	"cul-warrior-expansion": "Prioritize martial dominance over foreign rivals: whenever `demand_tribute`, `raid`, or `conquer` against a foreign settlement has >= 40% win chance, choose martial action over passive foraging, scholarly innovation, or foreign pacts.",
-	"cul-extraction-tools": "Use specialized toolkits for high harvest yields while offsetting habitat wear through expansion, trade, or rotation.",
-	"cul-fire-processing": "Channel caloric surpluses from thermal food processing into steady demographic and civic investments."
+	"bio-r-strategy": "Your people are prolific pioneers who reproduce quickly and disperse into open frontier lands.",
+	"bio-k-strategy": "Your people invest in longevity, civic endurance, fortified settlements, sanitation, and well-provisioned daughter communities.",
+	"bio-encephalization": "Your people possess high cognitive curiosity, valuing steady experimentation, cultural tradition, and intellectual exchange.",
+	"bio-social-instinct": "Your people feel deep solidarity with kin and trusted companions, finding strength in mutual aid and shared defense.",
+	"bio-thermal-tolerance": "Your people are hardy and adaptable across extreme climates, mountain passes, and coastal crossings.",
+	"bio-digestive-spec": "Your people draw reliable sustenance from varied wild flora and cultivated crops across diverse biomes.",
+	"cul-communal-conservation": "Your culture holds the land in communal trust, revering ecological balance, generous stewardship, and enduring civic unions.",
+	"cul-interdeme-barter": "Your culture prizes commerce, honest dealing, commercial reputation, and peaceful trade networks across neighbors.",
+	"cul-warrior-expansion": "Your culture honors martial prowess, bold raiding, tribute, and territorial conquest.",
+	"cul-extraction-tools": "Your culture crafts specialized tools for intensive harvesting and ambitious extraction.",
+	"cul-fire-processing": "Your culture masters fire and thermal food preparation, stretching harvests into greater vitality."
 }
 
 
 static func _emergent_directive(tdef: EvoTypes.TraitDef) -> String:
 	var v := tdef.vector
 	if v.ecological_impact >= 0.20:
-		return "Uphold %s by stewarding habitat capacity and cooperative stability." % tdef.name
+		return "Your tradition of %s upholds habitat stewardship and cooperative stability." % tdef.name
 	if v.spatial_mobility >= 0.25:
-		return "Apply %s to extend reach across corridors, trade routes, or border campaigns." % tdef.name
+		return "Your tradition of %s drives far-ranging movement across corridors, trade routes, and borderlands." % tdef.name
 	if v.social_cohesion >= 0.22:
-		return "Apply %s to strengthen collective defense, alliances, and civic unity." % tdef.name
+		return "Your tradition of %s strengthens collective defense, bonds, and civic unity." % tdef.name
 	if v.extraction_efficiency >= 0.22:
-		return "Apply %s to maximize sustainable food surpluses." % tdef.name
+		return "Your tradition of %s favors skilled harvesting and abundant sustenance." % tdef.name
 	return ""
 
 
@@ -54,24 +54,24 @@ static func build_instructions(deme: EvoTypes.Deme, state: EvoTypes.WorldState) 
 			var em := _emergent_directive(state.traits_catalog[tid])
 			if em != "":
 				parts.append(em)
-	parts.append("Choose the single action this turn that best fulfills your population's ethos and long-term survival over the next 10 turns, accounting for food thresholds, habitat health, memory, and neighbor reactions.")
+	parts.append("Weigh your external relations, settlement expansion, and strategic outlook over the next 10 turns, and choose the external action that best reflects your people's ethos and situation.")
 	return " ".join(parts)
 
 
 static func build_posture_instructions(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> String:
-	var parts: Array[String] = [EvoSituationReport.doctrine_of(deme, state)]
-	parts.append("Choose `open_harvest` for full 100% food yield whenever 0 raiders are in range; switch to `patrol_fields` when unallied rivals threaten your settlement or cultivated fields, or `mobilized_garrison` during active feuds and heavy raid danger.")
-	return " ".join(parts)
+	return "%s Choose the rural defense posture that balances harvest yield against the military security of your fields and borders." % EvoSituationReport.doctrine_of(deme, state)
+
+
+static func build_domestic_instructions(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> String:
+	return "%s Choose the domestic priority for your home settlement this turn—balancing steady sustenance, intensive extraction, fortification, or cultural experimentation according to your ethos and reserves." % EvoSituationReport.doctrine_of(deme, state)
 
 
 static func prepare_deme_menu(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -> Dictionary:
 	var hops_map := EvoActionMenu.settle_corridor_hops(deme, state)
 	var s_targets := EvoActionMenu.settle_targets_with_hops(deme, state, hops_map)
-	var neighbors := EvoActionMenu.neighbor_demes(deme, state)
-	var rivals := EvoActionMenu.border_field_rivals(deme, state)
-	var raiders := EvoActionMenu.field_raiders(deme, state)
+	var contacts := EvoActionMenu.sorted_contact_demes(deme, state)
 	var raid_cache: Dictionary = {}
-	var menu := EvoActionMenu.build_with_targets(deme, state, s_targets, neighbors, rivals, raid_cache)
+	var menu := EvoActionMenu.build_with_targets(deme, state, s_targets, contacts, raid_cache)
 	var forecasts := EvoOutcomeForecast.describe_menu(deme, menu, state, hops_map, raid_cache)
 	var probs: Dictionary = {}
 	var uniform_p := snappedf(1.0 / float(maxi(1, menu.size())), 0.0001)
@@ -81,9 +81,19 @@ static func prepare_deme_menu(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -
 	deme.action_probabilities = probs
 	deme.chosen_action = menu[0]
 
+	var dom_menu := EvoActionMenu.build_domestic(deme, state)
+	var dom_criteria := EvoOutcomeForecast.describe_domestic_menu(deme, dom_menu, state)
+	var dom_probs: Dictionary = {}
+	var uniform_dom := snappedf(1.0 / float(maxi(1, dom_menu.size())), 0.0001)
+	for dk in dom_menu:
+		dom_probs[dk] = uniform_dom
+	deme.domestic_forecasts = dom_criteria
+	deme.domestic_probabilities = dom_probs
+	deme.domestic_action = dom_menu[0]
+
 	if not EvoTypes.DEFENSE_POSTURES.has(deme.defense_posture):
 		deme.defense_posture = "open_harvest"
-	var threats := EvoActionMenu.threat_counts_from(deme, neighbors, raiders, state)
+	var threats := EvoActionMenu.threat_counts_from(deme, contacts, state)
 	var posture_criteria := EvoOutcomeForecast.describe_postures_with_threats(deme, state, threats)
 	var posture_probs: Dictionary = {}
 	var uniform_posture := snappedf(1.0 / float(EvoTypes.DEFENSE_POSTURES.size()), 0.0001)
@@ -96,31 +106,59 @@ static func prepare_deme_menu(deme: EvoTypes.Deme, state: EvoTypes.WorldState) -
 	return {
 		"deme_id": deme.id,
 		"preferred_tag": deme.decision_model_tag,
-		"briefing": EvoSituationReport.build_with_corridors(deme, state, hops_map, s_targets, neighbors, rivals, raiders),
+		"briefing": EvoSituationReport.build_with_corridors(deme, state, hops_map, s_targets, contacts),
 		"posture_instructions": build_posture_instructions(deme, state),
 		"posture_criteria": posture_criteria.duplicate(),
+		"domestic_instructions": build_domestic_instructions(deme, state),
+		"domestic_criteria": dom_criteria.duplicate(),
 		"instructions": build_instructions(deme, state),
 		"criteria": forecasts.duplicate()
 	}
 
 
 static func _sharpen_and_normalize(probabilities: Dictionary, keys: Array) -> Dictionary:
-	var sharpened: Dictionary = {}
-	var total := 0.0
+	if keys.is_empty():
+		return {}
+	var inv_temp := 1.0 / TEMPERATURE
+	var cat_keys: Dictionary = {}
+	var cat_sum: Dictionary = {}
+	var inner_w: Dictionary = {}
+	var cat_inner_total: Dictionary = {}
+
 	for k in keys:
+		var cat := str(EvoActionMenu.parse_key(str(k))["type"])
 		var raw_p := maxf(0.0, float(probabilities[k])) if probabilities.has(k) else 0.0
-		var w := pow(raw_p, 1.0 / TEMPERATURE) if raw_p > 0.0 else 0.0
-		sharpened[k] = w
-		total += w
+		if not cat_keys.has(cat):
+			cat_keys[cat] = []
+			cat_sum[cat] = 0.0
+			cat_inner_total[cat] = 0.0
+		(cat_keys[cat] as Array).append(k)
+		cat_sum[cat] = float(cat_sum[cat]) + raw_p
+		var iw := pow(raw_p, inv_temp) if raw_p > 0.0 else 0.0
+		inner_w[k] = iw
+		cat_inner_total[cat] = float(cat_inner_total[cat]) + iw
+
+	var cat_weight: Dictionary = {}
+	var total_cat_weight := 0.0
+	for cat in cat_sum.keys():
+		var cs := float(cat_sum[cat])
+		var cw := pow(cs, inv_temp) if cs > 0.0 else 0.0
+		cat_weight[cat] = cw
+		total_cat_weight += cw
 
 	var norm: Dictionary = {}
-	if total <= 0.0:
-		var u := snappedf(1.0 / float(maxi(1, keys.size())), 0.0001)
+	if total_cat_weight <= 0.0:
+		var u := snappedf(1.0 / float(keys.size()), 0.0001)
 		for k in keys:
 			norm[k] = u
-	else:
-		for k in keys:
-			norm[k] = snappedf(float(sharpened[k]) / total, 0.0001)
+		return norm
+
+	for cat in cat_keys.keys():
+		var cat_share := float(cat_weight[cat]) / total_cat_weight
+		var inner_total := float(cat_inner_total[cat])
+		for k in (cat_keys[cat] as Array):
+			var p := cat_share * (float(inner_w[k]) / inner_total) if inner_total > 0.0 else 0.0
+			norm[k] = snappedf(p, 0.0001)
 	return norm
 
 
@@ -136,15 +174,23 @@ static func _argmax_key(probs: Dictionary, keys: Array) -> String:
 
 
 static func _sample_key(probs: Dictionary, keys: Array, rng: RandomNumberGenerator) -> String:
-	var roll := rng.randf()
-	var accum := 0.0
-	var chosen := str(keys[0])
+	var total := 0.0
+	var last_pos := str(keys[0])
 	for k in keys:
-		accum += float(probs[k]) if probs.has(k) else 0.0
-		if roll <= accum:
-			chosen = str(k)
-			break
-	return chosen
+		var p := maxf(0.0, float(probs[k])) if probs.has(k) else 0.0
+		if p > 0.0:
+			total += p
+			last_pos = str(k)
+	if total <= 0.0:
+		return str(keys[0])
+	var roll := rng.randf() * total
+	var accum := 0.0
+	for k in keys:
+		var p := maxf(0.0, float(probs[k])) if probs.has(k) else 0.0
+		accum += p
+		if p > 0.0 and roll <= accum:
+			return str(k)
+	return last_pos
 
 
 static func apply_live_result(deme: EvoTypes.Deme, entry: Dictionary) -> void:
@@ -152,6 +198,11 @@ static func apply_live_result(deme: EvoTypes.Deme, entry: Dictionary) -> void:
 	if not action_keys.is_empty() and entry.has("probabilities"):
 		deme.action_probabilities = _sharpen_and_normalize(entry["probabilities"], action_keys)
 		deme.chosen_action = EvoActionMenu.parse_key(_argmax_key(deme.action_probabilities, action_keys))
+
+	var dom_keys := deme.domestic_forecasts.keys()
+	if not dom_keys.is_empty() and entry.has("domestic_probabilities"):
+		deme.domestic_probabilities = _sharpen_and_normalize(entry["domestic_probabilities"], dom_keys)
+		deme.domestic_action = _argmax_key(deme.domestic_probabilities, dom_keys)
 
 	if entry.has("posture_probabilities"):
 		deme.posture_probabilities = _sharpen_and_normalize(entry["posture_probabilities"], EvoTypes.DEFENSE_POSTURES)
@@ -165,6 +216,9 @@ static func apply_live_result(deme: EvoTypes.Deme, entry: Dictionary) -> void:
 static func sample_turn_decisions(deme: EvoTypes.Deme, rng: RandomNumberGenerator) -> void:
 	if not deme.posture_probabilities.is_empty():
 		deme.defense_posture = _sample_key(deme.posture_probabilities, EvoTypes.DEFENSE_POSTURES, rng)
+	var dom_keys := deme.domestic_forecasts.keys()
+	if not dom_keys.is_empty() and not deme.domestic_probabilities.is_empty():
+		deme.domestic_action = _sample_key(deme.domestic_probabilities, dom_keys, rng)
 	var action_keys := deme.action_forecasts.keys()
 	if not action_keys.is_empty() and not deme.action_probabilities.is_empty():
 		var chosen_key := _sample_key(deme.action_probabilities, action_keys, rng)
